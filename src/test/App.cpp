@@ -14,7 +14,7 @@ static void flushLine() {
 
 void App::begin() {
   Serial.println("APP: test_step1");
-  Serial.println("0 1 2 3");
+  Serial.println("0 1 2 3 4");
   Serial.println("7 8 9");
 }
 
@@ -34,7 +34,8 @@ void App::tick(uint32_t) {
   else if (c == '1') et = EventType::arm_night;
   else if (c == '2') et = EventType::window_open;
   else if (c == '3') et = EventType::vib_spike;
-  else { Serial.println("Use 0-3,7-9"); return; }
+  else if (c == '4') et = EventType::arm_away;
+  else { Serial.println("Use 0-4,7-9"); return; }
 
   Event e{et, nowMs};
   Decision d = engine.handle(state, cfg, e);

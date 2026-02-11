@@ -1,200 +1,313 @@
-#if !defined(ARDUINO_ARCH_ESP32)
-  #error "RTOS code builds only on ESP32 (not native)."
-#endif
 #include "rtos/Tasks.h"
+
+#include <cstdio>
+#include <cstring>
+
+#include "app/MqttConfig.h"
 #include "rtos/Queues.h"
 
+#if defined(ARDUINO_ARCH_ESP32)
+#include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <freertos/queue.h>
-
-#include "app/RuleEngine.h"
-#include "app/Config.h"
-#include "app/HardwareConfig.h"
-
-#include "services/CommandDispatcher.h"
-#include "services/Logger.h"
-#include "services/Notify.h"
-
-#include "actuators/Buzzer.h"
-#include "actuators/Servo.h"
-
-#include "sensors/ReedSensor.h"
-#include "sensors/PirSensor.h"
-#include "sensors/VibrationSensor.h"
-#if !KEYPAD_USE_I2C_EXPANDER
-#include "drivers/KeypadDriver.h"
-#else
-#include "drivers/I2CKeypadDriver.h"
-#include <Wire.h>
 #endif
-#include "sensors/KeypadInput.h"
 
-// ถ้าแกทำ ultrasonic + chokepoint แล้ว ค่อยเปิด 2 include นี้
-#include "drivers/UltrasonicDriver.h"
-#include "sensors/ChokepointSensor.h"
+namespace RtosTasks {
 
-// ===== queues storage =====
-namespace RtosQueues {
-  QueueHandle_t eventQ = nullptr;
-  QueueHandle_t cmdQ   = nullptr;
+#if defined(ARDUINO_ARCH_ESP32)
+static MqttClient* gMqtt = nullptr;
+static ChokepointSensor* gChokepoint = nullptr;
 
-  bool init() {
-    eventQ = xQueueCreate(16, sizeof(Event));
-    cmdQ   = xQueueCreate(1, sizeof(CommandMsg)); // latest-only
-    return (eventQ != nullptr) && (cmdQ != nullptr);
+static TaskHandle_t hMqtt = nullptr;
+static TaskHandle_t hChokepoint = nullptr;
+static bool started = false;
+
+static volatile uint32_t gPubDrops = 0;
+static volatile uint32_t gCmdDrops = 0;
+static volatile uint32_t gStoreDrops = 0;
+static volatile uint32_t gTickOverruns = 0;
+static volatile uint32_t gStoreDepth = 0;
+static volatile uint32_t gSensorDrops = 0;
+static volatile uint32_t gSensorDepth = 0;
+
+static Preferences pref;
+static bool prefReady = false;
+static RtosQueues::PublishMsg store[MQTT_STORE_CAP];
+static uint32_t storeHead = 0;
+static uint32_t storeTail = 0;
+static uint32_t storeCount = 0;
+
+static void copyText(char* dst, size_t dstLen, const char* src) {
+  if (!dst || dstLen == 0) return;
+  dst[0] = '\0';
+  if (!src) return;
+  std::strncpy(dst, src, dstLen - 1);
+  dst[dstLen - 1] = '\0';
+}
+
+static void slotKey(uint32_t idx, char* out, size_t outLen) {
+  std::snprintf(out, outLen, "s%02lu", (unsigned long)idx);
+}
+
+static void persistMeta() {
+  if (!prefReady) return;
+  pref.putUInt("h", storeHead);
+  pref.putUInt("t", storeTail);
+  pref.putUInt("c", storeCount);
+}
+
+static void persistSlot(uint32_t idx, const RtosQueues::PublishMsg& msg) {
+  if (!prefReady) return;
+  char key[8];
+  slotKey(idx, key, sizeof(key));
+  pref.putBytes(key, &msg, sizeof(RtosQueues::PublishMsg));
+}
+
+static void resetStore() {
+  storeHead = 0;
+  storeTail = 0;
+  storeCount = 0;
+  persistMeta();
+}
+
+static void loadStore() {
+  prefReady = pref.begin("eshmqv1", false);
+  if (!prefReady) {
+    resetStore();
+    return;
+  }
+
+  storeHead = pref.getUInt("h", 0);
+  storeTail = pref.getUInt("t", 0);
+  storeCount = pref.getUInt("c", 0);
+
+  if (storeHead >= MQTT_STORE_CAP || storeTail >= MQTT_STORE_CAP || storeCount > MQTT_STORE_CAP) {
+    resetStore();
+  }
+
+  for (uint32_t i = 0; i < MQTT_STORE_CAP; ++i) {
+    char key[8];
+    slotKey(i, key, sizeof(key));
+    if (pref.getBytesLength(key) == sizeof(RtosQueues::PublishMsg)) {
+      pref.getBytes(key, &store[i], sizeof(RtosQueues::PublishMsg));
+    }
   }
 }
 
-// ===== shared objects =====
-static RuleEngine engine;
-static Config cfg;
-
-// sensors owned by SensorsTask
-static ReedSensor reed1(HwCfg::PIN_REED_1, 1, true, 80);
-static PirSensor  pir1(HwCfg::PIN_PIR_1,  1, 1500);
-static VibrationSensor vib1(HwCfg::PIN_VIB_1, 1, 600, 700);
-
-#if !KEYPAD_USE_I2C_EXPANDER
-static KeypadDriver keypadDrv(HwCfg::KP_ROWS, 4, HwCfg::KP_COLS, 4, HwCfg::KP_MAP, 60);
-#else
-static I2CKeypadDriver keypadDrv(&Wire, HwCfg::KEYPAD_I2C_ADDR, HwCfg::KP_MAP, 60);
-#endif
-static KeypadInput  keypadIn(0);
-
-// ultrasonic owned by SensorsTask (ถ้าใช้)
-static UltrasonicDriver us1(HwCfg::PIN_US_TRIG, HwCfg::PIN_US_ECHO);
-static ChokepointSensor chokepoint1(&us1, 1); // ถ้า ctor ของแกไม่ตรง เดี๋ยวเราปรับตามไฟล์จริง
-
-// actuators owned by ActuatorsTask
-static Buzzer buzzer(HwCfg::PIN_BUZZER, 0);
-static Servo  servo1(HwCfg::PIN_SERVO1, 1, 1, 10, 90);
-static Servo  servo2(HwCfg::PIN_SERVO2, 2, 2, 10, 90);
-
-static Logger logger;
-static Notify notifySvc;
-static Actuators acts{ &buzzer, &servo1, &servo2 };
-
-// ===== internal state =====
-static TaskHandle_t hSensors = nullptr;
-static TaskHandle_t hEngine  = nullptr;
-static TaskHandle_t hActs    = nullptr;
-static volatile bool g_running = false;
-
-// ===== helpers =====
-static inline void pushEventNoWait(const Event& e) {
-  if (!RtosQueues::eventQ) return;
-  xQueueSend(RtosQueues::eventQ, &e, 0);
+static bool storePush(const RtosQueues::PublishMsg& msg) {
+  if (storeCount >= MQTT_STORE_CAP) return false;
+  store[storeTail] = msg;
+  persistSlot(storeTail, msg);
+  storeTail = (storeTail + 1) % MQTT_STORE_CAP;
+  ++storeCount;
+  persistMeta();
+  return true;
 }
 
-static void SensorsTask(void*) {
-  reed1.begin();
-  pir1.begin();
-  vib1.begin();
+static bool storePeek(RtosQueues::PublishMsg& out) {
+  if (storeCount == 0) return false;
+  out = store[storeHead];
+  return true;
+}
 
-#if KEYPAD_USE_I2C_EXPANDER
-  Wire.begin(HwCfg::PIN_I2C_SDA, HwCfg::PIN_I2C_SCL);
-#endif
-  keypadDrv.begin();
-  keypadIn.begin();
-  keypadIn.setArmCode("1234");
-  keypadIn.setDisarmCode("0000");
+static void storePop() {
+  if (storeCount == 0) return;
+  storeHead = (storeHead + 1) % MQTT_STORE_CAP;
+  --storeCount;
+  persistMeta();
+}
 
-  // ถ้าใช้ ultrasonic + chokepoint จริง ค่อยเปิด begin
-  us1.begin();
-  chokepoint1.begin();
+static bool publishMsg(const RtosQueues::PublishMsg& msg) {
+  if (!gMqtt) return false;
+  switch (msg.kind) {
+    case RtosQueues::PublishKind::event:
+      return gMqtt->publishEvent(msg.e, msg.st, msg.cmd);
+    case RtosQueues::PublishKind::status:
+      return gMqtt->publishStatus(msg.st, msg.text1);
+    case RtosQueues::PublishKind::ack:
+      return gMqtt->publishAck(msg.text1, msg.ok, msg.text2);
+    default:
+      return false;
+  }
+}
 
-  Serial.println("[RTOS] SensorsTask ready");
+static void onMqttCommand(const String&, const String& payloadRaw) {
+  if (!RtosQueues::mqttCmdQ) return;
+  RtosQueues::CmdMsg msg{};
+  payloadRaw.toCharArray(msg.payload, sizeof(msg.payload));
+  if (xQueueSend(RtosQueues::mqttCmdQ, &msg, 0) != pdTRUE) {
+    ++gCmdDrops;
+  }
+}
 
-  TickType_t last = xTaskGetTickCount();
+static void mqttTask(void*) {
+  if (!gMqtt) vTaskDelete(nullptr);
+
+  loadStore();
+  gMqtt->begin(onMqttCommand);
+
   const TickType_t period = pdMS_TO_TICKS(10);
+  TickType_t last = xTaskGetTickCount();
+  uint32_t nextMetricsMs = 0;
 
   for (;;) {
-    uint32_t nowMs = millis();
+    const uint32_t nowMs = millis();
+    gMqtt->update(nowMs);
 
-    // keypad -> event
-    char k = keypadDrv.update(nowMs);
-    if (k) keypadIn.feedKey(k, nowMs);
+    if (gMqtt->ready()) {
+      RtosQueues::PublishMsg msg{};
+      uint32_t burst = 0;
+      while (burst < MQTT_STORE_FLUSH_BURST && storePeek(msg)) {
+        if (!publishMsg(msg)) break;
+        storePop();
+        ++burst;
+      }
+    }
 
-    Event e;
-    if (keypadIn.poll(nowMs, e)) pushEventNoWait(e);
+    if (RtosQueues::mqttPubQ) {
+      RtosQueues::PublishMsg msg{};
+      uint32_t burst = 0;
+      while (burst < MQTT_PUB_DRAIN_BURST && xQueueReceive(RtosQueues::mqttPubQ, &msg, 0) == pdTRUE) {
+        if (gMqtt->ready() && storeCount == 0) {
+          if (!publishMsg(msg) && !storePush(msg)) {
+            ++gStoreDrops;
+          }
+        } else if (!storePush(msg)) {
+          ++gStoreDrops;
+        }
+        ++burst;
+      }
+    }
 
-    // sensors priority: reed -> pir -> vib -> chokepoint
-    if (reed1.poll(nowMs, e)) pushEventNoWait(e);
-    if (pir1.poll(nowMs, e))  pushEventNoWait(e);
-    if (vib1.poll(nowMs, e))  pushEventNoWait(e);
-    if (chokepoint1.poll(nowMs, e)) pushEventNoWait(e);
+    if (nowMs >= nextMetricsMs) {
+      nextMetricsMs = nowMs + MQTT_METRICS_PERIOD_MS;
+      gMqtt->publishMetrics(
+        gSensorDrops,
+        gPubDrops,
+        gCmdDrops,
+        gStoreDrops,
+        gSensorDepth,
+        RtosQueues::mqttPubQ ? (uint32_t)uxQueueMessagesWaiting(RtosQueues::mqttPubQ) : 0,
+        RtosQueues::mqttCmdQ ? (uint32_t)uxQueueMessagesWaiting(RtosQueues::mqttCmdQ) : 0,
+        storeCount
+      );
+    }
 
+    gStoreDepth = storeCount;
+
+    const TickType_t nowTicks = xTaskGetTickCount();
+    if ((nowTicks - last) > period) {
+      ++gTickOverruns;
+    }
     vTaskDelayUntil(&last, period);
   }
 }
 
-static void EngineTask(void*) {
-  SystemState state; // truth lives here
-  Serial.println("[RTOS] EngineTask ready");
+static void chokepointTask(void*) {
+  const TickType_t period = pdMS_TO_TICKS(10);
+  TickType_t last = xTaskGetTickCount();
 
   for (;;) {
     Event e;
-    if (xQueueReceive(RtosQueues::eventQ, &e, portMAX_DELAY) != pdTRUE) continue;
-
-    Decision d = engine.handle(state, cfg, e);
-    state = d.next;
-
-    RtosQueues::CommandMsg msg{ d.cmd, state };
-    xQueueOverwrite(RtosQueues::cmdQ, &msg);
-
-    Serial.print("[EV] "); Serial.print((int)e.type);
-    Serial.print(" src="); Serial.print((int)e.src);
-    Serial.print(" -> [CMD] "); Serial.println((int)d.cmd.type);
-  }
-}
-
-static void ActuatorsTask(void*) {
-  logger.begin();
-  notifySvc.begin();
-
-  buzzer.begin();
-  servo1.begin();
-  servo2.begin();
-
-  Serial.println("[RTOS] ActuatorsTask ready");
-
-  RtosQueues::CommandMsg msg{};
-  for (;;) {
-    if (xQueueReceive(RtosQueues::cmdQ, &msg, pdMS_TO_TICKS(20)) == pdTRUE) {
-      applyCommand(msg.cmd, msg.st, acts, &notifySvc, &logger);
+    const uint32_t nowMs = millis();
+    if (gChokepoint && gChokepoint->poll(nowMs, e)) {
+      RtosQueues::ChokepointMsg msg{};
+      msg.e = e;
+      msg.cm = gChokepoint->lastCm();
+      if (RtosQueues::chokepointQ && xQueueSend(RtosQueues::chokepointQ, &msg, 0) != pdTRUE) {
+        ++gSensorDrops;
+      }
     }
-
-    uint32_t nowMs = millis();
-    buzzer.update(nowMs);
-    servo1.update(nowMs);
-    servo2.update(nowMs);
-
-    vTaskDelay(pdMS_TO_TICKS(5));
+    gSensorDepth = RtosQueues::chokepointQ ? (uint32_t)uxQueueMessagesWaiting(RtosQueues::chokepointQ) : 0;
+    vTaskDelayUntil(&last, period);
   }
 }
+#endif
 
-namespace RtosTasks {
+void attachMqtt(MqttClient* client) {
+#if defined(ARDUINO_ARCH_ESP32)
+  gMqtt = client;
+#else
+  (void)client;
+#endif
+}
 
-void start() {
-  if (g_running) return;
+void attachChokepoint(ChokepointSensor* sensor) {
+#if defined(ARDUINO_ARCH_ESP32)
+  gChokepoint = sensor;
+#else
+  (void)sensor;
+#endif
+}
 
-  if (!RtosQueues::init()) {
-    Serial.println("[RTOS] queue init failed");
-    return;
+void startIfReady() {
+#if defined(ARDUINO_ARCH_ESP32)
+  if (started) return;
+  if (!gMqtt || !gChokepoint) return;
+  if (!RtosQueues::init()) return;
+
+  xTaskCreatePinnedToCore(mqttTask, "Mqtt", 4096, nullptr, 1, &hMqtt, 0);
+  xTaskCreatePinnedToCore(chokepointTask, "USonic", 3072, nullptr, 1, &hChokepoint, 1);
+  started = true;
+#endif
+}
+
+void setSensorTelemetry(uint32_t drops, uint32_t depth) {
+#if defined(ARDUINO_ARCH_ESP32)
+  gSensorDrops = drops;
+  gSensorDepth = depth;
+#else
+  (void)drops;
+  (void)depth;
+#endif
+}
+
+Stats stats() {
+  Stats s{};
+#if defined(ARDUINO_ARCH_ESP32)
+  s.pubDrops = gPubDrops;
+  s.cmdDrops = gCmdDrops;
+  s.storeDrops = gStoreDrops;
+  s.tickOverruns = gTickOverruns;
+  s.storeDepth = gStoreDepth;
+  s.sensorDrops = gSensorDrops;
+  s.sensorDepth = gSensorDepth;
+#endif
+  return s;
+}
+
+bool enqueuePublish(const RtosQueues::PublishMsg& msg) {
+#if defined(ARDUINO_ARCH_ESP32)
+  if (!RtosQueues::mqttPubQ) return false;
+  if (xQueueSend(RtosQueues::mqttPubQ, &msg, 0) != pdTRUE) {
+    ++gPubDrops;
+    return false;
   }
-
-  Serial.println("[RTOS] starting...");
-
-  xTaskCreatePinnedToCore(SensorsTask, "Sensors", 4096, nullptr, 2, &hSensors, 1);
-  xTaskCreatePinnedToCore(EngineTask,  "Engine",  4096, nullptr, 3, &hEngine,  1);
-  xTaskCreatePinnedToCore(ActuatorsTask,"Acts",   4096, nullptr, 2, &hActs,    0);
-
-  g_running = true;
+  return true;
+#else
+  (void)msg;
+  return false;
+#endif
 }
 
-bool running() {
-  return g_running;
+bool dequeueCommand(RtosQueues::CmdMsg& out) {
+#if defined(ARDUINO_ARCH_ESP32)
+  if (!RtosQueues::mqttCmdQ) return false;
+  return xQueueReceive(RtosQueues::mqttCmdQ, &out, 0) == pdTRUE;
+#else
+  (void)out;
+  return false;
+#endif
 }
 
-} // namespace
+bool dequeueChokepoint(RtosQueues::ChokepointMsg& out) {
+#if defined(ARDUINO_ARCH_ESP32)
+  if (!RtosQueues::chokepointQ) return false;
+  return xQueueReceive(RtosQueues::chokepointQ, &out, 0) == pdTRUE;
+#else
+  (void)out;
+  return false;
+#endif
+}
+
+} // namespace RtosTasks
