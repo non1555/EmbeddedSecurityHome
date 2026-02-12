@@ -1,8 +1,9 @@
 #include "ReedSensor.h"
 
-ReedSensor::ReedSensor(uint8_t pin, uint8_t id, bool open_is_high, uint32_t debounce_ms)
+ReedSensor::ReedSensor(uint8_t pin, uint8_t id, EventType open_event, bool open_is_high, uint32_t debounce_ms)
 : pin_(pin),
   id_(id),
+  open_event_(open_event),
   open_is_high_(open_is_high),
   debounce_ms_(debounce_ms),
   stable_open_(false),
@@ -36,7 +37,7 @@ bool ReedSensor::poll(uint32_t nowMs, Event& out) {
 
   if (stable_open_ && !fired_open_) {
     fired_open_ = true;
-    out = {EventType::window_open, nowMs, id_};
+    out = {open_event_, nowMs, id_};
     return true;
   }
 

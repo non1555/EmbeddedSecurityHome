@@ -4,7 +4,13 @@
 
 class ReedSensor {
 public:
-  ReedSensor(uint8_t pin, uint8_t id, bool open_is_high = true, uint32_t debounce_ms = 80);
+  ReedSensor(
+    uint8_t pin,
+    uint8_t id,
+    EventType open_event = EventType::window_open,
+    bool open_is_high = true,
+    uint32_t debounce_ms = 80
+  );
 
   void begin();
   bool poll(uint32_t nowMs, Event& out);
@@ -14,6 +20,7 @@ public:
 private:
   uint8_t pin_;
   uint8_t id_;
+  EventType open_event_;
   bool open_is_high_;
   uint32_t debounce_ms_;
 

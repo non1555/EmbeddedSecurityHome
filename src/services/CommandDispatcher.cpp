@@ -16,7 +16,10 @@ void applyCommand(const Command& cmd, const SystemState& st, Actuators& acts, No
   if (isDisarmed(st)) {
     if (acts.buzzer) acts.buzzer->stop();
     if (acts.servo1) acts.servo1->unlock();
-    if (acts.servo2) acts.servo2->unlock();
+    if (acts.servo2) {
+      if (st.keep_window_locked_when_disarmed) acts.servo2->lock();
+      else acts.servo2->unlock();
+    }
   } else {
     if (acts.servo1) acts.servo1->lock();
     if (acts.servo2) acts.servo2->lock();
