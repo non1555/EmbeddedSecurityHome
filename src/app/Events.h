@@ -6,6 +6,7 @@ enum class EventType {
   arm_night,
   arm_away,
   window_open,
+  door_tamper,
   vib_spike,
   motion,
   chokepoint
@@ -17,6 +18,7 @@ static const char* toString(EventType t) {
     case EventType::arm_away:    return "arm_away";
     case EventType::disarm:      return "disarm";
     case EventType::window_open: return "window_open";
+    case EventType::door_tamper: return "door_tamper";
     case EventType::vib_spike:   return "vib_spike";
     case EventType::motion:      return "motion";
     case EventType::chokepoint:  return "chokepoint";

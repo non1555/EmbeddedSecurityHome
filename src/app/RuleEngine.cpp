@@ -27,6 +27,13 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
+  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::door_tamper) {
+    d.next.level = AlarmLevel::critical;
+    d.next.last_notify_ms = e.ts_ms;
+    d.cmd.type = CommandType::notify;
+    return d;
+  }
+
   if ((s.mode == Mode::night || s.mode == Mode::away) &&
       (e.type == EventType::motion || e.type == EventType::chokepoint)) {
     AlarmLevel target = (s.mode == Mode::away) ? AlarmLevel::alert : AlarmLevel::warn;
