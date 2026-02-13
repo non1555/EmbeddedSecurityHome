@@ -39,6 +39,7 @@ private:
   PubSubClient mqtt_;
   CommandCallback cmdCb_ = nullptr;
   bool lastConnected_ = false;
+  wl_status_t lastWifiStatus_ = WL_IDLE_STATUS;
 
   uint32_t nextWifiRetryMs_ = 0;
   uint32_t nextMqttRetryMs_ = 0;

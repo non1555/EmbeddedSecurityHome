@@ -51,6 +51,13 @@ LINE_TARGET_USER_ID = env("LINE_TARGET_USER_ID")
 LINE_TARGET_GROUP_ID = env("LINE_TARGET_GROUP_ID")
 LINE_TARGET_ROOM_ID = env("LINE_TARGET_ROOM_ID")
 
+# Rich menu IDs per mode (images are static; we switch rich menu per user).
+LINE_RICHMENU_ID_DISARM = env("LINE_RICHMENU_ID_DISARM")
+LINE_RICHMENU_ID_NIGHT = env("LINE_RICHMENU_ID_NIGHT")
+LINE_RICHMENU_ID_AWAY = env("LINE_RICHMENU_ID_AWAY")
+
+CMD_DEBOUNCE_MS = max(0, int(env("CMD_DEBOUNCE_MS", "600")))
+
 HTTP_HOST = env("HTTP_HOST", "0.0.0.0")
 HTTP_PORT = int(env("HTTP_PORT", "8080"))
 
@@ -130,9 +137,15 @@ def push_line_text(text: str) -> None:
 def reply_line_text(reply_token: str, text: str) -> None:
     if not LINE_CHANNEL_ACCESS_TOKEN:
         return
+    reply_line_messages(reply_token, [{"type": "text", "text": text[:4800]}])
+
+
+def reply_line_messages(reply_token: str, messages: Any) -> None:
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        return
     body = {
         "replyToken": reply_token,
-        "messages": [{"type": "text", "text": text[:4800]}],
+        "messages": messages,
     }
     requests.post(
         "https://api.line.me/v2/bot/message/reply",
@@ -140,6 +153,38 @@ def reply_line_text(reply_token: str, text: str) -> None:
         json=body,
         timeout=8,
     )
+
+
+def menu_message() -> Dict[str, Any]:
+    # Use Quick Reply so user can tap buttons instead of typing.
+    items = [
+        # No displayText: keep chat clean (tap does not echo a user message).
+        {"type": "action", "action": {"type": "postback", "label": "Status", "data": "cmd=status"}},
+        {"type": "action", "action": {"type": "postback", "label": "Disarm", "data": "cmd=disarm"}},
+        {"type": "action", "action": {"type": "postback", "label": "Arm Night", "data": "cmd=arm night"}},
+        {"type": "action", "action": {"type": "postback", "label": "Arm Away", "data": "cmd=arm away"}},
+        {"type": "action", "action": {"type": "postback", "label": "Lock Door", "data": "cmd=lock door"}},
+        {"type": "action", "action": {"type": "postback", "label": "Unlock Door", "data": "cmd=unlock door"}},
+        {"type": "action", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
+        {"type": "action", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
+        {"type": "action", "action": {"type": "postback", "label": "Alarm", "data": "cmd=alarm"}},
+        {"type": "action", "action": {"type": "postback", "label": "Silence", "data": "cmd=silence"}},
+    ]
+    mode = state.last_status_mode or "unknown"
+    return {
+        "type": "text",
+        "text": f"Select command (mode={mode}):",
+        "quickReply": {"items": items},
+    }
+
+
+def parse_postback_cmd(data: str) -> str:
+    s = (data or "").strip()
+    if s.startswith("cmd="):
+        return s[4:].strip().lower()
+    if s.startswith("cmd:"):
+        return s[4:].strip().lower()
+    return s.strip().lower()
 
 
 class BridgeState:
@@ -151,10 +196,113 @@ class BridgeState:
         self.last_cmd = ""
         self.last_cmd_at = 0.0
         self.last_metrics_push_at = 0.0
+        self.last_status_mode = ""
+        self.last_status_level = ""
+        self.last_status_at = 0.0
 
 
 state = BridgeState()
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID, clean_session=True)
+
+_last_cmd_at_by_source_ms: Dict[str, int] = {}
+
+
+def source_key(ev: Dict[str, Any]) -> str:
+    src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
+    return (
+        str(src.get("userId") or "")
+        or str(src.get("groupId") or "")
+        or str(src.get("roomId") or "")
+        or "unknown"
+    )
+
+
+def debounce_ok(src_key: str, cmd: str, ev_ts_ms: int) -> bool:
+    if CMD_DEBOUNCE_MS <= 0:
+        return True
+    wall_ms = int(time.time() * 1000)
+    # Prefer LINE event timestamp, but guard against missing/garbage/very old values.
+    ts_ms = int(ev_ts_ms or 0)
+    if ts_ms <= 0:
+        now_ms = wall_ms
+    else:
+        # Accept timestamps within 1 day behind or 5 minutes ahead.
+        if (wall_ms - ts_ms) > 86_400_000 or (ts_ms - wall_ms) > 300_000:
+            now_ms = wall_ms
+        else:
+            now_ms = ts_ms
+    k = f"{src_key}|{cmd}"
+    last_ms = _last_cmd_at_by_source_ms.get(k, 0)
+    if now_ms - last_ms < CMD_DEBOUNCE_MS:
+        return False
+    _last_cmd_at_by_source_ms[k] = now_ms
+    # Prevent unbounded growth (cheap pruning).
+    if len(_last_cmd_at_by_source_ms) > 500:
+        cutoff_ms = now_ms - 30_000
+        for kk, vv in list(_last_cmd_at_by_source_ms.items()):
+            if vv < cutoff_ms:
+                _last_cmd_at_by_source_ms.pop(kk, None)
+    return True
+
+
+def richmenu_id_for_mode(mode: str) -> str:
+    m = (mode or "").strip().lower()
+    if m == "disarm":
+        return LINE_RICHMENU_ID_DISARM
+    if m == "night":
+        return LINE_RICHMENU_ID_NIGHT
+    if m == "away":
+        return LINE_RICHMENU_ID_AWAY
+    return ""
+
+
+def link_richmenu_to_user(user_id: str, richmenu_id: str) -> None:
+    if not LINE_CHANNEL_ACCESS_TOKEN or not user_id or not richmenu_id:
+        return
+    url = f"https://api.line.me/v2/bot/user/{user_id}/richmenu/{richmenu_id}"
+    try:
+        r = requests.post(url, headers=line_api_headers(), timeout=8)
+        # Ignore failures (userId may be missing/invalid, bot may not be 1:1 chat, etc.)
+        if r.status_code // 100 != 2:
+            return
+    except Exception:
+        return
+
+
+def maybe_update_user_richmenu(ev: Dict[str, Any]) -> None:
+    src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
+    user_id = str(src.get("userId") or "")
+    if not user_id:
+        return
+    rm = richmenu_id_for_mode(state.last_status_mode)
+    if not rm:
+        return
+    link_richmenu_to_user(user_id, rm)
+
+
+def maybe_update_user_richmenu_for_cmd(ev: Dict[str, Any], cmd: str) -> None:
+    """
+    Rich menu images are static; when user taps a mode command, switch their rich menu
+    optimistically to the target mode so UI matches immediately.
+    """
+    implied_mode = ""
+    c = (cmd or "").strip().lower()
+    if c in {"disarm", "mode disarm"}:
+        implied_mode = "disarm"
+    elif c in {"arm night", "arm_night", "mode night"}:
+        implied_mode = "night"
+    elif c in {"arm away", "arm_away", "mode away"}:
+        implied_mode = "away"
+
+    src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
+    user_id = str(src.get("userId") or "")
+    if not user_id:
+        return
+
+    rm = richmenu_id_for_mode(implied_mode) if implied_mode else richmenu_id_for_mode(state.last_status_mode)
+    if not rm:
+        return
+    link_richmenu_to_user(user_id, rm)
 
 
 def publish_cmd(cmd: str) -> None:
@@ -169,6 +317,16 @@ def publish_cmd(cmd: str) -> None:
 def is_supported_cmd(text: str) -> bool:
     allowed = {
         "status",
+        "disarm",
+        "arm night",
+        "arm away",
+        "buzz",
+        "buzz warn",
+        "buzz alarm",
+        "alarm",
+        "alarm on",
+        "alarm off",
+        "silence",
         "lock door",
         "unlock door",
         "lock window",
@@ -215,6 +373,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     state.last_mqtt_rx_topic = topic
     state.last_mqtt_rx_payload = payload
     state.last_mqtt_rx_at = time.time()
+    if topic == MQTT_TOPIC_STATUS:
+        obj = parse_json_payload(payload)
+        state.last_status_mode = str(obj.get("mode", "") or "")
+        state.last_status_level = str(obj.get("level", "") or "")
+        state.last_status_at = time.time()
     if topic == MQTT_TOPIC_METRICS:
       now = time.time()
       if (now - state.last_metrics_push_at) < METRICS_PUSH_PERIOD_S:
@@ -278,6 +441,29 @@ async def line_webhook(
     data = json.loads(body.decode("utf-8"))
     events = data.get("events", [])
     for ev in events:
+        reply_token = ev.get("replyToken", "")
+        src_k = source_key(ev)
+        ev_ts_ms = int(ev.get("timestamp") or 0)
+
+        if ev.get("type") == "postback":
+            cmd = parse_postback_cmd(str(ev.get("postback", {}).get("data", "")))
+            if not cmd:
+                continue
+            if cmd in {"help", "menu"}:
+                maybe_update_user_richmenu(ev)
+                reply_line_messages(reply_token, [menu_message()])
+                continue
+            if not is_supported_cmd(cmd):
+                reply_line_text(reply_token, "unsupported cmd, send 'menu'")
+                continue
+            if not debounce_ok(src_k, cmd, ev_ts_ms):
+                # Silent debounce: no chat spam.
+                continue
+            maybe_update_user_richmenu_for_cmd(ev, cmd)
+            publish_cmd(cmd)
+            # Silent success for UI taps: no chat spam.
+            continue
+
         if ev.get("type") != "message":
             continue
         msg = ev.get("message", {})
@@ -285,21 +471,23 @@ async def line_webhook(
             continue
 
         text = str(msg.get("text", "")).strip().lower()
-        reply_token = ev.get("replyToken", "")
 
-        if text == "help":
-            reply_line_text(
-                reply_token,
-                "cmd: status | lock door | unlock door | lock window | unlock window | lock all | unlock all",
-            )
+        if text in {"help", "menu"}:
+            maybe_update_user_richmenu(ev)
+            reply_line_messages(reply_token, [menu_message()])
             continue
 
         if not is_supported_cmd(text):
-            reply_line_text(reply_token, "unsupported cmd, send 'help'")
+            reply_line_text(reply_token, "unsupported cmd, send 'menu'")
             continue
 
+        if not debounce_ok(src_k, text, ev_ts_ms):
+            reply_line_text(reply_token, "ignored (debounce), try again")
+            continue
+
+        maybe_update_user_richmenu_for_cmd(ev, text)
         publish_cmd(text)
-        reply_line_text(reply_token, f"sent: {text}")
+        reply_line_text(reply_token, f"sent: {text} (mode={state.last_status_mode or 'unknown'})")
 
     return {"ok": True}
 

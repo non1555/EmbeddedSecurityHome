@@ -6,6 +6,20 @@
 
 MqttClient* MqttClient::self_ = nullptr;
 
+static const char* wlStatusText(wl_status_t st) {
+  switch (st) {
+    case WL_NO_SHIELD:       return "NO_SHIELD";
+    case WL_IDLE_STATUS:     return "IDLE";
+    case WL_NO_SSID_AVAIL:   return "NO_SSID";
+    case WL_SCAN_COMPLETED:  return "SCAN_COMPLETED";
+    case WL_CONNECTED:       return "CONNECTED";
+    case WL_CONNECT_FAILED:  return "CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "CONNECTION_LOST";
+    case WL_DISCONNECTED:    return "DISCONNECTED";
+    default:                 return "UNKNOWN";
+  }
+}
+
 static const char* modeText(Mode mode) {
   switch (mode) {
     case Mode::disarm: return "disarm";
@@ -34,6 +48,28 @@ void MqttClient::begin(CommandCallback cb) {
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
+
+#if APP_VERBOSE_LOG
+  WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info) {
+    Serial.print("[WIFI] ");
+    Serial.print(WiFi.eventName(event));
+
+    if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+      Serial.print(" ip=");
+      Serial.print(IPAddress(info.got_ip.ip_info.ip.addr));
+    } else if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+      const auto reason = (wifi_err_reason_t)info.wifi_sta_disconnected.reason;
+      Serial.print(" reason=");
+      Serial.print((int)reason);
+      Serial.print(" ");
+      Serial.print(WiFi.disconnectReasonName(reason));
+    }
+
+    Serial.println();
+  });
+#endif
+
   mqtt_.setServer(MQTT_BROKER, MQTT_PORT);
   mqtt_.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt_.setSocketTimeout(MQTT_SOCKET_TIMEOUT_S);
@@ -41,7 +77,18 @@ void MqttClient::begin(CommandCallback cb) {
 }
 
 void MqttClient::connectWifi(uint32_t nowMs) {
-  if (WiFi.status() == WL_CONNECTED) return;
+  const wl_status_t st = WiFi.status();
+  if (st != lastWifiStatus_) {
+    lastWifiStatus_ = st;
+#if APP_VERBOSE_LOG
+    Serial.print("[WIFI] status=");
+    Serial.print((int)st);
+    Serial.print(" ");
+    Serial.println(wlStatusText(st));
+#endif
+  }
+
+  if (st == WL_CONNECTED) return;
   if (nowMs < nextWifiRetryMs_) return;
 
   nextWifiRetryMs_ = nowMs + WIFI_RECONNECT_MS;

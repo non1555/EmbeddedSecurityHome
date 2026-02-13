@@ -143,6 +143,52 @@ void SecurityOrchestrator::begin() {
 void SecurityOrchestrator::processRemoteCommand(const String& payload) {
   const String cmd = normalize(payload);
 
+  // Buzzer/alarm test commands (useful when outputs aren't wired yet)
+  if (cmd == "buzz" || cmd == "buzzer" || cmd == "buzz warn" || cmd == "buzzer warn") {
+    buzzer_.warn();
+    Serial.println("[REMOTE] buzzer warn");
+    mqttBus_.publishAck("buzz warn", true, "ok");
+    return;
+  }
+
+  if (cmd == "alarm" || cmd == "alarm on" || cmd == "buzz alarm" || cmd == "buzz alert" || cmd == "buzzer alert") {
+    buzzer_.alert();
+    Serial.println("[REMOTE] buzzer alert");
+    mqttBus_.publishAck("alarm", true, "ok");
+    return;
+  }
+
+  if (cmd == "silence" || cmd == "alarm off" || cmd == "buzz stop" || cmd == "buzzer stop") {
+    buzzer_.stop();
+    Serial.println("[REMOTE] buzzer stop");
+    mqttBus_.publishAck("silence", true, "ok");
+    return;
+  }
+
+  if (cmd == "disarm" || cmd == "mode disarm") {
+    const Event e{EventType::disarm, millis(), 9};
+    applyDecision(e);
+    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
+    mqttBus_.publishAck("disarm", true, "ok");
+    return;
+  }
+
+  if (cmd == "arm night" || cmd == "arm_night" || cmd == "mode night") {
+    const Event e{EventType::arm_night, millis(), 9};
+    applyDecision(e);
+    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
+    mqttBus_.publishAck("arm night", true, "ok");
+    return;
+  }
+
+  if (cmd == "arm away" || cmd == "arm_away" || cmd == "mode away") {
+    const Event e{EventType::arm_away, millis(), 9};
+    applyDecision(e);
+    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
+    mqttBus_.publishAck("arm away", true, "ok");
+    return;
+  }
+
   if (cmd == "status") {
     String msg = "mode=" + String((int)state_.mode) +
                  " level=" + String((int)state_.level) +
