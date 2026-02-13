@@ -5,3 +5,5 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/settings.local.backup.json
+tools/line_bridge/.env
+tools/line_bridge/.venv/

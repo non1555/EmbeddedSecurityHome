@@ -9,7 +9,7 @@
 #endif
 
 #ifndef MQTT_BROKER
-#define MQTT_BROKER "192.168.1.10"
+#define MQTT_BROKER "192.168.1.58"
 #endif
 
 #ifndef MQTT_PORT
