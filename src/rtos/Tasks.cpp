@@ -6,15 +6,12 @@
 #include "app/MqttConfig.h"
 #include "rtos/Queues.h"
 
-#if defined(ARDUINO_ARCH_ESP32)
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#endif
 
 namespace RtosTasks {
 
-#if defined(ARDUINO_ARCH_ESP32)
 static MqttClient* gMqtt = nullptr;
 static ChokepointSensor* gChokepoint = nullptr;
 
@@ -222,26 +219,16 @@ static void chokepointTask(void*) {
     vTaskDelayUntil(&last, period);
   }
 }
-#endif
 
 void attachMqtt(MqttClient* client) {
-#if defined(ARDUINO_ARCH_ESP32)
   gMqtt = client;
-#else
-  (void)client;
-#endif
 }
 
 void attachChokepoint(ChokepointSensor* sensor) {
-#if defined(ARDUINO_ARCH_ESP32)
   gChokepoint = sensor;
-#else
-  (void)sensor;
-#endif
 }
 
 void startIfReady() {
-#if defined(ARDUINO_ARCH_ESP32)
   if (started) return;
   if (!gMqtt || !gChokepoint) return;
   if (!RtosQueues::init()) return;
@@ -249,22 +236,15 @@ void startIfReady() {
   xTaskCreatePinnedToCore(mqttTask, "Mqtt", 4096, nullptr, 1, &hMqtt, 0);
   xTaskCreatePinnedToCore(chokepointTask, "USonic", 3072, nullptr, 1, &hChokepoint, 1);
   started = true;
-#endif
 }
 
 void setSensorTelemetry(uint32_t drops, uint32_t depth) {
-#if defined(ARDUINO_ARCH_ESP32)
   gSensorDrops = drops;
   gSensorDepth = depth;
-#else
-  (void)drops;
-  (void)depth;
-#endif
 }
 
 Stats stats() {
   Stats s{};
-#if defined(ARDUINO_ARCH_ESP32)
   s.pubDrops = gPubDrops;
   s.cmdDrops = gCmdDrops;
   s.storeDrops = gStoreDrops;
@@ -272,42 +252,26 @@ Stats stats() {
   s.storeDepth = gStoreDepth;
   s.sensorDrops = gSensorDrops;
   s.sensorDepth = gSensorDepth;
-#endif
   return s;
 }
 
 bool enqueuePublish(const RtosQueues::PublishMsg& msg) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttPubQ) return false;
   if (xQueueSend(RtosQueues::mqttPubQ, &msg, 0) != pdTRUE) {
     ++gPubDrops;
     return false;
   }
   return true;
-#else
-  (void)msg;
-  return false;
-#endif
 }
 
 bool dequeueCommand(RtosQueues::CmdMsg& out) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttCmdQ) return false;
   return xQueueReceive(RtosQueues::mqttCmdQ, &out, 0) == pdTRUE;
-#else
-  (void)out;
-  return false;
-#endif
 }
 
 bool dequeueChokepoint(RtosQueues::ChokepointMsg& out) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::chokepointQ) return false;
   return xQueueReceive(RtosQueues::chokepointQ, &out, 0) == pdTRUE;
-#else
-  (void)out;
-  return false;
-#endif
 }
 
 } // namespace RtosTasks

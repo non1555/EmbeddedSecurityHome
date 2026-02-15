@@ -14,4 +14,5 @@ private:
   uint8_t id_;
   uint32_t cooldown_ms_;
   uint32_t last_fire_ms_;
+  bool last_active_;
 };

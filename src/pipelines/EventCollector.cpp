@@ -3,66 +3,50 @@
 EventCollector::EventCollector()
 : us1_(HwCfg::PIN_US_TRIG, HwCfg::PIN_US_ECHO),
   chokep1_(&us1_, 1, 35, 55, 200, 1500),
-#if US_SENSOR_COUNT >= 2
   us2_(HwCfg::PIN_US_TRIG_2, HwCfg::PIN_US_ECHO_2),
   chokep2_(&us2_, 2, 35, 55, 200, 1500),
-#endif
-#if US_SENSOR_COUNT >= 3
   us3_(HwCfg::PIN_US_TRIG_3, HwCfg::PIN_US_ECHO_3),
   chokep3_(&us3_, 3, 35, 55, 200, 1500),
-#endif
   reedDoor_(HwCfg::PIN_REED_1, 1, EventType::door_open, true, 80),
   reedWindow_(HwCfg::PIN_REED_2, 2, EventType::window_open, true, 80),
   pir1_(HwCfg::PIN_PIR_1, 1, 1500),
   pir2_(HwCfg::PIN_PIR_2, 2, 1500),
   pir3_(HwCfg::PIN_PIR_3, 3, 1500),
-  vib1_(HwCfg::PIN_VIB_1, 1, 600, 700),
-  vib2_(HwCfg::PIN_VIB_2, 2, 600, 700),
-#if !KEYPAD_USE_I2C_EXPANDER
-  keypadDrv_(HwCfg::KP_ROWS, 4, HwCfg::KP_COLS, 4, HwCfg::KP_MAP, 60),
-#else
+  vibCombined_(HwCfg::PIN_VIB_1, 0, 700),
   keypadDrv_(&Wire, HwCfg::KEYPAD_I2C_ADDR, HwCfg::KP_MAP, 60),
-#endif
   keypadIn_(0) {}
 
 void EventCollector::begin() {
-#if KEYPAD_USE_I2C_EXPANDER
   Wire.begin(HwCfg::PIN_I2C_SDA, HwCfg::PIN_I2C_SCL);
-#endif
+  oled_.begin();
   keypadDrv_.begin();
   keypadIn_.begin();
-  keypadIn_.setArmCode("1234");
-  keypadIn_.setDisarmCode("0000");
-  pinMode(HwCfg::PIN_BTN_MANUAL_LOCK, INPUT_PULLUP);
-  pinMode(HwCfg::PIN_BTN_MANUAL_UNLOCK, INPUT_PULLUP);
+  keypadIn_.setDoorCode("1234");
+  pinMode(HwCfg::PIN_BTN_DOOR_TOGGLE, INPUT_PULLUP);
+  pinMode(HwCfg::PIN_BTN_WINDOW_TOGGLE, INPUT_PULLUP);
 
-  const bool lockPressed = (digitalRead(HwCfg::PIN_BTN_MANUAL_LOCK) == LOW);
-  manualLockLastRawPressed_ = lockPressed;
-  manualLockStablePressed_ = lockPressed;
-  manualLockLastChangeMs_ = millis();
+  const bool doorPressed = (digitalRead(HwCfg::PIN_BTN_DOOR_TOGGLE) == LOW);
+  doorToggleLastRawPressed_ = doorPressed;
+  doorToggleStablePressed_ = doorPressed;
+  doorToggleLastChangeMs_ = millis();
 
-  const bool unlockPressed = (digitalRead(HwCfg::PIN_BTN_MANUAL_UNLOCK) == LOW);
-  manualUnlockLastRawPressed_ = unlockPressed;
-  manualUnlockStablePressed_ = unlockPressed;
-  manualUnlockLastChangeMs_ = millis();
+  const bool windowPressed = (digitalRead(HwCfg::PIN_BTN_WINDOW_TOGGLE) == LOW);
+  windowToggleLastRawPressed_ = windowPressed;
+  windowToggleStablePressed_ = windowPressed;
+  windowToggleLastChangeMs_ = millis();
 
   reedDoor_.begin();
   reedWindow_.begin();
   pir1_.begin();
   pir2_.begin();
   pir3_.begin();
-  vib1_.begin();
-  vib2_.begin();
+  vibCombined_.begin();
   us1_.begin();
   chokep1_.begin();
-#if US_SENSOR_COUNT >= 2
   us2_.begin();
   chokep2_.begin();
-#endif
-#if US_SENSOR_COUNT >= 3
   us3_.begin();
   chokep3_.begin();
-#endif
 }
 
 bool EventCollector::pollKeypad(uint32_t nowMs, Event& out) {
@@ -71,8 +55,31 @@ bool EventCollector::pollKeypad(uint32_t nowMs, Event& out) {
     out = {EventType::door_hold_warn_silence, nowMs, 0};
     return true;
   }
-  if (k) keypadIn_.feedKey(k, nowMs);
+  if (k) {
+    keypadIn_.feedKey(k, nowMs);
+    oled_.showCode(keypadIn_.buf(), keypadIn_.len());
+
+    KeypadInput::SubmitResult sr;
+    if (keypadIn_.takeSubmitResult(sr)) {
+      oled_.showResult(sr == KeypadInput::SubmitResult::ok);
+    }
+  }
+  oled_.update(nowMs);
   return keypadIn_.poll(nowMs, out);
+}
+
+void EventCollector::updateOledStatus(uint32_t nowMs,
+                                      bool doorLocked,
+                                      bool doorOpen,
+                                      bool countdownActive,
+                                      uint32_t countdownDeadlineMs,
+                                      uint32_t countdownWarnBeforeMs) {
+  oled_.setDoorStatus(doorLocked,
+                      doorOpen,
+                      countdownActive,
+                      countdownDeadlineMs,
+                      countdownWarnBeforeMs);
+  oled_.update(nowMs);
 }
 
 bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const {
@@ -86,6 +93,8 @@ bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const 
   if (c == '4') { out = {EventType::motion, nowMs, 0}; return true; }
   if (c == '5') { out = {EventType::chokepoint, nowMs, 0}; return true; }
   if (c == 'S' || c == 's') { out = {EventType::door_hold_warn_silence, nowMs, 0}; return true; }
+  if (c == 'D' || c == 'd') { out = {EventType::manual_door_toggle, nowMs, 0}; return true; }
+  if (c == 'W' || c == 'w') { out = {EventType::manual_window_toggle, nowMs, 0}; return true; }
   if (c == 'L' || c == 'l') { out = {EventType::manual_lock_request, nowMs, 0}; return true; }
   if (c == 'U' || c == 'u') { out = {EventType::manual_unlock_request, nowMs, 0}; return true; }
   return false;
@@ -108,15 +117,10 @@ bool EventCollector::pollSensorOrSerial(uint32_t nowMs, Event& out) {
   if (pir1_.poll(nowMs, out)) return true;
   if (pir2_.poll(nowMs, out)) return true;
   if (pir3_.poll(nowMs, out)) return true;
-  if (vib1_.poll(nowMs, out)) return true;
-  if (vib2_.poll(nowMs, out)) return true;
+  if (vibCombined_.poll(nowMs, out)) return true;
   if (chokep1_.poll(nowMs, out)) return true;
-#if US_SENSOR_COUNT >= 2
   if (chokep2_.poll(nowMs, out)) return true;
-#endif
-#if US_SENSOR_COUNT >= 3
   if (chokep3_.poll(nowMs, out)) return true;
-#endif
   return readSerialEvent(nowMs, out);
 }
 
@@ -146,23 +150,23 @@ bool EventCollector::pollManualButton(uint8_t pin,
 
 bool EventCollector::pollManualButtons(uint32_t nowMs, Event& out) {
   static constexpr uint32_t kDebounceMs = 40;
-  if (pollManualButton(HwCfg::PIN_BTN_MANUAL_LOCK,
+  if (pollManualButton(HwCfg::PIN_BTN_DOOR_TOGGLE,
                        nowMs,
                        kDebounceMs,
-                       manualLockLastRawPressed_,
-                       manualLockStablePressed_,
-                       manualLockLastChangeMs_,
-                       EventType::manual_lock_request,
+                       doorToggleLastRawPressed_,
+                       doorToggleStablePressed_,
+                       doorToggleLastChangeMs_,
+                       EventType::manual_door_toggle,
                        out)) {
     return true;
   }
-  return pollManualButton(HwCfg::PIN_BTN_MANUAL_UNLOCK,
+  return pollManualButton(HwCfg::PIN_BTN_WINDOW_TOGGLE,
                           nowMs,
                           kDebounceMs,
-                          manualUnlockLastRawPressed_,
-                          manualUnlockStablePressed_,
-                          manualUnlockLastChangeMs_,
-                          EventType::manual_unlock_request,
+                          windowToggleLastRawPressed_,
+                          windowToggleStablePressed_,
+                          windowToggleLastChangeMs_,
+                          EventType::manual_window_toggle,
                           out);
 }
 

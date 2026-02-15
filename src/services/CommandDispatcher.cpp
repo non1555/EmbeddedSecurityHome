@@ -44,6 +44,10 @@ void applyCommand(const Command& cmd, const SystemState& st, Actuators& acts, No
         String msg = String("alarm=") + levelText(st) + " mode=" + String((int)st.mode);
         notify->send(msg);
       }
+      // When escalation reaches alert/critical, make sure buzzer is audible even if we choose to notify.
+      if (acts.buzzer && (st.level == AlarmLevel::alert || st.level == AlarmLevel::critical)) {
+        acts.buzzer->alert();
+      }
       break;
 
     case CommandType::none:

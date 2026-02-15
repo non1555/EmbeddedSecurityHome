@@ -19,25 +19,16 @@ void onDirectCommand(const String&, const String& payload) {
 
 void MqttBus::begin() {
   if (!impl_) impl_ = reinterpret_cast<Impl*>(1); // initialized marker
-#if defined(ARDUINO_ARCH_ESP32)
   RtosTasks::attachMqtt(&gClient);
   RtosTasks::startIfReady();
   if (!RtosQueues::mqttCmdQ) gClient.begin(onDirectCommand);
-#else
-  gClient.begin(onDirectCommand);
-#endif
 }
 
 void MqttBus::update(uint32_t nowMs) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttCmdQ) gClient.update(nowMs);
-#else
-  gClient.update(nowMs);
-#endif
 }
 
 void MqttBus::publishEvent(const Event& e, const SystemState& st, const Command& cmd) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttPubQ) {
     gClient.publishEvent(e, st, cmd);
     return;
@@ -48,13 +39,9 @@ void MqttBus::publishEvent(const Event& e, const SystemState& st, const Command&
   msg.st = st;
   msg.cmd = cmd;
   RtosTasks::enqueuePublish(msg);
-#else
-  gClient.publishEvent(e, st, cmd);
-#endif
 }
 
 void MqttBus::publishStatus(const SystemState& st, const char* reason) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttPubQ) {
     gClient.publishStatus(st, reason);
     return;
@@ -67,13 +54,9 @@ void MqttBus::publishStatus(const SystemState& st, const char* reason) {
     msg.text1[sizeof(msg.text1) - 1] = '\0';
   }
   RtosTasks::enqueuePublish(msg);
-#else
-  gClient.publishStatus(st, reason);
-#endif
 }
 
 void MqttBus::publishAck(const char* cmd, bool ok, const char* detail) {
-#if defined(ARDUINO_ARCH_ESP32)
   if (!RtosQueues::mqttPubQ) {
     gClient.publishAck(cmd, ok, detail);
     return;
@@ -90,14 +73,10 @@ void MqttBus::publishAck(const char* cmd, bool ok, const char* detail) {
     msg.text2[sizeof(msg.text2) - 1] = '\0';
   }
   RtosTasks::enqueuePublish(msg);
-#else
-  gClient.publishAck(cmd, ok, detail);
-#endif
 }
 
 bool MqttBus::pollCommand(String& outPayload) {
   outPayload = "";
-#if defined(ARDUINO_ARCH_ESP32)
   if (RtosQueues::mqttCmdQ) {
     RtosQueues::CmdMsg msg{};
     if (!RtosTasks::dequeueCommand(msg)) return false;
@@ -108,12 +87,6 @@ bool MqttBus::pollCommand(String& outPayload) {
   outPayload = gPendingCmd;
   gHasPendingCmd = false;
   return true;
-#else
-  if (!gHasPendingCmd) return false;
-  outPayload = gPendingCmd;
-  gHasPendingCmd = false;
-  return true;
-#endif
 }
 
 void MqttBus::setSensorTelemetry(uint32_t drops, uint32_t depth) {
@@ -128,9 +101,7 @@ MqttBus::Stats MqttBus::stats() const {
   out.storeDrops = s.storeDrops;
   out.tickOverruns = s.tickOverruns;
   out.storeDepth = s.storeDepth;
-#if defined(ARDUINO_ARCH_ESP32)
   out.pubQueueDepth = RtosQueues::mqttPubQ ? (uint32_t)uxQueueMessagesWaiting(RtosQueues::mqttPubQ) : 0;
   out.cmdQueueDepth = RtosQueues::mqttCmdQ ? (uint32_t)uxQueueMessagesWaiting(RtosQueues::mqttCmdQ) : 0;
-#endif
   return out;
 }

@@ -12,6 +12,10 @@ enum class EventType {
   motion,
   chokepoint,
   door_hold_warn_silence,
+  door_code_unlock,
+  door_code_bad,
+  manual_door_toggle,
+  manual_window_toggle,
   manual_lock_request,
   manual_unlock_request,
   entry_timeout
@@ -29,6 +33,10 @@ static const char* toString(EventType t) {
     case EventType::motion:      return "motion";
     case EventType::chokepoint:  return "chokepoint";
     case EventType::door_hold_warn_silence: return "door_hold_warn_silence";
+    case EventType::door_code_unlock: return "door_code_unlock";
+    case EventType::door_code_bad: return "door_code_bad";
+    case EventType::manual_door_toggle: return "manual_door_toggle";
+    case EventType::manual_window_toggle: return "manual_window_toggle";
     case EventType::manual_lock_request: return "manual_lock_request";
     case EventType::manual_unlock_request: return "manual_unlock_request";
     case EventType::entry_timeout:return "entry_timeout";

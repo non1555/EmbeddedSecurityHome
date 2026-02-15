@@ -10,13 +10,10 @@
 #include "sensors/PirSensor.h"
 #include "sensors/ReedSensor.h"
 #include "sensors/VibrationSensor.h"
+#include "ui/OledCodeUi.h"
 
-#if !KEYPAD_USE_I2C_EXPANDER
-#include "drivers/KeypadDriver.h"
-#else
 #include <Wire.h>
 #include "drivers/I2CKeypadDriver.h"
-#endif
 
 class EventCollector {
 public:
@@ -27,32 +24,33 @@ public:
   bool pollSensorOrSerial(uint32_t nowMs, Event& out);
   bool isDoorOpen() const;
   bool isWindowOpen() const;
+  void updateOledStatus(uint32_t nowMs,
+                        bool doorLocked,
+                        bool doorOpen,
+                        bool countdownActive,
+                        uint32_t countdownDeadlineMs,
+                        uint32_t countdownWarnBeforeMs);
 
 private:
   UltrasonicDriver us1_;
   ChokepointSensor chokep1_;
-#if US_SENSOR_COUNT >= 2
   UltrasonicDriver us2_;
   ChokepointSensor chokep2_;
-#endif
-#if US_SENSOR_COUNT >= 3
   UltrasonicDriver us3_;
   ChokepointSensor chokep3_;
-#endif
 
   ReedSensor reedDoor_;
   ReedSensor reedWindow_;
   PirSensor pir1_;
   PirSensor pir2_;
   PirSensor pir3_;
-  VibrationSensor vib1_;
-  VibrationSensor vib2_;
 
-#if !KEYPAD_USE_I2C_EXPANDER
-  KeypadDriver keypadDrv_;
-#else
+  // Multiple vibration switches wired together into one input.
+  VibrationSensor vibCombined_;
+
+  OledCodeUi oled_{HwCfg::OLED_I2C_ADDR};
+
   I2CKeypadDriver keypadDrv_;
-#endif
   KeypadInput keypadIn_;
 
   bool pollManualButton(uint8_t pin,
@@ -67,11 +65,11 @@ private:
   bool parseSerialEvent(char c, uint32_t nowMs, Event& out) const;
   bool readSerialEvent(uint32_t nowMs, Event& out) const;
 
-  bool manualLockLastRawPressed_ = false;
-  bool manualLockStablePressed_ = false;
-  uint32_t manualLockLastChangeMs_ = 0;
+  bool doorToggleLastRawPressed_ = false;
+  bool doorToggleStablePressed_ = false;
+  uint32_t doorToggleLastChangeMs_ = 0;
 
-  bool manualUnlockLastRawPressed_ = false;
-  bool manualUnlockStablePressed_ = false;
-  uint32_t manualUnlockLastChangeMs_ = 0;
+  bool windowToggleLastRawPressed_ = false;
+  bool windowToggleStablePressed_ = false;
+  uint32_t windowToggleLastChangeMs_ = 0;
 };

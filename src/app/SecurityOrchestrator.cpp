@@ -16,7 +16,6 @@ static bool tryLockDoor(EventCollector& collector, Servo& servo, Notify& notify,
   return true;
 }
 
-#if SERVO_COUNT >= 2
 static bool tryLockWindow(EventCollector& collector, Servo& servo, Notify& notify, const char* reason) {
   if (collector.isWindowOpen()) {
     notify.send(String(reason) + ": window is open");
@@ -25,15 +24,14 @@ static bool tryLockWindow(EventCollector& collector, Servo& servo, Notify& notif
   servo.lock();
   return true;
 }
-#endif
 } // namespace
 
 void SecurityOrchestrator::printEventDecision(const Event& e, const Decision& d) const {
-  Serial.print("[EV] "); Serial.print((int)e.type);
+  Serial.print("[EV] "); Serial.print(toString(e.type));
   Serial.print(" src="); Serial.print((int)e.src);
-  Serial.print(" | [CMD] "); Serial.print((int)d.cmd.type);
-  Serial.print(" | MODE "); Serial.print((int)d.next.mode);
-  Serial.print(" | LEVEL "); Serial.print((int)d.next.level);
+  Serial.print(" | [CMD] "); Serial.print(toString(d.cmd.type));
+  Serial.print(" | MODE "); Serial.print(toString(d.next.mode));
+  Serial.print(" | LEVEL "); Serial.print(toString(d.next.level));
   Serial.print(" | ENTRY "); Serial.println(d.next.entry_pending ? "pending" : "none");
 }
 
@@ -53,6 +51,8 @@ void SecurityOrchestrator::startDoorUnlockSession(uint32_t nowMs) {
   doorUnlockDeadlineMs_ = nowMs + cfg_.door_unlock_timeout_ms;
   doorWasOpenLastTick_ = collector_.isDoorOpen();
   doorOpenSinceMs_ = doorWasOpenLastTick_ ? nowMs : 0;
+  doorOpenWarnAtMs_ = 0;
+  doorCloseLockAtMs_ = 0;
   nextDoorWarnMs_ = 0;
 }
 
@@ -62,6 +62,8 @@ void SecurityOrchestrator::clearDoorUnlockSession(bool stopBuzzer) {
   doorHoldWarnActive_ = false;
   doorHoldWarnSilenced_ = false;
   doorUnlockDeadlineMs_ = 0;
+  doorOpenWarnAtMs_ = 0;
+  doorCloseLockAtMs_ = 0;
   doorOpenSinceMs_ = 0;
   nextDoorWarnMs_ = 0;
   if (stopBuzzer) buzzer_.stop();
@@ -70,27 +72,66 @@ void SecurityOrchestrator::clearDoorUnlockSession(bool stopBuzzer) {
 void SecurityOrchestrator::updateDoorUnlockSession(uint32_t nowMs) {
   if (!doorUnlockSessionActive_) return;
 
+  static constexpr uint32_t kAutoLockAfterCloseMs = 3000;
+
   const bool doorOpen = collector_.isDoorOpen();
   if (!doorWasOpenLastTick_ && doorOpen) {
     doorSessionSawOpen_ = true;
     doorOpenSinceMs_ = nowMs;
     doorHoldWarnActive_ = false;
     doorHoldWarnSilenced_ = false;
+    doorOpenWarnAtMs_ = nowMs + cfg_.door_open_hold_warn_after_ms;
+    doorCloseLockAtMs_ = 0; // cancel pending close-lock
     nextDoorWarnMs_ = 0;
   }
 
   if (doorWasOpenLastTick_ && !doorOpen) {
-    servo1_.lock();
-    notifySvc_.send("door auto-locked after close");
-    clearDoorUnlockSession(true);
-    doorWasOpenLastTick_ = doorOpen;
-    return;
+    // Schedule auto-lock a bit after close (gives user time to fully shut door).
+    doorHoldWarnActive_ = false;
+    doorHoldWarnSilenced_ = false;
+    doorOpenWarnAtMs_ = 0;
+    doorCloseLockAtMs_ = nowMs + kAutoLockAfterCloseMs;
+    nextDoorWarnMs_ = 0;
   }
   doorWasOpenLastTick_ = doorOpen;
 
+  // Two independent countdown phases:
+  // 1) Unlocked but not opened yet: countdown to auto-lock.
+  // 2) Opened but not closed: countdown to start warnings (can't auto-lock while open).
+
+  // Phase 3: closed after being opened -> lock after a short delay.
+  if (doorCloseLockAtMs_ != 0) {
+    if (doorOpen) {
+      doorCloseLockAtMs_ = 0;
+    } else if (nowMs >= doorCloseLockAtMs_) {
+      servo1_.lock();
+      notifySvc_.send("door auto-locked after close");
+      clearDoorUnlockSession(true);
+    }
+    return;
+  }
+
+  if (!doorSessionSawOpen_) {
+    // Phase 1: waiting for door to open (entry).
+    if (nowMs >= doorUnlockDeadlineMs_) {
+      servo1_.lock();
+      notifySvc_.send("door auto-locked: unlock timeout");
+      clearDoorUnlockSession(true);
+      return;
+    }
+
+    const uint32_t timeLeftMs = doorUnlockDeadlineMs_ - nowMs;
+    if (timeLeftMs <= cfg_.door_unlock_warn_before_ms &&
+        (nextDoorWarnMs_ == 0 || nowMs >= nextDoorWarnMs_)) {
+      buzzer_.warn();
+      nextDoorWarnMs_ = nowMs + cfg_.door_warn_retrigger_ms;
+    }
+    return;
+  }
+
   if (doorOpen) {
-    if (doorOpenSinceMs_ == 0) doorOpenSinceMs_ = nowMs;
-    if ((nowMs - doorOpenSinceMs_) >= cfg_.door_open_hold_warn_after_ms) {
+    // Phase 2: door is open, count down to warning start.
+    if (doorOpenWarnAtMs_ != 0 && nowMs >= doorOpenWarnAtMs_) {
       doorHoldWarnActive_ = true;
       if (!doorHoldWarnSilenced_ && (nextDoorWarnMs_ == 0 || nowMs >= nextDoorWarnMs_)) {
         buzzer_.warn();
@@ -98,24 +139,6 @@ void SecurityOrchestrator::updateDoorUnlockSession(uint32_t nowMs) {
       }
     }
     return;
-  }
-
-  doorOpenSinceMs_ = 0;
-  doorHoldWarnActive_ = false;
-  doorHoldWarnSilenced_ = false;
-
-  if (nowMs >= doorUnlockDeadlineMs_) {
-    servo1_.lock();
-    notifySvc_.send("door auto-locked: unlock timeout");
-    clearDoorUnlockSession(true);
-    return;
-  }
-
-  const uint32_t timeLeftMs = doorUnlockDeadlineMs_ - nowMs;
-  if (timeLeftMs <= cfg_.door_unlock_warn_before_ms &&
-      (nextDoorWarnMs_ == 0 || nowMs >= nextDoorWarnMs_)) {
-    buzzer_.warn();
-    nextDoorWarnMs_ = nowMs + cfg_.door_warn_retrigger_ms;
   }
 }
 
@@ -128,20 +151,31 @@ void SecurityOrchestrator::begin() {
 
   buzzer_.begin();
   servo1_.begin();
-#if SERVO_COUNT >= 2
   servo2_.begin();
-#endif
+  servo1WasLocked_ = servo1_.isLocked();
 
   Serial.println("READY");
-  Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN L=MANUAL_LOCK U=MANUAL_UNLOCK");
-  Serial.println("Policy: keypad can DISARM only, arm requests are blocked.");
-  Serial.printf("Manual button lock/unlock pins: GPIO %u / %u (active LOW)\n",
-                HwCfg::PIN_BTN_MANUAL_LOCK,
-                HwCfg::PIN_BTN_MANUAL_UNLOCK);
+  Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN D=DOOR_TOGGLE W=WINDOW_TOGGLE");
+  Serial.println("Policy: keypad code disarms when armed; unlocks door when disarmed.");
+  Serial.printf("Manual toggle button pins (active LOW): DOOR=%u WINDOW=%u\n",
+                HwCfg::PIN_BTN_DOOR_TOGGLE,
+                HwCfg::PIN_BTN_WINDOW_TOGGLE);
 }
 
 void SecurityOrchestrator::processRemoteCommand(const String& payload) {
   const String cmd = normalize(payload);
+  const uint32_t nowMs = millis();
+  auto fillDetail = [&](char* out, size_t outLen) {
+    snprintf(
+      out,
+      outLen,
+      "dL=%u,wL=%u,dO=%u,wO=%u",
+      servo1_.isLocked() ? 1u : 0u,
+      servo2_.isLocked() ? 1u : 0u,
+      collector_.isDoorOpen() ? 1u : 0u,
+      collector_.isWindowOpen() ? 1u : 0u
+    );
+  };
 
   // Buzzer/alarm test commands (useful when outputs aren't wired yet)
   if (cmd == "buzz" || cmd == "buzzer" || cmd == "buzz warn" || cmd == "buzzer warn") {
@@ -195,22 +229,27 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
                  " door_open=" + String(collector_.isDoorOpen() ? "1" : "0") +
                  " window_open=" + String(collector_.isWindowOpen() ? "1" : "0") +
                  " door_locked=" + String(servo1_.isLocked() ? "1" : "0");
-#if SERVO_COUNT >= 2
     msg += " window_locked=" + String(servo2_.isLocked() ? "1" : "0");
-#endif
     notifySvc_.send(msg);
-    mqttBus_.publishAck("status", true, "ok");
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("status", true, detail);
     return;
   }
 
   if (cmd == "lock door") {
     const bool ok = tryLockDoor(collector_, servo1_, notifySvc_, "lock door rejected");
     if (ok) clearDoorUnlockSession(true);
-    mqttBus_.publishAck("lock door", ok, ok ? "ok" : "door open");
+    if (ok) {
+      char detail[32];
+      fillDetail(detail, sizeof(detail));
+      mqttBus_.publishAck("lock door", true, detail);
+    } else {
+      mqttBus_.publishAck("lock door", false, "door open");
+    }
     return;
   }
 
-#if SERVO_COUNT >= 2
   if (cmd == "lock window") {
     const bool ok = tryLockWindow(collector_, servo2_, notifySvc_, "lock window rejected");
     if (!ok) {
@@ -218,10 +257,11 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
       return;
     }
     state_.keep_window_locked_when_disarmed = true;
-    mqttBus_.publishAck("lock window", true, "ok");
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("lock window", true, detail);
     return;
   }
-#endif
 
   if (cmd == "lock all") {
     if (collector_.isDoorOpen()) {
@@ -229,47 +269,49 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
       mqttBus_.publishAck("lock all", false, "door open");
       return;
     }
-#if SERVO_COUNT >= 2
     if (collector_.isWindowOpen()) {
       notifySvc_.send("lock all rejected: window is open");
       mqttBus_.publishAck("lock all", false, "window open");
       return;
     }
-#endif
     servo1_.lock();
     clearDoorUnlockSession(true);
-#if SERVO_COUNT >= 2
     servo2_.lock();
     state_.keep_window_locked_when_disarmed = true;
-#endif
-    mqttBus_.publishAck("lock all", true, "ok");
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("lock all", true, detail);
     return;
   }
 
   if (cmd == "unlock door") {
     servo1_.unlock();
     clearDoorUnlockSession(true);
-    mqttBus_.publishAck("unlock door", true, "ok");
+    if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("unlock door", true, detail);
     return;
   }
 
-#if SERVO_COUNT >= 2
   if (cmd == "unlock window") {
     state_.keep_window_locked_when_disarmed = false;
     servo2_.unlock();
-    mqttBus_.publishAck("unlock window", true, "ok");
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("unlock window", true, detail);
     return;
   }
-#endif
 
   if (cmd == "unlock all") {
     servo1_.unlock();
     clearDoorUnlockSession(true);
-#if SERVO_COUNT >= 2
+    if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
     state_.keep_window_locked_when_disarmed = false;
     servo2_.unlock();
-#endif
-    mqttBus_.publishAck("unlock all", true, "ok");
+    char detail[32];
+    fillDetail(detail, sizeof(detail));
+    mqttBus_.publishAck("unlock all", true, detail);
     return;
   }
 
@@ -290,19 +332,53 @@ bool SecurityOrchestrator::processDoorHoldWarnSilenceEvent(const Event& e) {
 }
 
 bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
+  if (e.type == EventType::manual_door_toggle) {
+    if (servo1_.isLocked()) {
+      servo1_.unlock();
+      clearDoorUnlockSession(true);
+      if (!collector_.isDoorOpen()) startDoorUnlockSession(e.ts_ms);
+      notifySvc_.send("manual door: unlocked");
+      return true;
+    }
+    // toggle -> lock
+    if (collector_.isDoorOpen()) {
+      notifySvc_.send("manual door lock rejected: door is open");
+      return true;
+    }
+    servo1_.lock();
+    clearDoorUnlockSession(true);
+    notifySvc_.send("manual door: locked");
+    return true;
+  }
+
+  if (e.type == EventType::manual_window_toggle) {
+    if (servo2_.isLocked()) {
+      state_.keep_window_locked_when_disarmed = false;
+      servo2_.unlock();
+      notifySvc_.send("manual window: unlocked");
+      return true;
+    }
+    if (collector_.isWindowOpen()) {
+      notifySvc_.send("manual window lock rejected: window is open");
+      return true;
+    }
+    state_.keep_window_locked_when_disarmed = true;
+    servo2_.lock();
+    notifySvc_.send("manual window: locked");
+    return true;
+  }
+
   if (e.type == EventType::manual_lock_request) {
     if (collector_.isDoorOpen()) {
       notifySvc_.send("manual lock rejected: door is open");
       return true;
     }
-#if SERVO_COUNT >= 2
     if (collector_.isWindowOpen()) {
       notifySvc_.send("manual lock rejected: window is open");
       return true;
     }
     servo2_.lock();
     state_.keep_window_locked_when_disarmed = true;
-#endif
     servo1_.lock();
     clearDoorUnlockSession(true);
     notifySvc_.send("manual lock accepted");
@@ -312,10 +388,9 @@ bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
   if (e.type == EventType::manual_unlock_request) {
     servo1_.unlock();
     clearDoorUnlockSession(true);
-#if SERVO_COUNT >= 2
+    if (!collector_.isDoorOpen()) startDoorUnlockSession(e.ts_ms);
     state_.keep_window_locked_when_disarmed = false;
     servo2_.unlock();
-#endif
     notifySvc_.send("manual unlock accepted");
     return true;
   }
@@ -325,24 +400,132 @@ bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
 
 void SecurityOrchestrator::tick(uint32_t nowMs) {
   Event e;
+
+  // Always advance actuator patterns even if we return early (keypad/timeout).
+  buzzer_.update(nowMs);
+  servo1_.update(nowMs);
+  servo2_.update(nowMs);
+
+  // If something unlocked the door while it's closed (e.g., DISARM command path),
+  // start the auto-lock countdown.
+  const bool servo1LockedNow = servo1_.isLocked();
+  if (!doorUnlockSessionActive_ &&
+      servo1WasLocked_ &&
+      !servo1LockedNow &&
+      !collector_.isDoorOpen()) {
+    startDoorUnlockSession(nowMs);
+  }
+  servo1WasLocked_ = servo1LockedNow;
+
+  bool cdActive = false;
+  uint32_t cdDeadline = 0;
+  uint32_t cdWarnBefore = 0;
+  if (doorUnlockSessionActive_ && !servo1_.isLocked()) {
+    if (!doorSessionSawOpen_) {
+      cdDeadline = doorUnlockDeadlineMs_;
+      cdWarnBefore = cfg_.door_unlock_warn_before_ms;
+      cdActive = (cdDeadline != 0 && nowMs < cdDeadline);
+    } else if (collector_.isDoorOpen()) {
+      cdDeadline = doorOpenWarnAtMs_;
+      cdWarnBefore = 2000;
+      cdActive = (cdDeadline != 0 && nowMs < cdDeadline);
+    } else if (doorCloseLockAtMs_ != 0) {
+      cdDeadline = doorCloseLockAtMs_;
+      cdWarnBefore = 1000;
+      cdActive = (nowMs < cdDeadline);
+    }
+  }
+  collector_.updateOledStatus(nowMs,
+                              servo1_.isLocked(),
+                              collector_.isDoorOpen(),
+                              cdActive,
+                              cdDeadline,
+                              cdWarnBefore);
+
   mqttBus_.update(nowMs);
 
   String remoteCmd;
-  if (mqttBus_.pollCommand(remoteCmd)) processRemoteCommand(remoteCmd);
+  if (mqttBus_.pollCommand(remoteCmd)) {
+    processRemoteCommand(remoteCmd);
+    const uint32_t t = millis();
+    cdActive = false;
+    cdDeadline = 0;
+    cdWarnBefore = 0;
+    if (doorUnlockSessionActive_ && !servo1_.isLocked()) {
+      if (!doorSessionSawOpen_) {
+        cdDeadline = doorUnlockDeadlineMs_;
+        cdWarnBefore = cfg_.door_unlock_warn_before_ms;
+        cdActive = (cdDeadline != 0 && t < cdDeadline);
+      } else if (collector_.isDoorOpen()) {
+        cdDeadline = doorOpenWarnAtMs_;
+        cdWarnBefore = 2000;
+        cdActive = (cdDeadline != 0 && t < cdDeadline);
+      } else if (doorCloseLockAtMs_ != 0) {
+        cdDeadline = doorCloseLockAtMs_;
+        cdWarnBefore = 1000;
+        cdActive = (t < cdDeadline);
+      }
+    }
+    collector_.updateOledStatus(millis(),
+                                servo1_.isLocked(),
+                                collector_.isDoorOpen(),
+                                cdActive,
+                                cdDeadline,
+                                cdWarnBefore);
+  }
 
   if (collector_.pollKeypad(nowMs, e)) {
     if (processDoorHoldWarnSilenceEvent(e)) {
       updateDoorUnlockSession(nowMs);
       return;
     }
+    if (e.type == EventType::door_code_bad) {
+      // 3 strikes: notify each time, last time trigger buzzer alert.
+      if (badDoorCodeAttempts_ < 3) badDoorCodeAttempts_++;
+      const uint8_t n = badDoorCodeAttempts_;
+      const bool last = (n >= 3);
+
+      const String msg = String("wrong door code ") + String(n) + "/3" + (last ? " (ALERT)" : "");
+      notifySvc_.send(msg);
+      mqttBus_.publishAck("door_code", false, msg.c_str());
+      if (last) {
+        buzzer_.alert();
+        badDoorCodeAttempts_ = 0; // allow next 3 tries
+      }
+      updateDoorUnlockSession(nowMs);
+      return;
+    }
+    if (e.type == EventType::door_code_unlock) {
+      // Always issue a DISARM event first. It's idempotent when already disarmed,
+      // and guarantees "code -> disarm" works even if mode tracking gets out of sync.
+      const Mode before = state_.mode;
+      badDoorCodeAttempts_ = 0;
+      applyDecision({EventType::disarm, nowMs, 9});
+
+      // Variant B: disarm + unlock door (entry UX).
+      servo1_.unlock();
+      // Keep window locked while disarmed; allow a timed door-unlock session.
+      state_.keep_window_locked_when_disarmed = true;
+      servo2_.lock();
+      clearDoorUnlockSession(true);
+      if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
+
+      if (before == Mode::disarm) notifySvc_.send("door code accepted");
+      else notifySvc_.send("disarmed by code");
+
+      if (state_.mode != Mode::disarm) {
+        Serial.print("[KEYPAD] WARN: disarm by code failed, mode=");
+        Serial.println(toString(state_.mode));
+      }
+      updateDoorUnlockSession(nowMs);
+      return;
+    }
     if (EventGate::allowKeypadEvent(e)) {
       applyDecision(e);
       if (e.type == EventType::disarm) {
-#if SERVO_COUNT >= 2
         state_.keep_window_locked_when_disarmed = true;
         servo2_.lock();
-#endif
-        startDoorUnlockSession(nowMs);
+        if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
       }
       updateDoorUnlockSession(nowMs);
       return;
@@ -355,12 +538,6 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
     applyDecision(e);
     return;
   }
-
-  buzzer_.update(nowMs);
-  servo1_.update(nowMs);
-#if SERVO_COUNT >= 2
-  servo2_.update(nowMs);
-#endif
 
   const bool hasEvent = collector_.pollSensorOrSerial(nowMs, e);
   updateDoorUnlockSession(nowMs);

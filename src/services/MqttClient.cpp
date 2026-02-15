@@ -50,26 +50,6 @@ void MqttClient::begin(CommandCallback cb) {
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
-#if APP_VERBOSE_LOG
-  WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info) {
-    Serial.print("[WIFI] ");
-    Serial.print(WiFi.eventName(event));
-
-    if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-      Serial.print(" ip=");
-      Serial.print(IPAddress(info.got_ip.ip_info.ip.addr));
-    } else if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
-      const auto reason = (wifi_err_reason_t)info.wifi_sta_disconnected.reason;
-      Serial.print(" reason=");
-      Serial.print((int)reason);
-      Serial.print(" ");
-      Serial.print(WiFi.disconnectReasonName(reason));
-    }
-
-    Serial.println();
-  });
-#endif
-
   mqtt_.setServer(MQTT_BROKER, MQTT_PORT);
   mqtt_.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt_.setSocketTimeout(MQTT_SOCKET_TIMEOUT_S);
@@ -80,12 +60,6 @@ void MqttClient::connectWifi(uint32_t nowMs) {
   const wl_status_t st = WiFi.status();
   if (st != lastWifiStatus_) {
     lastWifiStatus_ = st;
-#if APP_VERBOSE_LOG
-    Serial.print("[WIFI] status=");
-    Serial.print((int)st);
-    Serial.print(" ");
-    Serial.println(wlStatusText(st));
-#endif
   }
 
   if (st == WL_CONNECTED) return;
@@ -96,11 +70,6 @@ void MqttClient::connectWifi(uint32_t nowMs) {
   if (strlen(WIFI_SSID) == 0) {
     return;
   }
-
-#if APP_VERBOSE_LOG
-  Serial.print("[MQTT] WiFi connecting to ");
-  Serial.println(WIFI_SSID);
-#endif
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
@@ -110,13 +79,6 @@ void MqttClient::connectMqtt(uint32_t nowMs) {
   if (nowMs < nextMqttRetryMs_) return;
 
   nextMqttRetryMs_ = nowMs + MQTT_RECONNECT_MS;
-
-#if APP_VERBOSE_LOG
-  Serial.print("[MQTT] Broker ");
-  Serial.print(MQTT_BROKER);
-  Serial.print(":");
-  Serial.println(MQTT_PORT);
-#endif
 
   const bool hasAuth = strlen(MQTT_USERNAME) > 0;
   bool connected = false;
@@ -148,10 +110,6 @@ void MqttClient::connectMqtt(uint32_t nowMs) {
   }
 
   mqtt_.subscribe(MQTT_TOPIC_CMD);
-#if APP_VERBOSE_LOG
-  Serial.print("[MQTT] subscribed ");
-  Serial.println(MQTT_TOPIC_CMD);
-#endif
 
   lastConnected_ = true;
   mqtt_.publish(MQTT_TOPIC_STATUS, "{\"reason\":\"online\"}", true);

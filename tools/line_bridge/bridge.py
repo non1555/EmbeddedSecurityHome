@@ -51,11 +51,6 @@ LINE_TARGET_USER_ID = env("LINE_TARGET_USER_ID")
 LINE_TARGET_GROUP_ID = env("LINE_TARGET_GROUP_ID")
 LINE_TARGET_ROOM_ID = env("LINE_TARGET_ROOM_ID")
 
-# Rich menu IDs per mode (images are static; we switch rich menu per user).
-LINE_RICHMENU_ID_DISARM = env("LINE_RICHMENU_ID_DISARM")
-LINE_RICHMENU_ID_NIGHT = env("LINE_RICHMENU_ID_NIGHT")
-LINE_RICHMENU_ID_AWAY = env("LINE_RICHMENU_ID_AWAY")
-
 CMD_DEBOUNCE_MS = max(0, int(env("CMD_DEBOUNCE_MS", "600")))
 
 HTTP_HOST = env("HTTP_HOST", "0.0.0.0")
@@ -69,6 +64,8 @@ def get_line_target() -> Optional[str]:
         return LINE_TARGET_GROUP_ID
     if LINE_TARGET_ROOM_ID:
         return LINE_TARGET_ROOM_ID
+    if state.auto_line_target and state.auto_line_target[0] in {"U", "C", "R"}:
+        return state.auto_line_target
     return None
 
 
@@ -156,9 +153,9 @@ def reply_line_messages(reply_token: str, messages: Any) -> None:
 
 
 def menu_message() -> Dict[str, Any]:
-    # Use Quick Reply so user can tap buttons instead of typing.
+    # Backward-compatible quick reply menu (kept as fallback).
     items = [
-        # No displayText: keep chat clean (tap does not echo a user message).
+        {"type": "action", "action": {"type": "postback", "label": "Home", "data": "ui=home"}},
         {"type": "action", "action": {"type": "postback", "label": "Status", "data": "cmd=status"}},
         {"type": "action", "action": {"type": "postback", "label": "Disarm", "data": "cmd=disarm"}},
         {"type": "action", "action": {"type": "postback", "label": "Arm Night", "data": "cmd=arm night"}},
@@ -167,15 +164,9 @@ def menu_message() -> Dict[str, Any]:
         {"type": "action", "action": {"type": "postback", "label": "Unlock Door", "data": "cmd=unlock door"}},
         {"type": "action", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
         {"type": "action", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
-        {"type": "action", "action": {"type": "postback", "label": "Alarm", "data": "cmd=alarm"}},
-        {"type": "action", "action": {"type": "postback", "label": "Silence", "data": "cmd=silence"}},
     ]
-    mode = state.last_status_mode or "unknown"
-    return {
-        "type": "text",
-        "text": f"Select command (mode={mode}):",
-        "quickReply": {"items": items},
-    }
+    mode = state.dev_mode or state.last_status_mode or "unknown"
+    return {"type": "text", "text": f"Menu (mode={mode})", "quickReply": {"items": items}}
 
 
 def parse_postback_cmd(data: str) -> str:
@@ -185,6 +176,144 @@ def parse_postback_cmd(data: str) -> str:
     if s.startswith("cmd:"):
         return s[4:].strip().lower()
     return s.strip().lower()
+
+
+def _fmt_bool(b: Optional[bool], t: str, f: str, u: str = "?") -> str:
+    if b is True:
+        return t
+    if b is False:
+        return f
+    return u
+
+
+def _device_summary_line() -> str:
+    mode = (state.dev_mode or state.last_status_mode or "unknown").strip() or "unknown"
+    dl = _fmt_bool(state.dev_door_locked, "LOCK", "UNLOCK")
+    wl = _fmt_bool(state.dev_window_locked, "LOCK", "UNLOCK")
+    do = _fmt_bool(state.dev_door_open, "OPEN", "CLOSE")
+    wo = _fmt_bool(state.dev_window_open, "OPEN", "CLOSE")
+    return f"mode={mode} | door={dl}/{do} | window={wl}/{wo}"
+
+
+def _action(label: str, data: str) -> Dict[str, Any]:
+    return {"type": "button", "action": {"type": "postback", "label": label[:20], "data": data}}
+
+
+def flex_home() -> Dict[str, Any]:
+    # Rich UI inside chat (Flex) without uploading images.
+    return {
+        "type": "flex",
+        "altText": "EmbeddedSecurity menu",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {"type": "text", "text": "EmbeddedSecurity", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
+                    {"type": "separator"},
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "spacing": "md",
+                        "contents": [
+                            {
+                                "type": "button",
+                                "style": "primary",
+                                "action": {"type": "postback", "label": "Mode", "data": "ui=mode"},
+                            },
+                            {
+                                "type": "button",
+                                "style": "secondary",
+                                "action": {"type": "postback", "label": "Lock", "data": "ui=lock"},
+                            },
+                        ],
+                    },
+                    {
+                        "type": "button",
+                        "style": "link",
+                        "action": {"type": "postback", "label": "Refresh Status", "data": "cmd=status"},
+                    },
+                ],
+            },
+        },
+    }
+
+
+def flex_mode() -> Dict[str, Any]:
+    return {
+        "type": "flex",
+        "altText": "Mode menu",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {"type": "text", "text": "Mode", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
+                    {"type": "separator"},
+                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": "Disarm", "data": "cmd=disarm"}},
+                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Night", "data": "cmd=arm night"}},
+                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Away", "data": "cmd=arm away"}},
+                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
+                ],
+            },
+        },
+    }
+
+
+def flex_lock() -> Dict[str, Any]:
+    # Button label should represent the action (opposite of current state).
+    if state.dev_door_locked is True:
+        door_label = "Unlock Door"
+        door_cmd = "cmd=unlock door"
+    elif state.dev_door_locked is False:
+        door_label = "Lock Door"
+        door_cmd = "cmd=lock door"
+    else:
+        door_label = "Door (refresh)"
+        door_cmd = "cmd=status"
+
+    if state.dev_window_locked is True:
+        win_label = "Unlock Window"
+        win_cmd = "cmd=unlock window"
+    elif state.dev_window_locked is False:
+        win_label = "Lock Window"
+        win_cmd = "cmd=lock window"
+    else:
+        win_label = "Window (refresh)"
+        win_cmd = "cmd=status"
+
+    return {
+        "type": "flex",
+        "altText": "Lock menu",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {"type": "text", "text": "Locks", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
+                    {"type": "separator"},
+                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": door_label, "data": door_cmd}},
+                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": win_label, "data": win_cmd}},
+                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
+                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
+                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Refresh Status", "data": "cmd=status"}},
+                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
+                ],
+            },
+        },
+    }
 
 
 class BridgeState:
@@ -199,6 +328,16 @@ class BridgeState:
         self.last_status_mode = ""
         self.last_status_level = ""
         self.last_status_at = 0.0
+        # Device snapshot (best-effort, populated from MQTT event/status/ack).
+        self.dev_mode = ""
+        self.dev_level = ""
+        self.dev_door_locked: Optional[bool] = None
+        self.dev_window_locked: Optional[bool] = None
+        self.dev_door_open: Optional[bool] = None
+        self.dev_window_open: Optional[bool] = None
+        self.dev_at = 0.0
+        # Learned from LINE webhook when LINE_TARGET_* isn't configured.
+        self.auto_line_target = ""
 
 
 state = BridgeState()
@@ -210,9 +349,10 @@ _last_cmd_at_by_source_ms: Dict[str, int] = {}
 def source_key(ev: Dict[str, Any]) -> str:
     src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
     return (
-        str(src.get("userId") or "")
-        or str(src.get("groupId") or "")
+        # Prefer group/room so pushes go back to the chat.
+        str(src.get("groupId") or "")
         or str(src.get("roomId") or "")
+        or str(src.get("userId") or "")
         or "unknown"
     )
 
@@ -243,66 +383,6 @@ def debounce_ok(src_key: str, cmd: str, ev_ts_ms: int) -> bool:
             if vv < cutoff_ms:
                 _last_cmd_at_by_source_ms.pop(kk, None)
     return True
-
-
-def richmenu_id_for_mode(mode: str) -> str:
-    m = (mode or "").strip().lower()
-    if m == "disarm":
-        return LINE_RICHMENU_ID_DISARM
-    if m == "night":
-        return LINE_RICHMENU_ID_NIGHT
-    if m == "away":
-        return LINE_RICHMENU_ID_AWAY
-    return ""
-
-
-def link_richmenu_to_user(user_id: str, richmenu_id: str) -> None:
-    if not LINE_CHANNEL_ACCESS_TOKEN or not user_id or not richmenu_id:
-        return
-    url = f"https://api.line.me/v2/bot/user/{user_id}/richmenu/{richmenu_id}"
-    try:
-        r = requests.post(url, headers=line_api_headers(), timeout=8)
-        # Ignore failures (userId may be missing/invalid, bot may not be 1:1 chat, etc.)
-        if r.status_code // 100 != 2:
-            return
-    except Exception:
-        return
-
-
-def maybe_update_user_richmenu(ev: Dict[str, Any]) -> None:
-    src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
-    user_id = str(src.get("userId") or "")
-    if not user_id:
-        return
-    rm = richmenu_id_for_mode(state.last_status_mode)
-    if not rm:
-        return
-    link_richmenu_to_user(user_id, rm)
-
-
-def maybe_update_user_richmenu_for_cmd(ev: Dict[str, Any], cmd: str) -> None:
-    """
-    Rich menu images are static; when user taps a mode command, switch their rich menu
-    optimistically to the target mode so UI matches immediately.
-    """
-    implied_mode = ""
-    c = (cmd or "").strip().lower()
-    if c in {"disarm", "mode disarm"}:
-        implied_mode = "disarm"
-    elif c in {"arm night", "arm_night", "mode night"}:
-        implied_mode = "night"
-    elif c in {"arm away", "arm_away", "mode away"}:
-        implied_mode = "away"
-
-    src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
-    user_id = str(src.get("userId") or "")
-    if not user_id:
-        return
-
-    rm = richmenu_id_for_mode(implied_mode) if implied_mode else richmenu_id_for_mode(state.last_status_mode)
-    if not rm:
-        return
-    link_richmenu_to_user(user_id, rm)
 
 
 def publish_cmd(cmd: str) -> None:
@@ -378,6 +458,49 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
         state.last_status_mode = str(obj.get("mode", "") or "")
         state.last_status_level = str(obj.get("level", "") or "")
         state.last_status_at = time.time()
+        state.dev_mode = state.last_status_mode
+        state.dev_level = state.last_status_level
+        state.dev_at = time.time()
+    if topic == MQTT_TOPIC_EVENT:
+        obj = parse_json_payload(payload)
+        m = str(obj.get("mode", "") or "")
+        lv = str(obj.get("level", "") or "")
+        if m:
+            state.dev_mode = m
+        if lv:
+            state.dev_level = lv
+        state.dev_at = time.time()
+    if topic == MQTT_TOPIC_ACK:
+        obj = parse_json_payload(payload)
+        detail = str(obj.get("detail", "") or "")
+        # Compact firmware detail format: dL=1,wL=0,dO=0,wO=1
+        kv: Dict[str, str] = {}
+        for part in detail.split(","):
+            part = part.strip()
+            if "=" not in part:
+                continue
+            k, v = part.split("=", 1)
+            kv[k.strip()] = v.strip()
+
+        def b(name: str) -> Optional[bool]:
+            if name not in kv:
+                return None
+            return kv[name] in {"1", "true", "True", "yes", "Y", "on"}
+
+        dl = b("dL")
+        wl = b("wL")
+        do = b("dO")
+        wo = b("wO")
+        if dl is not None:
+            state.dev_door_locked = dl
+        if wl is not None:
+            state.dev_window_locked = wl
+        if do is not None:
+            state.dev_door_open = do
+        if wo is not None:
+            state.dev_window_open = wo
+        if any(x is not None for x in (dl, wl, do, wo)):
+            state.dev_at = time.time()
     if topic == MQTT_TOPIC_METRICS:
       now = time.time()
       if (now - state.last_metrics_push_at) < METRICS_PUSH_PERIOD_S:
@@ -396,6 +519,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
           f"q_store={obj.get('q_store', '-')}"
       )
       return
+    # Avoid spamming LINE with UI-driven polling.
+    if topic == MQTT_TOPIC_ACK:
+        obj = parse_json_payload(payload)
+        if str(obj.get("cmd", "") or "") == "status":
+            return
     push_line_text(format_mqtt_to_text(topic, payload))
 
 
@@ -418,14 +546,71 @@ def mqtt_loop_thread() -> None:
 
 app = FastAPI(title="EmbeddedSecurity LINE Bridge")
 
+@app.get("/state")
+def get_state() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "at": time.time(),
+        "device": {
+            "mode": state.dev_mode or state.last_status_mode or "",
+            "level": state.dev_level or state.last_status_level or "",
+            "door_locked": state.dev_door_locked,
+            "window_locked": state.dev_window_locked,
+            "door_open": state.dev_door_open,
+            "window_open": state.dev_window_open,
+            "updated_at": state.dev_at,
+        },
+    }
+
+
+@app.post("/cmd")
+async def http_cmd(request: Request) -> Dict[str, Any]:
+    data = await request.json()
+    cmd = str((data or {}).get("cmd", "")).strip().lower()
+    if not cmd or not is_supported_cmd(cmd):
+        raise HTTPException(status_code=400, detail="unsupported cmd")
+    # Publish to firmware.
+    mqtt_client.publish(MQTT_TOPIC_CMD, cmd, qos=0, retain=False)
+    state.last_cmd = cmd
+    state.last_cmd_at = time.time()
+    return {"ok": True, "cmd": cmd}
+
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
+    target = get_line_target()
+    problems = []
+
+    if not state.mqtt_connected:
+        problems.append("mqtt_disconnected")
+
+    # LINE push requires: token + a push target. Webhook verify requires: channel secret.
+    line_token_ok = bool(LINE_CHANNEL_ACCESS_TOKEN)
+    line_secret_ok = bool(LINE_CHANNEL_SECRET)
+    line_target_ok = bool(target)
+    line_push_ready = line_token_ok and line_target_ok
+    line_webhook_ready = line_token_ok and line_secret_ok
+
+    if not line_token_ok:
+        problems.append("line_access_token_missing")
+    if not line_secret_ok:
+        problems.append("line_channel_secret_missing")
+    if not line_target_ok:
+        problems.append("line_target_missing")
+
+    ready = bool(state.mqtt_connected and line_push_ready and line_webhook_ready)
     return {
         "ok": True,
+        "ready": ready,
+        "problems": problems,
         "mqtt_connected": state.mqtt_connected,
+        "mqtt_broker": MQTT_BROKER,
+        "mqtt_port": MQTT_PORT,
         "last_mqtt_topic": state.last_mqtt_rx_topic,
         "last_cmd": state.last_cmd,
+        "line_webhook_ready": line_webhook_ready,
+        "line_push_ready": line_push_ready,
+        "line_target_configured": bool(target),
     }
 
 
@@ -445,13 +630,31 @@ async def line_webhook(
         src_k = source_key(ev)
         ev_ts_ms = int(ev.get("timestamp") or 0)
 
+        if not (LINE_TARGET_USER_ID or LINE_TARGET_GROUP_ID or LINE_TARGET_ROOM_ID):
+            if src_k and src_k != "unknown":
+                state.auto_line_target = src_k
+
         if ev.get("type") == "postback":
-            cmd = parse_postback_cmd(str(ev.get("postback", {}).get("data", "")))
+            data_pb = str(ev.get("postback", {}).get("data", "") or "").strip()
+            if not data_pb:
+                continue
+
+            # UI navigation within chat (Flex)
+            if data_pb.startswith("ui="):
+                page = data_pb[3:].strip().lower()
+                if page == "mode":
+                    reply_line_messages(reply_token, [flex_mode()])
+                elif page == "lock":
+                    reply_line_messages(reply_token, [flex_lock()])
+                else:
+                    reply_line_messages(reply_token, [flex_home()])
+                continue
+
+            cmd = parse_postback_cmd(data_pb)
             if not cmd:
                 continue
             if cmd in {"help", "menu"}:
-                maybe_update_user_richmenu(ev)
-                reply_line_messages(reply_token, [menu_message()])
+                reply_line_messages(reply_token, [flex_home()])
                 continue
             if not is_supported_cmd(cmd):
                 reply_line_text(reply_token, "unsupported cmd, send 'menu'")
@@ -459,9 +662,9 @@ async def line_webhook(
             if not debounce_ok(src_k, cmd, ev_ts_ms):
                 # Silent debounce: no chat spam.
                 continue
-            maybe_update_user_richmenu_for_cmd(ev, cmd)
             publish_cmd(cmd)
-            # Silent success for UI taps: no chat spam.
+            # Keep chat clean: show menu again instead of "sent: ..."
+            reply_line_messages(reply_token, [flex_home()])
             continue
 
         if ev.get("type") != "message":
@@ -473,8 +676,7 @@ async def line_webhook(
         text = str(msg.get("text", "")).strip().lower()
 
         if text in {"help", "menu"}:
-            maybe_update_user_richmenu(ev)
-            reply_line_messages(reply_token, [menu_message()])
+            reply_line_messages(reply_token, [flex_home()])
             continue
 
         if not is_supported_cmd(text):
@@ -485,9 +687,8 @@ async def line_webhook(
             reply_line_text(reply_token, "ignored (debounce), try again")
             continue
 
-        maybe_update_user_richmenu_for_cmd(ev, text)
         publish_cmd(text)
-        reply_line_text(reply_token, f"sent: {text} (mode={state.last_status_mode or 'unknown'})")
+        reply_line_messages(reply_token, [flex_home()])
 
     return {"ok": True}
 

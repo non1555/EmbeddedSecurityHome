@@ -87,6 +87,8 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
   }
 
   if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::door_open) {
+    // Don't keep extending entry delay / stacking score if the door stays open or chatters.
+    if (s.entry_pending) return d;
     if (s.last_indoor_activity_ms != 0 &&
         (e.ts_ms - s.last_indoor_activity_ms) <= cfg.exit_grace_after_indoor_activity_ms) {
       return d;

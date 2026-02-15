@@ -4,6 +4,25 @@
 enum class Mode { disarm, away, night };
 enum class AlarmLevel { off, warn, alert, critical };
 
+static inline const char* toString(Mode m) {
+  switch (m) {
+    case Mode::disarm: return "disarm";
+    case Mode::away:   return "away";
+    case Mode::night:  return "night";
+    default:           return "unknown";
+  }
+}
+
+static inline const char* toString(AlarmLevel lv) {
+  switch (lv) {
+    case AlarmLevel::off:      return "off";
+    case AlarmLevel::warn:     return "warn";
+    case AlarmLevel::alert:    return "alert";
+    case AlarmLevel::critical: return "critical";
+    default:                  return "unknown";
+  }
+}
+
 struct SystemState {
   Mode mode = Mode::disarm;
   AlarmLevel level = AlarmLevel::off;

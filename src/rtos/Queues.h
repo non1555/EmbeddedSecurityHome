@@ -6,10 +6,8 @@
 #include "app/Events.h"
 #include "app/SystemState.h"
 
-#if defined(ARDUINO_ARCH_ESP32)
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-#endif
 
 namespace RtosQueues {
 
@@ -38,13 +36,10 @@ struct ChokepointMsg {
   int cm = -1;
 };
 
-#if defined(ARDUINO_ARCH_ESP32)
 extern QueueHandle_t mqttPubQ;
 extern QueueHandle_t mqttCmdQ;
 extern QueueHandle_t chokepointQ;
-#endif
 
 bool init();
 
 } // namespace RtosQueues
-

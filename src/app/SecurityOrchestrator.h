@@ -33,18 +33,10 @@ private:
 
   Buzzer buzzer_{HwCfg::PIN_BUZZER, 0};
   Servo servo1_{HwCfg::PIN_SERVO1, 1, 1, 10, 90};
-#if SERVO_COUNT >= 2
   Servo servo2_{HwCfg::PIN_SERVO2, 2, 2, 10, 90};
-#endif
   Logger logger_;
   Notify notifySvc_;
-  Actuators acts_{&buzzer_, &servo1_,
-#if SERVO_COUNT >= 2
-  &servo2_
-#else
-  nullptr
-#endif
-  };
+  Actuators acts_{&buzzer_, &servo1_, &servo2_};
 
   void applyDecision(const Event& e);
   void printEventDecision(const Event& e, const Decision& d) const;
@@ -61,6 +53,12 @@ private:
   bool doorHoldWarnActive_ = false;
   bool doorHoldWarnSilenced_ = false;
   uint32_t doorUnlockDeadlineMs_ = 0;
+  uint32_t doorOpenWarnAtMs_ = 0;
+  uint32_t doorCloseLockAtMs_ = 0;
   uint32_t doorOpenSinceMs_ = 0;
   uint32_t nextDoorWarnMs_ = 0;
+
+  uint8_t badDoorCodeAttempts_ = 0;
+
+  bool servo1WasLocked_ = false;
 };

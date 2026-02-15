@@ -4,7 +4,9 @@
 
 class VibrationSensor {
 public:
-  VibrationSensor(uint8_t pin, uint8_t id, uint16_t threshold = 600, uint32_t cooldown_ms = 500);
+  // Vibration switch wired to GND (NC) with pull-up on the input.
+  // A "spike" is detected on a LOW->HIGH transition (brief open circuit) with cooldown.
+  VibrationSensor(uint8_t pin, uint8_t id, uint32_t cooldown_ms = 500);
 
   void begin();
   bool poll(uint32_t nowMs, Event& out);
@@ -12,9 +14,7 @@ public:
 private:
   uint8_t pin_;
   uint8_t id_;
-  uint16_t threshold_;
   uint32_t cooldown_ms_;
   uint32_t last_fire_ms_;
-
-  uint16_t readRaw_() const;
+  bool last_active_;
 };

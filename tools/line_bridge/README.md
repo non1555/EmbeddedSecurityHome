@@ -19,9 +19,16 @@ This bridge connects your ESP32 MQTT topics to LINE Official Account:
 
 ## 2) Setup bridge env
 
+Windows:
+```bat
+cd tools\line_bridge
+copy .env.example .env
+```
+
+Linux/Ubuntu:
 ```bash
 cd tools/line_bridge
-copy .env.example .env
+cp .env.example .env
 ```
 
 Edit `.env` values.
@@ -29,33 +36,74 @@ Edit `.env` values.
 Important fields:
 - `MQTT_BROKER`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`
 - `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
-- one target: `LINE_TARGET_USER_ID` or `LINE_TARGET_GROUP_ID` or `LINE_TARGET_ROOM_ID`
+- optional target (for push pinning): `LINE_TARGET_USER_ID` or `LINE_TARGET_GROUP_ID` or `LINE_TARGET_ROOM_ID`
 - metrics throttle: `METRICS_PUSH_PERIOD_S` (default 30s)
 
+Notes:
+- If you do not set any `LINE_TARGET_*`, the bridge will automatically learn a push target from the first LINE webhook it receives (send any message in the chat you want to receive pushes to).
+
 ## Broker on this machine
-
-Detected on this PC:
-- Mosquitto installed at `C:\Program Files\mosquitto\mosquitto.exe`
-- Listener config `listener 1883 0.0.0.0` in `C:\Program Files\mosquitto\mosquitto.conf`
-- LAN IP used for ESP32: `192.168.1.58`
-
-If broker is not running, start it:
-
-```powershell
-& "C:\Program Files\mosquitto\mosquitto.exe" -c "C:\Program Files\mosquitto\mosquitto.conf" -v
-```
+Run an MQTT broker reachable by both:
+- ESP32 firmware (`MQTT_BROKER` in `platformio.ini`)
+- this bridge (`MQTT_BROKER` in `.env`)
 
 ## 3) Install and run
 
-```bash
+Windows (CLI):
+```bat
+cd tools\line_bridge
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python bridge.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe bridge.py
 ```
 
+Linux/Ubuntu (CLI):
+```bash
+cd tools/line_bridge
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+.venv/bin/python3 bridge.py
+```
+
+Convenience scripts:
+- Windows: `tools\line_bridge\run.cmd` and `tools\line_bridge\stop.cmd`
+- Linux/Ubuntu: `tools/line_bridge/run.sh` and `tools/line_bridge/stop.sh` (run `chmod +x tools/line_bridge/*.sh` once)
+
+UI Launcher (no terminal):
+- Double-click `tools/line_bridge/launcher.vbs`
+- Click `Start`, then use `Copy Webhook` and paste into LINE Developers as `.../line/webhook`
+- Control UI: use the `Control` tab (Mode / Lock). It talks to the local bridge endpoints (`/cmd`, `/state`).
+
+## Rich Menu (Bottom Bar)
+
+LINE "Rich menu" (the bottom bar UI) requires an image. This project generates one for you.
+
+1. Ensure your `.env` has `LINE_CHANNEL_ACCESS_TOKEN`.
+2. Install Pillow (one-time):
+   - Windows: `tools\\line_bridge\\.venv\\Scripts\\python.exe -m pip install pillow`
+   - Linux: `tools/line_bridge/.venv/bin/python3 -m pip install pillow`
+3. Create + set default rich menu:
+   - Windows: `tools\\line_bridge\\.venv\\Scripts\\python.exe tools\\line_bridge\\richmenu_setup.py`
+   - Linux: `tools/line_bridge/.venv/bin/python3 tools/line_bridge/richmenu_setup.py`
+
+The bottom bar buttons open the in-chat Flex UI (`Mode` / `Lock`).
+
+UI Launcher (Linux/Ubuntu):
+- Install Tkinter if missing: `sudo apt-get install -y python3-tk`
+- Run: `tools/line_bridge/.venv/bin/python3 tools/line_bridge/launcher.pyw`
+
+Port:
+- Default is `HTTP_PORT=8080` (see `.env`). If you get Windows error `WinError 10048`, another process is already using the port. Either stop that process or change `HTTP_PORT` (e.g. 8081) and restart the bridge.
+
 Health check:
-- `GET http://127.0.0.1:8080/health`
+- `GET http://127.0.0.1:<HTTP_PORT>/health`
+
+`/health` returns:
+- `mqtt_connected`: whether the bridge is connected to MQTT
+- `line_webhook_ready`: token+secret configured (webhook verify + replies)
+- `line_push_ready`: token+target configured (push notifications)
+- `ready`: true when MQTT + LINE webhook + LINE push are all ready
+- `problems`: list of missing pieces when not ready
 
 ## 4) Supported LINE commands
 
