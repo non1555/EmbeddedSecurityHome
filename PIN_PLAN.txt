@@ -1,0 +1,48 @@
+SecurityHome Pin Plan (Draft)
+Updated: 2026-02-16
+
+Assumptions agreed
+- Keypad uses I2C expander (PCF8574) for sure.
+- Button can move to GPIO39.
+- Vibration uses D0 and will be single-line input (GPIO34).
+- GPIO36 will be unused.
+- New motor driver is L293D.
+
+I2C bus
+- SDA: GPIO21
+- SCL: GPIO22
+- Devices:
+  - Keypad expander (PCF8574): 0x20
+  - OLED: 0x3C/0x3D
+  - BH1750: 0x23/0x5C
+
+Core security pins (existing)
+- BUZZER: GPIO25
+- SERVO1: GPIO26
+- SERVO2: GPIO27
+- REED_1: GPIO35
+- REED_2: GPIO32
+- PIR_1: GPIO33
+- PIR_2: GPIO18
+- PIR_3: GPIO19
+- VIB_DO (single): GPIO34
+- US1 TRIG/ECHO: GPIO13 / GPIO14
+- US2 TRIG/ECHO: GPIO16 / GPIO17
+- US3 TRIG/ECHO: GPIO4 / GPIO5
+
+Updated user controls
+- MANUAL BUTTON: GPIO39
+
+New modules
+- LED: GPIO2
+- L293D IN1: GPIO12
+- L293D IN2: GPIO23
+- L293D ENA: tie to 5V (always enabled)
+
+Reserved / unused
+- GPIO36: unused
+
+Important notes
+- GPIO39 is input-only and has no internal pull-up/down.
+- GPIO2 and GPIO12 are strapping pins; avoid external circuits forcing wrong level during boot.
+- If motor speed control is needed later, move ENA from fixed 5V to a free PWM-capable GPIO.
