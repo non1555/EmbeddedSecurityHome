@@ -36,6 +36,7 @@ Edit `.env` values.
 Important fields:
 - `MQTT_BROKER`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`
 - `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
+- `NGROK_AUTHTOKEN` (required)
 - optional target (for push pinning): `LINE_TARGET_USER_ID` or `LINE_TARGET_GROUP_ID` or `LINE_TARGET_ROOM_ID`
 - metrics throttle: `METRICS_PUSH_PERIOD_S` (default 30s)
 
@@ -72,7 +73,11 @@ Convenience scripts:
 UI Launcher (no terminal):
 - Double-click `tools/line_bridge/launcher.vbs`
 - Click `Start`, then use `Copy Webhook` and paste into LINE Developers as `.../line/webhook`
-- Control UI: use the `Control` tab (Mode / Lock). It talks to the local bridge endpoints (`/cmd`, `/state`).
+- Control is handled in LINE chat (Rich Menu + Flex UI).
+- Firmware UI: use the `Firmware` tab to set ESP Wi-Fi/MQTT values, then click `Build`/`Upload`.
+- Launcher saves your values in `tools/line_bridge/.env`.
+  - `platformio.ini` reads `.env` via `tools/pio_env.py` (PlatformIO pre-build script).
+  - `platformio.ini` is not edited by launcher.
 
 ## Rich Menu (Bottom Bar)
 
@@ -87,6 +92,8 @@ LINE "Rich menu" (the bottom bar UI) requires an image. This project generates o
    - Linux: `tools/line_bridge/.venv/bin/python3 tools/line_bridge/richmenu_setup.py`
 
 The bottom bar buttons open the in-chat Flex UI (`Mode` / `Lock`).
+`richmenu_setup.py` now regenerates `richmenu.png` by default every run.
+If you want to keep your own image file, run with `--use-existing-image`.
 
 UI Launcher (Linux/Ubuntu):
 - Install Tkinter if missing: `sudo apt-get install -y python3-tk`

@@ -6,9 +6,11 @@ __pycache__/
 nohup.out
 .vscode/.browse.c_cpp.db*
 .vscode/ipch
+.vscode/c_cpp_properties.json
 .vscode/settings.local.backup.json
 tools/line_bridge/.env
 tools/line_bridge/.venv/
 tools/line_bridge/.bridge.pid
 tools/line_bridge/.ngrok.pid
 tools/line_bridge/richmenu.png
+platformio.local.ini

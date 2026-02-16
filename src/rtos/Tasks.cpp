@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "app/MqttConfig.h"
 #include "rtos/Queues.h"
 
 #include <Preferences.h>

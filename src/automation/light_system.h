@@ -1,7 +1,4 @@
-#ifndef LIGHT_SYSTEM_H
-#define LIGHT_SYSTEM_H
+#pragma once
 
 void initLightSystem();
 void updateLightSystem();
-
-#endif

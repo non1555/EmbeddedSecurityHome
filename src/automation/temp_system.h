@@ -1,7 +1,4 @@
-#ifndef TEMP_SYSTEM_H
-#define TEMP_SYSTEM_H
+#pragma once
 
 void initTempSystem();
 void updateTempSystem();
-
-#endif

@@ -64,7 +64,7 @@ def generate_image(out_path: Path) -> None:
         )
 
     W, H = 2500, 1686
-    img = Image.new("RGB", (W, H), (245, 247, 250))
+    img = Image.new("RGB", (W, H), (242, 246, 252))
     d = ImageDraw.Draw(img)
 
     # Panels
@@ -76,44 +76,66 @@ def generate_image(out_path: Path) -> None:
     def rr(x0, y0, x1, y1, r, fill, outline):
         d.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=fill, outline=outline, width=6)
 
-    rr(pad, top, mid - 25, bottom, 90, (255, 255, 255), (40, 40, 40))
-    rr(mid + 25, top, W - pad, bottom, 90, (255, 255, 255), (40, 40, 40))
+    rr(pad, top, mid - 25, bottom, 90, (255, 255, 255), (52, 66, 84))
+    rr(mid + 25, top, W - pad, bottom, 90, (255, 255, 255), (52, 66, 84))
 
     # Header bar
-    rr(pad, 60, W - pad, 190, 60, (40, 40, 40), (40, 40, 40))
+    rr(pad, 60, W - pad, 190, 60, (36, 54, 76), (36, 54, 76))
 
     # Fonts
     try:
         font_title = ImageFont.truetype("arial.ttf", 80)
-        font_big = ImageFont.truetype("arial.ttf", 220)
-        font_small = ImageFont.truetype("arial.ttf", 70)
+        font_big = ImageFont.truetype("arial.ttf", 210)
+        font_small = ImageFont.truetype("arial.ttf", 62)
     except Exception:
         font_title = ImageFont.load_default()
         font_big = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
     d.text((pad + 60, 90), "EmbeddedSecurity", fill=(255, 255, 255), font=font_title)
-    d.text((pad + 60, 200), "Tap a button", fill=(40, 40, 40), font=font_small)
+    d.text((pad + 60, 200), "Tap a button", fill=(52, 66, 84), font=font_small)
 
-    # Left: MODE
-    d.text((pad + 200, top + 200), "MODE", fill=(40, 40, 40), font=font_big)
-    d.text((pad + 210, top + 470), "Disarm / Night / Away", fill=(80, 80, 80), font=font_small)
-    # Simple icon: three bars
-    x = pad + 200
-    y = bottom - 380
-    for i, w in enumerate([520, 420, 300]):
-        d.rectangle([x, y + i * 110, x + w, y + i * 110 + 60], fill=(40, 40, 40))
+    # Left: MODE (Windows-style app tile icon)
+    d.text((pad + 200, top + 190), "MODE", fill=(36, 54, 76), font=font_big)
+    d.text((pad + 210, top + 450), "Disarm / Night / Away", fill=(90, 100, 115), font=font_small)
+    x = pad + 250
+    y = bottom - 470
+    c = (36, 54, 76)
+    s = 150
+    gap = 24
+    d.rounded_rectangle([x, y, x + s, y + s], radius=22, fill=c)
+    d.rounded_rectangle([x + s + gap, y, x + 2 * s + gap, y + s], radius=22, fill=c)
+    d.rounded_rectangle([x, y + s + gap, x + s, y + 2 * s + gap], radius=22, fill=c)
+    d.rounded_rectangle([x + s + gap, y + s + gap, x + 2 * s + gap, y + 2 * s + gap], radius=22, fill=c)
 
-    # Right: LOCK
+    # Right: LOCK (window + door + lock icons)
     rx = mid + 140
-    d.text((rx, top + 200), "LOCK", fill=(40, 40, 40), font=font_big)
-    d.text((rx + 10, top + 470), "Door / Window", fill=(80, 80, 80), font=font_small)
-    # Simple icon: padlock
-    cx = W - pad - 560
-    cy = bottom - 330
-    d.rounded_rectangle([cx, cy, cx + 520, cy + 340], radius=60, fill=(40, 40, 40))
-    d.arc([cx + 90, cy - 220, cx + 430, cy + 90], start=200, end=-20, fill=(40, 40, 40), width=80)
-    d.ellipse([cx + 240, cy + 130, cx + 290, cy + 180], fill=(245, 247, 250))
+    d.text((rx, top + 190), "LOCK", fill=(36, 54, 76), font=font_big)
+    d.text((rx + 10, top + 450), "Door / Window / All", fill=(90, 100, 115), font=font_small)
+
+    # Window icon
+    wx = rx + 30
+    wy = bottom - 500
+    ww = 250
+    wh = 250
+    d.rounded_rectangle([wx, wy, wx + ww, wy + wh], radius=30, outline=(36, 54, 76), width=26)
+    d.line([wx + ww // 2, wy + 22, wx + ww // 2, wy + wh - 22], fill=(36, 54, 76), width=18)
+    d.line([wx + 22, wy + wh // 2, wx + ww - 22, wy + wh // 2], fill=(36, 54, 76), width=18)
+
+    # Door icon
+    dx = wx + 320
+    dy = wy
+    dw = 190
+    dh = 280
+    d.rounded_rectangle([dx, dy, dx + dw, dy + dh], radius=24, outline=(36, 54, 76), width=24)
+    d.ellipse([dx + dw - 44, dy + dh // 2 - 12, dx + dw - 20, dy + dh // 2 + 12], fill=(36, 54, 76))
+
+    # Padlock icon
+    lx = rx + 40
+    ly = bottom - 180
+    d.rounded_rectangle([lx, ly, lx + 470, ly + 250], radius=52, fill=(36, 54, 76))
+    d.arc([lx + 90, ly - 190, lx + 380, ly + 70], start=205, end=-25, fill=(36, 54, 76), width=64)
+    d.ellipse([lx + 225, ly + 100, lx + 265, ly + 140], fill=(242, 246, 252))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path, format="PNG")
@@ -185,6 +207,7 @@ def main() -> int:
     ap.add_argument("--chatbar", default="Mode / Lock")
     ap.add_argument("--image", default=str(ROOT / "richmenu.png"))
     ap.add_argument("--delete-all", action="store_true", help="Delete all existing rich menus first")
+    ap.add_argument("--use-existing-image", action="store_true", help="Do not regenerate image; use --image as-is")
     args = ap.parse_args()
 
     if args.delete_all:
@@ -194,7 +217,10 @@ def main() -> int:
                 delete_richmenu(rid)
 
     img_path = Path(args.image)
-    if not img_path.exists():
+    if args.use_existing_image:
+        if not img_path.exists():
+            raise SystemExit(f"Image not found: {img_path}")
+    else:
         generate_image(img_path)
 
     rid = create_richmenu(args.name, args.chatbar)

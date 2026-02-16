@@ -10,7 +10,7 @@ void initLightSystem() {
 }
 
 void updateLightSystem() {
-  if (HwCfg::PIN_LDR == HwCfg::PIN_UNUSED) return;
+  if (HwCfg::LIGHT_SENSOR_ADC_PIN == HwCfg::PIN_UNUSED) return;
   if (HwCfg::PIN_RELAY_LIGHT == HwCfg::PIN_UNUSED) return;
 
   static uint32_t nextMs = 0;
@@ -18,9 +18,8 @@ void updateLightSystem() {
   if (nextMs != 0 && nowMs < nextMs) return;
   nextMs = nowMs + 400;
 
-  const int lightValue = analogRead(HwCfg::PIN_LDR);
+  const int lightValue = analogRead(HwCfg::LIGHT_SENSOR_ADC_PIN);
 
-  // Note: depending on your LDR divider, "darker" can mean higher or lower ADC.
   const bool shouldOn = isSomeoneHome && (lightValue > HwCfg::LIGHT_ADC_THRESHOLD);
   digitalWrite(HwCfg::PIN_RELAY_LIGHT, shouldOn ? HIGH : LOW);
 

@@ -5,6 +5,7 @@
 #include "actuators/Buzzer.h"
 #include "actuators/Servo.h"
 #include "app/Config.h"
+#include "app/DoorUnlockSession.h"
 #include "app/Events.h"
 #include "app/HardwareConfig.h"
 #include "app/RuleEngine.h"
@@ -47,16 +48,7 @@ private:
   void clearDoorUnlockSession(bool stopBuzzer);
   void updateDoorUnlockSession(uint32_t nowMs);
 
-  bool doorUnlockSessionActive_ = false;
-  bool doorSessionSawOpen_ = false;
-  bool doorWasOpenLastTick_ = false;
-  bool doorHoldWarnActive_ = false;
-  bool doorHoldWarnSilenced_ = false;
-  uint32_t doorUnlockDeadlineMs_ = 0;
-  uint32_t doorOpenWarnAtMs_ = 0;
-  uint32_t doorCloseLockAtMs_ = 0;
-  uint32_t doorOpenSinceMs_ = 0;
-  uint32_t nextDoorWarnMs_ = 0;
+  DoorUnlockSession doorSession_;
 
   uint8_t badDoorCodeAttempts_ = 0;
 

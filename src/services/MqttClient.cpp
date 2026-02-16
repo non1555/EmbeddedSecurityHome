@@ -2,8 +2,6 @@
 
 #include <cstring>
 
-#include "app/MqttConfig.h"
-
 MqttClient* MqttClient::self_ = nullptr;
 
 static const char* wlStatusText(wl_status_t st) {

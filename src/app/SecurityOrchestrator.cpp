@@ -44,102 +44,20 @@ void SecurityOrchestrator::applyDecision(const Event& e) {
 }
 
 void SecurityOrchestrator::startDoorUnlockSession(uint32_t nowMs) {
-  doorUnlockSessionActive_ = true;
-  doorSessionSawOpen_ = false;
-  doorHoldWarnActive_ = false;
-  doorHoldWarnSilenced_ = false;
-  doorUnlockDeadlineMs_ = nowMs + cfg_.door_unlock_timeout_ms;
-  doorWasOpenLastTick_ = collector_.isDoorOpen();
-  doorOpenSinceMs_ = doorWasOpenLastTick_ ? nowMs : 0;
-  doorOpenWarnAtMs_ = 0;
-  doorCloseLockAtMs_ = 0;
-  nextDoorWarnMs_ = 0;
+  doorSession_.start(nowMs, collector_.isDoorOpen(), cfg_);
 }
 
 void SecurityOrchestrator::clearDoorUnlockSession(bool stopBuzzer) {
-  doorUnlockSessionActive_ = false;
-  doorSessionSawOpen_ = false;
-  doorHoldWarnActive_ = false;
-  doorHoldWarnSilenced_ = false;
-  doorUnlockDeadlineMs_ = 0;
-  doorOpenWarnAtMs_ = 0;
-  doorCloseLockAtMs_ = 0;
-  doorOpenSinceMs_ = 0;
-  nextDoorWarnMs_ = 0;
-  if (stopBuzzer) buzzer_.stop();
+  doorSession_.clear(stopBuzzer, buzzer_);
 }
 
 void SecurityOrchestrator::updateDoorUnlockSession(uint32_t nowMs) {
-  if (!doorUnlockSessionActive_) return;
-
-  static constexpr uint32_t kAutoLockAfterCloseMs = 3000;
-
-  const bool doorOpen = collector_.isDoorOpen();
-  if (!doorWasOpenLastTick_ && doorOpen) {
-    doorSessionSawOpen_ = true;
-    doorOpenSinceMs_ = nowMs;
-    doorHoldWarnActive_ = false;
-    doorHoldWarnSilenced_ = false;
-    doorOpenWarnAtMs_ = nowMs + cfg_.door_open_hold_warn_after_ms;
-    doorCloseLockAtMs_ = 0; // cancel pending close-lock
-    nextDoorWarnMs_ = 0;
-  }
-
-  if (doorWasOpenLastTick_ && !doorOpen) {
-    // Schedule auto-lock a bit after close (gives user time to fully shut door).
-    doorHoldWarnActive_ = false;
-    doorHoldWarnSilenced_ = false;
-    doorOpenWarnAtMs_ = 0;
-    doorCloseLockAtMs_ = nowMs + kAutoLockAfterCloseMs;
-    nextDoorWarnMs_ = 0;
-  }
-  doorWasOpenLastTick_ = doorOpen;
-
-  // Two independent countdown phases:
-  // 1) Unlocked but not opened yet: countdown to auto-lock.
-  // 2) Opened but not closed: countdown to start warnings (can't auto-lock while open).
-
-  // Phase 3: closed after being opened -> lock after a short delay.
-  if (doorCloseLockAtMs_ != 0) {
-    if (doorOpen) {
-      doorCloseLockAtMs_ = 0;
-    } else if (nowMs >= doorCloseLockAtMs_) {
-      servo1_.lock();
-      notifySvc_.send("door auto-locked after close");
-      clearDoorUnlockSession(true);
-    }
-    return;
-  }
-
-  if (!doorSessionSawOpen_) {
-    // Phase 1: waiting for door to open (entry).
-    if (nowMs >= doorUnlockDeadlineMs_) {
-      servo1_.lock();
-      notifySvc_.send("door auto-locked: unlock timeout");
-      clearDoorUnlockSession(true);
-      return;
-    }
-
-    const uint32_t timeLeftMs = doorUnlockDeadlineMs_ - nowMs;
-    if (timeLeftMs <= cfg_.door_unlock_warn_before_ms &&
-        (nextDoorWarnMs_ == 0 || nowMs >= nextDoorWarnMs_)) {
-      buzzer_.warn();
-      nextDoorWarnMs_ = nowMs + cfg_.door_warn_retrigger_ms;
-    }
-    return;
-  }
-
-  if (doorOpen) {
-    // Phase 2: door is open, count down to warning start.
-    if (doorOpenWarnAtMs_ != 0 && nowMs >= doorOpenWarnAtMs_) {
-      doorHoldWarnActive_ = true;
-      if (!doorHoldWarnSilenced_ && (nextDoorWarnMs_ == 0 || nowMs >= nextDoorWarnMs_)) {
-        buzzer_.warn();
-        nextDoorWarnMs_ = nowMs + cfg_.door_warn_retrigger_ms;
-      }
-    }
-    return;
-  }
+  doorSession_.update(nowMs,
+                      collector_.isDoorOpen(),
+                      cfg_,
+                      servo1_,
+                      buzzer_,
+                      notifySvc_);
 }
 
 void SecurityOrchestrator::begin() {
@@ -321,11 +239,7 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
 bool SecurityOrchestrator::processDoorHoldWarnSilenceEvent(const Event& e) {
   if (e.type != EventType::door_hold_warn_silence) return false;
 
-  if (doorUnlockSessionActive_ && collector_.isDoorOpen() && doorHoldWarnActive_) {
-    doorHoldWarnSilenced_ = true;
-    buzzer_.stop();
-    notifySvc_.send("door-open warning silenced");
-  } else {
+  if (!doorSession_.silenceHoldWarning(collector_.isDoorOpen(), buzzer_, notifySvc_)) {
     Serial.println("[KEYPAD] silence ignored (not in door-open-hold warning)");
   }
   return true;
@@ -409,7 +323,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   // If something unlocked the door while it's closed (e.g., DISARM command path),
   // start the auto-lock countdown.
   const bool servo1LockedNow = servo1_.isLocked();
-  if (!doorUnlockSessionActive_ &&
+  if (!doorSession_.isActive() &&
       servo1WasLocked_ &&
       !servo1LockedNow &&
       !collector_.isDoorOpen()) {
@@ -420,21 +334,12 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   bool cdActive = false;
   uint32_t cdDeadline = 0;
   uint32_t cdWarnBefore = 0;
-  if (doorUnlockSessionActive_ && !servo1_.isLocked()) {
-    if (!doorSessionSawOpen_) {
-      cdDeadline = doorUnlockDeadlineMs_;
-      cdWarnBefore = cfg_.door_unlock_warn_before_ms;
-      cdActive = (cdDeadline != 0 && nowMs < cdDeadline);
-    } else if (collector_.isDoorOpen()) {
-      cdDeadline = doorOpenWarnAtMs_;
-      cdWarnBefore = 2000;
-      cdActive = (cdDeadline != 0 && nowMs < cdDeadline);
-    } else if (doorCloseLockAtMs_ != 0) {
-      cdDeadline = doorCloseLockAtMs_;
-      cdWarnBefore = 1000;
-      cdActive = (nowMs < cdDeadline);
-    }
-  }
+  cdActive = doorSession_.countdown(nowMs,
+                                    servo1_.isLocked(),
+                                    collector_.isDoorOpen(),
+                                    cfg_,
+                                    cdDeadline,
+                                    cdWarnBefore);
   collector_.updateOledStatus(nowMs,
                               servo1_.isLocked(),
                               collector_.isDoorOpen(),
@@ -448,24 +353,12 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   if (mqttBus_.pollCommand(remoteCmd)) {
     processRemoteCommand(remoteCmd);
     const uint32_t t = millis();
-    cdActive = false;
-    cdDeadline = 0;
-    cdWarnBefore = 0;
-    if (doorUnlockSessionActive_ && !servo1_.isLocked()) {
-      if (!doorSessionSawOpen_) {
-        cdDeadline = doorUnlockDeadlineMs_;
-        cdWarnBefore = cfg_.door_unlock_warn_before_ms;
-        cdActive = (cdDeadline != 0 && t < cdDeadline);
-      } else if (collector_.isDoorOpen()) {
-        cdDeadline = doorOpenWarnAtMs_;
-        cdWarnBefore = 2000;
-        cdActive = (cdDeadline != 0 && t < cdDeadline);
-      } else if (doorCloseLockAtMs_ != 0) {
-        cdDeadline = doorCloseLockAtMs_;
-        cdWarnBefore = 1000;
-        cdActive = (t < cdDeadline);
-      }
-    }
+    cdActive = doorSession_.countdown(t,
+                                      servo1_.isLocked(),
+                                      collector_.isDoorOpen(),
+                                      cfg_,
+                                      cdDeadline,
+                                      cdWarnBefore);
     collector_.updateOledStatus(millis(),
                                 servo1_.isLocked(),
                                 collector_.isDoorOpen(),
