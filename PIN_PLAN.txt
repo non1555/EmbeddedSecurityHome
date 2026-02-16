@@ -3,9 +3,8 @@ Updated: 2026-02-16
 
 Assumptions agreed
 - Keypad uses I2C expander (PCF8574) for sure.
-- Button can move to GPIO39.
+- Button can move to GPIO36.
 - Vibration uses D0 and will be single-line input (GPIO34).
-- GPIO36 will be unused.
 - New motor driver is L293D.
 
 I2C bus
@@ -31,18 +30,20 @@ Core security pins (existing)
 - US3 TRIG/ECHO: GPIO4 / GPIO5
 
 Updated user controls
-- MANUAL BUTTON: GPIO39
+- MANUAL BUTTON LOCK: GPIO36
+- MANUAL BUTTON UNLOCK: GPIO39
 
 New modules
 - LED: GPIO2
 - L293D IN1: GPIO12
 - L293D IN2: GPIO23
 - L293D ENA: tie to 5V (always enabled)
+- DHT DATA: GPIO15
 
 Reserved / unused
-- GPIO36: unused
+- (none in current draft)
 
 Important notes
-- GPIO39 is input-only and has no internal pull-up/down.
-- GPIO2 and GPIO12 are strapping pins; avoid external circuits forcing wrong level during boot.
+- GPIO34/35/36/39 are input-only. GPIO36/39 have no internal pull-up/down.
+- GPIO2, GPIO12, and GPIO15 are strapping pins; avoid external circuits forcing wrong level during boot.
 - If motor speed control is needed later, move ENA from fixed 5V to a free PWM-capable GPIO.
