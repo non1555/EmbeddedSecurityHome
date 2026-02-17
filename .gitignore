@@ -1,5 +1,6 @@
 .pio
 .pio-venv
+.venv_pio/
 .venv
 __pycache__/
 *.log
