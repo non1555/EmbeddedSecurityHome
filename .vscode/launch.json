@@ -12,31 +12,31 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "c:/Users/N J/Documents/PlatformIO/Projects/EmbeddedSecurityHome/.pio/build/prod/firmware.elf",
-            "projectEnvName": "prod",
-            "toolchainBinDir": "C:/Users/N J/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "/home/non/SecurityHome/SecurityHome/.pio/build/automation/firmware.elf",
+            "projectEnvName": "automation",
+            "toolchainBinDir": "/home/non/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "preLaunchTask": {
                 "type": "PlatformIO",
-                "task": "Pre-Debug (prod)"
+                "task": "Pre-Debug (automation)"
             }
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "c:/Users/N J/Documents/PlatformIO/Projects/EmbeddedSecurityHome/.pio/build/prod/firmware.elf",
-            "projectEnvName": "prod",
-            "toolchainBinDir": "C:/Users/N J/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "/home/non/SecurityHome/SecurityHome/.pio/build/automation/firmware.elf",
+            "projectEnvName": "automation",
+            "toolchainBinDir": "/home/non/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "c:/Users/N J/Documents/PlatformIO/Projects/EmbeddedSecurityHome/.pio/build/prod/firmware.elf",
-            "projectEnvName": "prod",
-            "toolchainBinDir": "C:/Users/N J/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "/home/non/SecurityHome/SecurityHome/.pio/build/automation/firmware.elf",
+            "projectEnvName": "automation",
+            "toolchainBinDir": "/home/non/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "loadMode": "manual"
         }

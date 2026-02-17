@@ -37,7 +37,12 @@ mqtt_broker = cfg.get("FW_MQTT_BROKER", "127.0.0.1")
 mqtt_port = _as_int(cfg.get("FW_MQTT_PORT", "1883"), 1883)
 mqtt_username = cfg.get("FW_MQTT_USERNAME", "")
 mqtt_password = cfg.get("FW_MQTT_PASSWORD", "")
-mqtt_client_id = cfg.get("FW_MQTT_CLIENT_ID", "embedded-security-esp32")
+pioenv = str(env.get("PIOENV", "")).strip()
+if pioenv == "automation":
+    mqtt_client_id = cfg.get("FW_MQTT_CLIENT_ID_AUTOMATION", "") or cfg.get("FW_MQTT_CLIENT_ID", "")
+else:
+    mqtt_client_id = cfg.get("FW_MQTT_CLIENT_ID", "")
+mqtt_client_id = mqtt_client_id or "embedded-security-esp32"
 
 env.Append(
     CPPDEFINES=[
@@ -50,4 +55,3 @@ env.Append(
         ("MQTT_CLIENT_ID", _cstr(mqtt_client_id)),
     ]
 )
-
