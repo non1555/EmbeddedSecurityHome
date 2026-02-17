@@ -38,7 +38,7 @@ mqtt_port = _as_int(cfg.get("FW_MQTT_PORT", "1883"), 1883)
 mqtt_username = cfg.get("FW_MQTT_USERNAME", "")
 mqtt_password = cfg.get("FW_MQTT_PASSWORD", "")
 pioenv = str(env.get("PIOENV", "")).strip()
-if pioenv == "automation":
+if pioenv in ("automation-board", "automation"):
     mqtt_client_id = cfg.get("FW_MQTT_CLIENT_ID_AUTOMATION", "") or cfg.get("FW_MQTT_CLIENT_ID", "")
 else:
     mqtt_client_id = cfg.get("FW_MQTT_CLIENT_ID", "")

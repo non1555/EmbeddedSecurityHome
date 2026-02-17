@@ -50,6 +50,34 @@ Run an MQTT broker reachable by both:
 
 ## 3) Install and run
 
+From project root (all-in-one setup):
+
+Windows:
+```bat
+setup.cmd
+```
+
+Linux/Ubuntu:
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+Bootstrap (fresh clone, recommended):
+
+Windows:
+```bat
+tools\line_bridge\bootstrap.cmd
+```
+
+Linux/Ubuntu:
+```bash
+chmod +x tools/line_bridge/bootstrap.sh
+tools/line_bridge/bootstrap.sh
+```
+
+`bootstrap` will create `.venv`, install Python deps, create `.env` from `.env.example` if missing, and then start the launcher.
+
 Windows (CLI):
 ```bat
 cd tools\line_bridge
@@ -72,9 +100,12 @@ Convenience scripts:
 
 UI Launcher (no terminal):
 - Double-click `tools/line_bridge/launcher.vbs`
+- Or run `tools\line_bridge\start-ui.cmd`
 - Click `Start`, then use `Copy Webhook` and paste into LINE Developers as `.../line/webhook`
 - Control is handled in LINE chat (Rich Menu + Flex UI).
 - Firmware UI: use the `Firmware` tab to set ESP Wi-Fi/MQTT values, then click `Build`/`Upload`.
+- Firmware UI supports separate `Build Env` and `Upload Env` (board/profile), with env details shown under each selector.
+  - Recommended: `main-board` for main firmware, `automation-board` for automation firmware.
 - Launcher saves your values in `tools/line_bridge/.env`.
   - `platformio.ini` reads `.env` via `tools/pio_env.py` (PlatformIO pre-build script).
   - `platformio.ini` is not edited by launcher.
@@ -98,6 +129,12 @@ If you want to keep your own image file, run with `--use-existing-image`.
 UI Launcher (Linux/Ubuntu):
 - Install Tkinter if missing: `sudo apt-get install -y python3-tk`
 - Run: `tools/line_bridge/.venv/bin/python3 tools/line_bridge/launcher.pyw`
+
+Windows PowerShell note (ExecutionPolicy):
+- Do not run `Activate.ps1` for this project setup.
+- Use `setup.cmd` or `tools\line_bridge\start-ui.cmd` directly.
+- If you still want to activate in PowerShell, run once per shell:
+  - `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
 
 Port:
 - Default is `HTTP_PORT=8080` (see `.env`). If you get Windows error `WinError 10048`, another process is already using the port. Either stop that process or change `HTTP_PORT` (e.g. 8081) and restart the bridge.

@@ -1,7 +1,10 @@
 import json
+import json
 import os
 import platform
+import re
 import shutil
+import ctypes
 import signal
 import socket
 import subprocess
@@ -19,9 +22,78 @@ ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent.parent
 ENV_PATH = ROOT / ".env"
 PLATFORMIO_INI_PATH = PROJECT_ROOT / "platformio.ini"
+NGROK_BUNDLE_DIR = PROJECT_ROOT / "tools" / "ngrok"
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 DEFAULT_FW_ENV = "esp32doit-devkit-v1"
+PREFERRED_FW_ENVS = ("main-board", "automation-board")
+MAIN_BOARD_ENV = "main-board"
+AUTOMATION_BOARD_ENV = "automation-board"
+
+
+def parse_platformio_envs(path: Path) -> tuple[list[str], dict[str, str]]:
+    envs: list[str] = []
+    details: dict[str, str] = {}
+    if not path.exists():
+        return envs, details
+
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    pending_comments: list[str] = []
+    current_env = ""
+
+    for raw in lines:
+        line = raw.strip()
+        env_match = re.match(r"^\[env:([^\]]+)\]$", line)
+        if env_match:
+            current_env = env_match.group(1).strip()
+            if current_env:
+                envs.append(current_env)
+                if pending_comments:
+                    details[current_env] = " ".join(pending_comments)
+            pending_comments = []
+            continue
+
+        if not line:
+            pending_comments = []
+            continue
+
+        if line.startswith(";") or line.startswith("#"):
+            txt = line.lstrip(";#").strip()
+            if txt:
+                pending_comments.append(txt)
+            continue
+
+        pending_comments = []
+        if not current_env or "=" not in line:
+            continue
+
+        k, v = line.split("=", 1)
+        key = k.strip().lower()
+        val = v.strip()
+        if key == "board":
+            prev = details.get(current_env, "")
+            details[current_env] = f"{prev} board={val}".strip()
+        elif key == "build_src_filter":
+            prev = details.get(current_env, "")
+            details[current_env] = f"{prev} src={val}".strip()
+
+    return envs, details
+
+
+def select_fw_env_options(all_envs: list[str]) -> list[str]:
+    preferred = [e for e in PREFERRED_FW_ENVS if e in all_envs]
+    if preferred:
+        return preferred
+    return all_envs if all_envs else [DEFAULT_FW_ENV]
+
+
+def normalize_fw_env_name(name: str) -> str:
+    raw = (name or "").strip()
+    aliases = {
+        "prod": "main-board",
+        "automation": "automation-board",
+    }
+    return aliases.get(raw, raw)
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -68,11 +140,17 @@ def http_get_json(url: str, timeout_s: float = 2.0) -> dict:
     return json.loads(data.decode("utf-8", errors="replace"))
 
 
+def hidden_proc_kwargs() -> dict[str, object]:
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {}
+
+
 def port_listeners(port: int) -> list[int]:
     if os.name == "nt":
         # Parse netstat output for LISTENING PID(s) on :port
         try:
-            out = subprocess.check_output(["netstat", "-ano"], text=True, errors="replace")
+            out = subprocess.check_output(["netstat", "-ano"], text=True, errors="replace", **hidden_proc_kwargs())
         except Exception:
             return []
 
@@ -150,6 +228,7 @@ def detect_serial_ports() -> list[str]:
                     ],
                     text=True,
                     errors="replace",
+                    **hidden_proc_kwargs(),
                 )
                 ports = [ln.strip() for ln in out.splitlines() if ln.strip()]
             except Exception:
@@ -173,10 +252,24 @@ def detect_serial_ports() -> list[str]:
     return out_ports
 
 
+def is_serial_port_usable(port: str) -> bool:
+    p = (port or "").strip()
+    if not p:
+        return False
+    try:
+        import serial  # type: ignore
+
+        s = serial.Serial(port=p, baudrate=115200, timeout=0.2)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
 def current_wifi_ssid() -> str:
     if os.name == "nt":
         try:
-            out = subprocess.check_output(["netsh", "wlan", "show", "interfaces"], text=True, errors="replace")
+            out = subprocess.check_output(["netsh", "wlan", "show", "interfaces"], text=True, errors="replace", **hidden_proc_kwargs())
             for ln in out.splitlines():
                 line = ln.strip()
                 if line.startswith("SSID") and " : " in line and not line.startswith("BSSID"):
@@ -206,11 +299,33 @@ def local_ip() -> str:
         return ""
 
 
+def ngrok_config_has_authtoken() -> bool:
+    candidates: list[Path] = []
+    if os.name == "nt":
+        localapp = os.environ.get("LOCALAPPDATA", "").strip()
+        if localapp:
+            candidates.append(Path(localapp) / "ngrok" / "ngrok.yml")
+    home = Path.home()
+    candidates.append(home / ".config" / "ngrok" / "ngrok.yml")
+    candidates.append(home / ".ngrok2" / "ngrok.yml")
+    for p in candidates:
+        try:
+            if not p.exists():
+                continue
+            txt = p.read_text(encoding="utf-8", errors="replace")
+            if "authtoken:" in txt and "authtoken: \"\"" not in txt and "authtoken: ''" not in txt:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 class LauncherApp:
     def __init__(self) -> None:
         self.root = Tk()
         self.root.title("EmbeddedSecurity LINE Bridge")
         self.root.resizable(False, False)
+        self.root.configure(bg="#f4f7fb")
 
         self.env = read_env(ENV_PATH)
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
@@ -242,10 +357,25 @@ class LauncherApp:
         self.fw_mqtt_password = StringVar(value=self.env.get("FW_MQTT_PASSWORD", ""))
         self.fw_mqtt_client_id = StringVar(value=self.env.get("FW_MQTT_CLIENT_ID", "embedded-security-esp32"))
         self.fw_upload_port = StringVar(value=self.env.get("FW_UPLOAD_PORT", ""))
+        all_envs, self.fw_env_details = parse_platformio_envs(PLATFORMIO_INI_PATH)
+        self.fw_env_options = select_fw_env_options(all_envs)
+        fallback_fw_env = normalize_fw_env_name((self.env.get("FW_ENV", "") or DEFAULT_FW_ENV).strip() or DEFAULT_FW_ENV)
+        default_fw_build_env = normalize_fw_env_name((self.env.get("FW_ENV_BUILD", "") or fallback_fw_env).strip() or fallback_fw_env)
+        default_fw_upload_env = normalize_fw_env_name((self.env.get("FW_ENV_UPLOAD", "") or fallback_fw_env).strip() or fallback_fw_env)
+        if default_fw_build_env not in self.fw_env_options:
+            default_fw_build_env = self.fw_env_options[0]
+        if default_fw_upload_env not in self.fw_env_options:
+            default_fw_upload_env = self.fw_env_options[0]
+        self.fw_build_env = StringVar(value=default_fw_build_env)
+        self.fw_upload_env = StringVar(value=default_fw_upload_env)
+        self.fw_build_env_desc = StringVar(value="")
+        self.fw_upload_env_desc = StringVar(value="")
         self.serial_ports: list[str] = []
         self.current_wifi_ssid_var = StringVar(value="")
         self.current_wifi_ip_var = StringVar(value="")
         self._show_fw_wifi_password = False
+        self._fw_build_env_box: ttk.Combobox | None = None
+        self._fw_upload_env_box: ttk.Combobox | None = None
 
         # Services tab state
         self.check_python_var = StringVar(value="Python: (unknown)")
@@ -253,10 +383,14 @@ class LauncherApp:
         self.check_deps_var = StringVar(value="Bridge Deps: (unknown)")
         self.check_pio_var = StringVar(value="PlatformIO: (unknown)")
         self.check_ngrok_var = StringVar(value="ngrok: (unknown)")
+        self.admin_var = StringVar(value="Admin: (unknown)")
         self.service_bridge_var = StringVar(value="(unknown)")
         self.service_ngrok_var = StringVar(value="(unknown)")
         self.service_mosquitto_var = StringVar(value="(unknown)")
         self.install_action_var = StringVar(value="Ready")
+        self.busy_var = StringVar(value="Idle")
+        self._busy_count = 0
+        self._busy_bar: ttk.Progressbar | None = None
         self._btn_setup_deps: ttk.Button | None = None
         self._btn_install_pio: ttk.Button | None = None
         self._btn_install_ngrok: ttk.Button | None = None
@@ -265,17 +399,42 @@ class LauncherApp:
         self._btn_ngrok_toggle: ttk.Button | None = None
         self._btn_mosquitto_toggle: ttk.Button | None = None
 
+        self._init_style()
         self._build_ui()
         self._tick()
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    def _init_style(self) -> None:
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+        style.configure("App.TFrame", background="#f4f7fb")
+        style.configure("Header.TLabel", background="#f4f7fb", foreground="#114a75", font=("Segoe UI", 16, "bold"))
+        style.configure("SubHeader.TLabel", background="#f4f7fb", foreground="#4b6478", font=("Segoe UI", 9))
+        style.configure("Section.TLabel", foreground="#114a75", font=("Segoe UI", 10, "bold"))
+        style.configure("Primary.TButton", padding=(10, 6))
+        style.configure("Accent.TButton", padding=(10, 6))
+        style.map("Accent.TButton", background=[("active", "#e9f4ff")])
+
     def _build_ui(self) -> None:
-        frm = ttk.Frame(self.root, padding=12)
+        frm = ttk.Frame(self.root, padding=12, style="App.TFrame")
         frm.grid(row=0, column=0, sticky="nsew")
+        frm.columnconfigure(0, weight=1)
+
+        head = ttk.Frame(frm, style="App.TFrame")
+        head.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(head, text="EmbeddedSecurity Control Center", style="Header.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            head,
+            text="LINE bridge, firmware setup, and service control in one place",
+            style="SubHeader.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
 
         nb = ttk.Notebook(frm)
-        nb.grid(row=0, column=0, sticky="nsew")
+        nb.grid(row=1, column=0, sticky="nsew")
 
         status_tab = ttk.Frame(nb, padding=12)
         config_tab = ttk.Frame(nb, padding=12)
@@ -312,9 +471,9 @@ class LauncherApp:
         btns.columnconfigure(1, weight=1)
         btns.columnconfigure(2, weight=1)
 
-        ttk.Button(btns, text="Start", command=self.start).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(btns, text="Start", command=self.start, style="Primary.TButton").grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(btns, text="Stop", command=self.stop).grid(row=0, column=1, sticky="ew", padx=(0, 6))
-        ttk.Button(btns, text="Copy Webhook", command=self.copy_webhook).grid(row=0, column=2, sticky="ew")
+        ttk.Button(btns, text="Copy Webhook", command=self.copy_webhook, style="Accent.TButton").grid(row=0, column=2, sticky="ew")
 
         links = ttk.Frame(status_tab)
         links.grid(row=4, column=0, sticky="ew", pady=(10, 0))
@@ -383,6 +542,31 @@ class LauncherApp:
         # Firmware tab
         firmware_tab.columnconfigure(1, weight=1)
         fr = 0
+        ttk.Label(firmware_tab, text="Firmware Target", style="Section.TLabel").grid(row=fr, column=0, sticky="w", pady=(0, 6))
+        fr += 1
+        ttk.Label(firmware_tab, text="Build Env").grid(row=fr, column=0, sticky="w")
+        self._fw_build_env_box = ttk.Combobox(firmware_tab, textvariable=self.fw_build_env, state="readonly", width=28)
+        self._fw_build_env_box.grid(row=fr, column=1, sticky="w")
+        self._fw_build_env_box.bind("<<ComboboxSelected>>", lambda _evt: self._update_fw_env_descriptions())
+        fr += 1
+        ttk.Label(firmware_tab, textvariable=self.fw_build_env_desc, foreground="#4b6478").grid(row=fr, column=1, sticky="w")
+        fr += 1
+        ttk.Label(firmware_tab, text="Upload Env").grid(row=fr, column=0, sticky="w")
+        self._fw_upload_env_box = ttk.Combobox(firmware_tab, textvariable=self.fw_upload_env, state="readonly", width=28)
+        self._fw_upload_env_box.grid(row=fr, column=1, sticky="w")
+        self._fw_upload_env_box.bind("<<ComboboxSelected>>", lambda _evt: self._update_fw_env_descriptions())
+        fr += 1
+        ttk.Label(firmware_tab, textvariable=self.fw_upload_env_desc, foreground="#4b6478").grid(row=fr, column=1, sticky="w")
+        fr += 1
+        env_btns = ttk.Frame(firmware_tab)
+        env_btns.grid(row=fr, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Button(env_btns, text="Refresh Envs", command=self.refresh_fw_envs).grid(row=0, column=0, sticky="w")
+        fr += 1
+
+        ttk.Separator(firmware_tab).grid(row=fr, column=0, columnspan=2, sticky="ew", pady=(12, 12))
+        fr += 1
+        ttk.Label(firmware_tab, text="Current Network", style="Section.TLabel").grid(row=fr, column=0, sticky="w", pady=(0, 6))
+        fr += 1
         ttk.Label(firmware_tab, text="Current Wi-Fi SSID").grid(row=fr, column=0, sticky="w")
         ttk.Entry(firmware_tab, textvariable=self.current_wifi_ssid_var, width=36, state="readonly").grid(row=fr, column=1, sticky="ew")
         fr += 1
@@ -396,6 +580,8 @@ class LauncherApp:
         fr += 1
 
         ttk.Separator(firmware_tab).grid(row=fr, column=0, columnspan=2, sticky="ew", pady=(12, 12))
+        fr += 1
+        ttk.Label(firmware_tab, text="Wi-Fi Settings", style="Section.TLabel").grid(row=fr, column=0, sticky="w", pady=(0, 6))
         fr += 1
 
         ttk.Label(firmware_tab, text="Wi-Fi SSID").grid(row=fr, column=0, sticky="w")
@@ -412,6 +598,8 @@ class LauncherApp:
         fr += 1
 
         ttk.Separator(firmware_tab).grid(row=fr, column=0, columnspan=2, sticky="ew", pady=(12, 12))
+        fr += 1
+        ttk.Label(firmware_tab, text="MQTT Settings", style="Section.TLabel").grid(row=fr, column=0, sticky="w", pady=(0, 6))
         fr += 1
 
         ttk.Label(firmware_tab, text="MQTT Broker").grid(row=fr, column=0, sticky="w")
@@ -432,6 +620,8 @@ class LauncherApp:
 
         ttk.Separator(firmware_tab).grid(row=fr, column=0, columnspan=2, sticky="ew", pady=(12, 12))
         fr += 1
+        ttk.Label(firmware_tab, text="Build & Upload", style="Section.TLabel").grid(row=fr, column=0, sticky="w", pady=(0, 6))
+        fr += 1
 
         ttk.Label(firmware_tab, text="Upload Port").grid(row=fr, column=0, sticky="w")
         self._upload_port_box = ttk.Combobox(firmware_tab, textvariable=self.fw_upload_port, state="readonly", width=28)
@@ -448,11 +638,20 @@ class LauncherApp:
         fw_btns.columnconfigure(0, weight=1)
         fw_btns.columnconfigure(1, weight=1)
         fw_btns.columnconfigure(2, weight=1)
+        fw_btns.columnconfigure(3, weight=1)
+        fw_btns.columnconfigure(4, weight=1)
 
         ttk.Button(fw_btns, text="Save to .env", command=self.save_firmware_env).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(fw_btns, text="Build", command=self.build_firmware).grid(row=0, column=1, sticky="ew", padx=(0, 6))
-        ttk.Button(fw_btns, text="Upload", command=self.upload_firmware).grid(row=0, column=2, sticky="ew")
+        ttk.Button(fw_btns, text="Build", command=self.build_firmware, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(0, 6))
+        ttk.Button(fw_btns, text="Upload", command=self.upload_firmware, style="Primary.TButton").grid(row=0, column=2, sticky="ew", padx=(0, 6))
+        ttk.Button(fw_btns, text="Deploy Main Board", command=self.deploy_main_board, style="Accent.TButton").grid(
+            row=0, column=3, sticky="ew", padx=(0, 6)
+        )
+        ttk.Button(fw_btns, text="Deploy Automation", command=self.deploy_automation_board, style="Primary.TButton").grid(
+            row=0, column=4, sticky="ew"
+        )
 
+        self.refresh_fw_envs()
         self.refresh_upload_ports()
         self.refresh_current_wifi_info()
         self._build_install_tab(install_tab)
@@ -462,8 +661,12 @@ class LauncherApp:
         install_tab.columnconfigure(0, weight=1)
         top = ttk.Frame(install_tab)
         top.grid(row=0, column=0, sticky="ew")
-        top.columnconfigure(0, weight=1)
-        ttk.Button(top, text="Refresh Checks", command=self.refresh_install_checks).grid(row=0, column=0, sticky="w")
+        top.columnconfigure(0, weight=0)
+        top.columnconfigure(1, weight=0)
+        top.columnconfigure(2, weight=1)
+        ttk.Button(top, text="Quick Setup", command=self.quick_setup_all, style="Primary.TButton").grid(row=0, column=0, sticky="w")
+        ttk.Button(top, text="Run as Admin", command=self.relaunch_as_admin).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        ttk.Button(top, text="Refresh Checks", command=self.refresh_install_checks).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
         table = ttk.LabelFrame(install_tab, text="Modules", padding=10)
         table.grid(row=1, column=0, sticky="ew", pady=(8, 0))
@@ -479,6 +682,12 @@ class LauncherApp:
         ttk.Separator(table).grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 8))
 
         r = 2
+        ttk.Label(table, text="Windows Admin").grid(row=r, column=0, sticky="w", pady=(0, 4))
+        ttk.Label(table, textvariable=self.admin_var).grid(row=r, column=1, sticky="w", pady=(0, 4))
+        ttk.Label(table, text="-").grid(row=r, column=2, sticky="w", padx=(8, 0), pady=(0, 4))
+        ttk.Label(table, text="-").grid(row=r, column=3, sticky="w", padx=(6, 0), pady=(0, 4))
+
+        r += 1
         ttk.Label(table, text="Python").grid(row=r, column=0, sticky="w", pady=(0, 4))
         ttk.Label(table, textvariable=self.check_python_var).grid(row=r, column=1, sticky="w", pady=(0, 4))
         ttk.Button(table, text="Check", command=self.refresh_install_checks).grid(row=r, column=2, sticky="ew", padx=(8, 0), pady=(0, 4))
@@ -544,6 +753,22 @@ class LauncherApp:
         action.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         action.columnconfigure(0, weight=1)
         ttk.Label(action, textvariable=self.install_action_var).grid(row=0, column=0, sticky="w")
+        ttk.Label(action, textvariable=self.busy_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self._busy_bar = ttk.Progressbar(action, mode="indeterminate")
+        self._busy_bar.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+
+    def _begin_busy(self, label: str) -> None:
+        self._busy_count += 1
+        self.busy_var.set(f"Working: {label}")
+        if self._busy_bar is not None:
+            self._busy_bar.start(10)
+
+    def _end_busy(self) -> None:
+        self._busy_count = max(0, self._busy_count - 1)
+        if self._busy_count == 0:
+            self.busy_var.set("Idle")
+            if self._busy_bar is not None:
+                self._busy_bar.stop()
 
     def _venv_python(self) -> Path:
         # Launcher is intended to be started by .venv pythonw, but don't assume.
@@ -579,18 +804,23 @@ class LauncherApp:
             )
             return
 
-        if not shutil.which("ngrok"):
-            messagebox.showerror("Missing ngrok", "ngrok not found in PATH.\nInstall ngrok and make sure `ngrok` works.")
+        ngrok_cmd = self._ngrok_base_cmd()
+        if not ngrok_cmd:
+            messagebox.showerror("Missing ngrok", "ngrok not found. Install ngrok or provide tools/ngrok/ngrok(.exe).")
             return
 
         ngrok_token = self.env.get("NGROK_AUTHTOKEN", "").strip()
-        if not ngrok_token:
-            messagebox.showerror("Missing ngrok authtoken", "NGROK_AUTHTOKEN is required. Save it in Config tab first.")
-            return
-        try:
-            subprocess.check_call(["ngrok", "config", "add-authtoken", ngrok_token])
-        except Exception as e:
-            messagebox.showerror("ngrok authtoken", f"Failed to apply NGROK_AUTHTOKEN.\n{e}")
+        if ngrok_token:
+            try:
+                subprocess.check_call(ngrok_cmd + ["config", "add-authtoken", ngrok_token])
+            except Exception as e:
+                messagebox.showerror("ngrok authtoken", f"Failed to apply NGROK_AUTHTOKEN.\n{e}")
+                return
+        elif not ngrok_config_has_authtoken():
+            messagebox.showerror(
+                "Missing ngrok authtoken",
+                "NGROK_AUTHTOKEN is empty and no authtoken found in ngrok config.\nSave token in Config tab first.",
+            )
             return
 
         # Free port (best effort)
@@ -620,10 +850,7 @@ class LauncherApp:
                 popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
             else:
                 popen_kwargs["start_new_session"] = True
-            self.ngrok_proc = subprocess.Popen(
-                ["ngrok", "http", str(self.http_port)],
-                **popen_kwargs,
-            )
+            self.ngrok_proc = subprocess.Popen(ngrok_cmd + ["http", str(self.http_port)], **popen_kwargs)
 
         self.status_var.set("Running")
 
@@ -686,6 +913,23 @@ class LauncherApp:
             return ["python3", "-m", "platformio"]
         return []
 
+    def _bundled_ngrok_cmd(self) -> list[str]:
+        # Prefer PATH ngrok. If unavailable, use a bundled binary if present.
+        is_win = os.name == "nt"
+        names = ["ngrok.exe", "ngrok"] if is_win else ["ngrok", "ngrok.exe"]
+        for name in names:
+            p = NGROK_BUNDLE_DIR / name
+            if not p.exists() or p.is_dir():
+                continue
+            if is_win or os.access(p, os.X_OK):
+                return [str(p)]
+        return []
+
+    def _ngrok_base_cmd(self) -> list[str]:
+        if shutil.which("ngrok"):
+            return ["ngrok"]
+        return self._bundled_ngrok_cmd()
+
     def _host_python_cmd(self) -> list[str]:
         if sys.executable:
             return [sys.executable]
@@ -705,9 +949,38 @@ class LauncherApp:
         resolved = shutil.which(candidate)
         return str(Path(resolved)) if resolved else ""
 
+    def is_windows_admin(self) -> bool:
+        if os.name != "nt":
+            return False
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+
+    def relaunch_as_admin(self) -> None:
+        if os.name != "nt":
+            messagebox.showinfo("Run as Admin", "This action is available on Windows only.")
+            return
+        if self.is_windows_admin():
+            messagebox.showinfo("Run as Admin", "Launcher is already running as Administrator.")
+            return
+        try:
+            exe = sys.executable
+            script = str(Path(__file__).resolve())
+            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, f'"{script}"', None, 1)
+            if rc <= 32:
+                raise RuntimeError(f"ShellExecuteW returned {rc}")
+            self.root.after(150, self.root.destroy)
+        except Exception as e:
+            messagebox.showerror("Run as Admin", f"Unable to relaunch as Administrator.\n{e}")
+
     def refresh_install_checks(self) -> None:
         host_py = self._resolved_host_python_path()
         self.check_python_var.set("OK" if host_py else "Missing")
+        if os.name == "nt":
+            self.admin_var.set("Yes" if self.is_windows_admin() else "No")
+        else:
+            self.admin_var.set("N/A")
 
         vpy = self._venv_python()
         self.check_venv_var.set("OK" if vpy.exists() else "Missing")
@@ -726,12 +999,13 @@ class LauncherApp:
         self.check_deps_var.set("OK" if deps_ok else "Missing")
 
         self.check_pio_var.set("OK" if bool(self._platformio_base_cmd()) else "Missing")
-        self.check_ngrok_var.set("OK" if bool(shutil.which("ngrok")) else "Missing")
+        ngrok_ok = bool(self._ngrok_base_cmd())
+        self.check_ngrok_var.set("OK" if ngrok_ok else "Missing")
         if self._btn_open_python_location is not None:
             self._btn_open_python_location.configure(state="normal" if host_py else "disabled")
         self._set_install_button_state(self._btn_setup_deps, installed=(vpy.exists() and deps_ok), base_label="Setup")
         self._set_install_button_state(self._btn_install_pio, installed=bool(self._platformio_base_cmd()), base_label="Install")
-        self._set_install_button_state(self._btn_install_ngrok, installed=bool(shutil.which("ngrok")), base_label="Install")
+        self._set_install_button_state(self._btn_install_ngrok, installed=ngrok_ok, base_label="Install")
         self.refresh_runtime_services_status()
 
     def open_python_file_location(self) -> None:
@@ -796,7 +1070,13 @@ class LauncherApp:
         if os.name != "nt":
             return ("Unsupported", "Unsupported")
         try:
-            q = subprocess.check_output(["sc", "query", name], text=True, errors="replace", stderr=subprocess.STDOUT)
+            q = subprocess.check_output(
+                ["sc.exe", "query", name],
+                text=True,
+                errors="replace",
+                stderr=subprocess.STDOUT,
+                **hidden_proc_kwargs(),
+            )
             if "FAILED 1060" in q:
                 return ("Not found", "Unknown")
             state = "Unknown"
@@ -811,7 +1091,13 @@ class LauncherApp:
                     state = ln.split(":", 1)[-1].strip()
                 break
 
-            qc = subprocess.check_output(["sc", "qc", name], text=True, errors="replace", stderr=subprocess.STDOUT)
+            qc = subprocess.check_output(
+                ["sc.exe", "qc", name],
+                text=True,
+                errors="replace",
+                stderr=subprocess.STDOUT,
+                **hidden_proc_kwargs(),
+            )
             startup = "Unknown"
             for ln in qc.splitlines():
                 if "START_TYPE" not in ln:
@@ -832,12 +1118,73 @@ class LauncherApp:
             messagebox.showerror("Windows only", "Mosquitto service control is available on Windows only.")
             return
         try:
-            subprocess.check_call(["sc"] + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # If starting from disabled state, switch to manual first.
+            if action_name.lower().strip() == "start":
+                try:
+                    qc = subprocess.check_output(["sc.exe", "qc", "mosquitto"], text=True, errors="replace", stderr=subprocess.STDOUT)
+                    if "START_TYPE" in qc and "DISABLED" in qc:
+                        subprocess.check_output(["sc.exe", "config", "mosquitto", "start= demand"], text=True, errors="replace", stderr=subprocess.STDOUT)
+                except Exception:
+                    pass
+
+            out = subprocess.check_output(["sc.exe"] + args, text=True, errors="replace", stderr=subprocess.STDOUT)
             self.install_action_var.set(f"{action_name}: mosquitto")
+            if out.strip():
+                self.install_action_var.set(f"{action_name}: mosquitto ({out.splitlines()[-1].strip()})")
+        except subprocess.CalledProcessError as e:
+            msg = (e.output or "").strip()
+            if "Access is denied" in msg and not self.is_windows_admin():
+                ask = messagebox.askyesno(
+                    "Administrator Required",
+                    "Windows denied service control.\nRun this Mosquitto action with Administrator permission now?",
+                )
+                if ask:
+                    ok = self._run_sc_mosquitto_elevated(args, action_name)
+                    if ok:
+                        self.install_action_var.set(f"{action_name}: mosquitto (elevated)")
+                    else:
+                        messagebox.showerror(
+                            "Mosquitto service",
+                            f"{action_name} failed in elevated mode.\nPlease allow UAC prompt and try again.",
+                        )
+                    return
+            if "Access is denied" in msg:
+                msg = msg + "\nTip: click Run as Admin or allow elevated action prompt."
+            messagebox.showerror("Mosquitto service", f"{action_name} failed.\n{msg or e}")
         except Exception as e:
             messagebox.showerror("Mosquitto service", f"{action_name} failed.\n{e}")
         finally:
             self.refresh_runtime_services_status()
+
+    def _run_sc_mosquitto_elevated(self, args: list[str], action_name: str) -> bool:
+        if os.name != "nt":
+            return False
+        try:
+            # Ensure service can be started when disabled.
+            if action_name.lower().strip() == "start":
+                state, startup = self._query_windows_service("mosquitto")
+                if startup == "Disabled":
+                    if not self._run_sc_elevated(["config", "mosquitto", "start= demand"]):
+                        return False
+            return self._run_sc_elevated(args)
+        except Exception:
+            return False
+
+    def _run_sc_elevated(self, args: list[str]) -> bool:
+        if os.name != "nt":
+            return False
+        # Use PowerShell Start-Process -Verb RunAs so Windows shows UAC prompt.
+        quoted: list[str] = []
+        for a in args:
+            q = str(a).replace("'", "''")
+            quoted.append("'" + q + "'")
+        ps_args = ", ".join(quoted)
+        script = (
+            f"$p = Start-Process -FilePath 'sc.exe' -ArgumentList @({ps_args}) "
+            "-Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+        )
+        rc = subprocess.call(["powershell", "-NoProfile", "-Command", script])
+        return rc == 0
 
     def start_mosquitto_service(self) -> None:
         self._run_sc_mosquitto(["start", "mosquitto"], "Start")
@@ -907,17 +1254,19 @@ class LauncherApp:
     def start_ngrok_only(self) -> None:
         self.env = read_env(ENV_PATH)
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
-        if not shutil.which("ngrok"):
-            messagebox.showerror("Missing ngrok", "ngrok not found in PATH.")
+        ngrok_cmd = self._ngrok_base_cmd()
+        if not ngrok_cmd:
+            messagebox.showerror("Missing ngrok", "ngrok not found.")
             return
         ngrok_token = self.env.get("NGROK_AUTHTOKEN", "").strip()
-        if not ngrok_token:
+        if ngrok_token:
+            try:
+                subprocess.check_call(ngrok_cmd + ["config", "add-authtoken", ngrok_token])
+            except Exception as e:
+                messagebox.showerror("ngrok authtoken", f"Failed to apply NGROK_AUTHTOKEN.\n{e}")
+                return
+        elif not ngrok_config_has_authtoken():
             messagebox.showerror("Missing ngrok authtoken", "NGROK_AUTHTOKEN is required.")
-            return
-        try:
-            subprocess.check_call(["ngrok", "config", "add-authtoken", ngrok_token])
-        except Exception as e:
-            messagebox.showerror("ngrok authtoken", f"Failed to apply NGROK_AUTHTOKEN.\n{e}")
             return
         if self.ngrok_proc is None or self.ngrok_proc.poll() is not None:
             ngrok_log = self._logfile("ngrok")
@@ -927,7 +1276,7 @@ class LauncherApp:
                 popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
             else:
                 popen_kwargs["start_new_session"] = True
-            self.ngrok_proc = subprocess.Popen(["ngrok", "http", str(self.http_port)], **popen_kwargs)
+            self.ngrok_proc = subprocess.Popen(ngrok_cmd + ["http", str(self.http_port)], **popen_kwargs)
         self.install_action_var.set("ngrok started")
         self.refresh_runtime_services_status()
 
@@ -960,6 +1309,7 @@ class LauncherApp:
     def _run_job_async(self, title: str, commands: list[list[str]], cwd: Path | None = None) -> None:
         log_path = self._logfile("install")
         self.install_action_var.set(f"{title}: running...")
+        self._begin_busy(title)
 
         def worker() -> None:
             rc = 0
@@ -968,12 +1318,16 @@ class LauncherApp:
                 f.write(f"TITLE: {title}\nCWD: {wd}\n\n")
                 for cmd in commands:
                     f.write("CMD: " + " ".join(cmd) + "\n")
-                    rc = subprocess.call(cmd, cwd=wd, stdout=f, stderr=subprocess.STDOUT)
+                    call_kwargs: dict[str, object] = {"cwd": wd, "stdout": f, "stderr": subprocess.STDOUT}
+                    if os.name == "nt":
+                        call_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                    rc = subprocess.call(cmd, **call_kwargs)
                     f.write(f"RC: {rc}\n\n")
                     if rc != 0:
                         break
 
             def done() -> None:
+                self._end_busy()
                 self.refresh_install_checks()
                 if rc == 0:
                     self.install_action_var.set(f"{title}: done (log: {log_path.name})")
@@ -1005,6 +1359,24 @@ class LauncherApp:
         cmds.append([str(vpy), "-m", "pip", "install", "-r", str(req)])
         self._run_job_async("Setup venv + deps", cmds, cwd=ROOT)
 
+    def quick_setup_all(self) -> None:
+        if os.name == "nt":
+            setup_cmd = PROJECT_ROOT / "setup.cmd"
+            if not setup_cmd.exists():
+                messagebox.showerror("Missing setup script", f"Missing file: {setup_cmd}")
+                return
+            self._run_job_async("Quick Setup", [["cmd", "/c", str(setup_cmd)]], cwd=PROJECT_ROOT)
+            return
+
+        setup_sh = PROJECT_ROOT / "setup.sh"
+        if not setup_sh.exists():
+            messagebox.showerror("Missing setup script", f"Missing file: {setup_sh}")
+            return
+        if shutil.which("bash"):
+            self._run_job_async("Quick Setup", [["bash", str(setup_sh)]], cwd=PROJECT_ROOT)
+            return
+        messagebox.showerror("bash missing", "Cannot run setup.sh because 'bash' is not available on PATH.")
+
     def install_platformio_core(self) -> None:
         py = self._host_python_cmd()
         if not py:
@@ -1013,6 +1385,10 @@ class LauncherApp:
         self._run_job_async("Install PlatformIO", [py + ["-m", "pip", "install", "--upgrade", "platformio"]], cwd=PROJECT_ROOT)
 
     def install_ngrok_cli(self) -> None:
+        if self._ngrok_base_cmd():
+            self.install_action_var.set("Install ngrok: already available")
+            messagebox.showinfo("Install ngrok", "ngrok is already available.")
+            return
         if os.name == "nt" and shutil.which("winget"):
             cmd = [
                 "winget",
@@ -1055,6 +1431,47 @@ class LauncherApp:
     def clear_fw_wifi_password(self) -> None:
         self.fw_wifi_password.set("")
 
+    def _describe_env(self, env_name: str) -> str:
+        custom = {
+            "main-board": "production firmware (main board)",
+            "automation-board": "automation firmware (automation board)",
+        }
+        if env_name in custom:
+            return f"{env_name}: {custom[env_name]}"
+        info = (self.fw_env_details.get(env_name, "") or "").strip()
+        if not info:
+            return f"{env_name}: no extra details"
+        return f"{env_name}: {info}"
+
+    def _update_fw_env_descriptions(self) -> None:
+        self.fw_build_env_desc.set(self._describe_env((self.fw_build_env.get() or "").strip()))
+        self.fw_upload_env_desc.set(self._describe_env((self.fw_upload_env.get() or "").strip()))
+
+    def refresh_fw_envs(self) -> None:
+        current_build = normalize_fw_env_name((self.fw_build_env.get() or "").strip())
+        current_upload = normalize_fw_env_name((self.fw_upload_env.get() or "").strip())
+        all_envs, details = parse_platformio_envs(PLATFORMIO_INI_PATH)
+        envs = select_fw_env_options(all_envs)
+        if current_build and current_build not in envs:
+            current_build = envs[0]
+        if current_upload and current_upload not in envs:
+            current_upload = envs[0]
+        self.fw_env_options = envs
+        self.fw_env_details = details
+        if self._fw_build_env_box is not None:
+            self._fw_build_env_box["values"] = self.fw_env_options
+        if self._fw_upload_env_box is not None:
+            self._fw_upload_env_box["values"] = self.fw_env_options
+        if current_build in self.fw_env_options:
+            self.fw_build_env.set(current_build)
+        else:
+            self.fw_build_env.set(self.fw_env_options[0])
+        if current_upload in self.fw_env_options:
+            self.fw_upload_env.set(current_upload)
+        else:
+            self.fw_upload_env.set(self.fw_env_options[0])
+        self._update_fw_env_descriptions()
+
     def refresh_upload_ports(self) -> None:
         self.serial_ports = detect_serial_ports()
         current = (self.fw_upload_port.get() or "").strip()
@@ -1092,6 +1509,17 @@ class LauncherApp:
         lines = upsert_env_kv(lines, "FW_MQTT_USERNAME", self.fw_mqtt_username.get().strip())
         lines = upsert_env_kv(lines, "FW_MQTT_PASSWORD", self.fw_mqtt_password.get().strip())
         lines = upsert_env_kv(lines, "FW_MQTT_CLIENT_ID", self.fw_mqtt_client_id.get().strip() or "embedded-security-esp32")
+        selected_build_env = normalize_fw_env_name((self.fw_build_env.get() or "").strip())
+        if selected_build_env not in self.fw_env_options:
+            selected_build_env = self.fw_env_options[0] if self.fw_env_options else DEFAULT_FW_ENV
+            self.fw_build_env.set(selected_build_env)
+        selected_upload_env = normalize_fw_env_name((self.fw_upload_env.get() or "").strip())
+        if selected_upload_env not in self.fw_env_options:
+            selected_upload_env = selected_build_env
+            self.fw_upload_env.set(selected_upload_env)
+        lines = upsert_env_kv(lines, "FW_ENV_BUILD", selected_build_env)
+        lines = upsert_env_kv(lines, "FW_ENV_UPLOAD", selected_upload_env)
+        lines = upsert_env_kv(lines, "FW_ENV", selected_build_env)
         upload_port = self.fw_upload_port.get().strip()
         if upload_port not in self.serial_ports:
             upload_port = ""
@@ -1103,27 +1531,33 @@ class LauncherApp:
             messagebox.showinfo("Saved", f"Firmware fields saved to {ENV_PATH}")
         return True
 
-    def _run_platformio_async(self, args: list[str], success_msg: str) -> None:
+    def _run_platformio_async(self, args: list[str], success_msg: str, fw_env: str) -> None:
         base = self._platformio_base_cmd()
         if not base:
             messagebox.showerror("PlatformIO not found", "Cannot find platformio/pio/python in PATH.")
             return
 
         log_path = self._logfile("platformio")
+        selected_fw_env = normalize_fw_env_name((fw_env or DEFAULT_FW_ENV).strip() or DEFAULT_FW_ENV)
+        self._begin_busy(f"PlatformIO {selected_fw_env}")
         cmd = base + [
             "run",
             "-c",
             str(PLATFORMIO_INI_PATH),
             "-e",
-            (self.env.get("FW_ENV", "") or DEFAULT_FW_ENV).strip() or DEFAULT_FW_ENV,
+            selected_fw_env,
         ] + args
 
         def worker() -> None:
             with open(log_path, "w", encoding="utf-8", errors="replace") as f:
                 f.write("CMD: " + " ".join(cmd) + "\n\n")
-                rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT), stdout=f, stderr=subprocess.STDOUT)
+                call_kwargs: dict[str, object] = {"cwd": str(PROJECT_ROOT), "stdout": f, "stderr": subprocess.STDOUT}
+                if os.name == "nt":
+                    call_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                rc = subprocess.call(cmd, **call_kwargs)
 
             def done() -> None:
+                self._end_busy()
                 if rc == 0:
                     messagebox.showinfo("PlatformIO", f"{success_msg}\nLog: {log_path}")
                 else:
@@ -1136,18 +1570,66 @@ class LauncherApp:
     def build_firmware(self) -> None:
         if not self.save_firmware_env(notify=False):
             return
-        self._run_platformio_async([], "Build completed")
+        selected_fw_env = normalize_fw_env_name((self.fw_build_env.get() or self.env.get("FW_ENV_BUILD", "") or self.env.get("FW_ENV", "") or DEFAULT_FW_ENV).strip())
+        self._run_platformio_async([], "Build completed", selected_fw_env)
+
+    def _deploy_env(self, env_name: str) -> None:
+        selected = normalize_fw_env_name(env_name)
+        if selected not in self.fw_env_options:
+            messagebox.showerror("Invalid deploy env", f"Environment '{selected}' is not available in this project.")
+            return
+        self.fw_build_env.set(selected)
+        self.fw_upload_env.set(selected)
+        self._update_fw_env_descriptions()
+        self.upload_firmware()
+
+    def deploy_main_board(self) -> None:
+        self._deploy_env(MAIN_BOARD_ENV)
+
+    def deploy_automation_board(self) -> None:
+        self._deploy_env(AUTOMATION_BOARD_ENV)
 
     def upload_firmware(self) -> None:
+        # Refresh port list right before upload to avoid stale COM selections.
+        self.refresh_upload_ports()
+        selected_port = (self.fw_upload_port.get() or "").strip()
+        if selected_port and selected_port not in self.serial_ports:
+            selected_port = ""
+
+        # Guard against stale ports that appear in the list but cannot be opened.
+        if selected_port and not is_serial_port_usable(selected_port):
+            # Try to pick another currently usable port automatically.
+            fallback = ""
+            for p in self.serial_ports:
+                if is_serial_port_usable(p):
+                    fallback = p
+                    break
+            if fallback:
+                self.fw_upload_port.set(fallback)
+                selected_port = fallback
+                messagebox.showwarning(
+                    "Upload port changed",
+                    f"Selected port is not usable now.\nSwitched to '{fallback}'.",
+                )
+            else:
+                # Let PlatformIO auto-detect if we cannot validate any port now.
+                self.fw_upload_port.set("")
+                selected_port = ""
+                messagebox.showwarning(
+                    "Upload port unavailable",
+                    "No currently usable serial port was found.\nWill try PlatformIO auto-detect.",
+                )
+
         if not self.save_firmware_env(notify=False):
             return
         extra: list[str] = ["-t", "upload"]
-        port = self.fw_upload_port.get().strip()
+        port = selected_port
         if port not in self.serial_ports:
             port = ""
         if port:
             extra += ["--upload-port", port]
-        self._run_platformio_async(extra, "Upload completed")
+        selected_fw_env = normalize_fw_env_name((self.fw_upload_env.get() or self.env.get("FW_ENV_UPLOAD", "") or self.env.get("FW_ENV", "") or DEFAULT_FW_ENV).strip())
+        self._run_platformio_async(extra, "Upload completed", selected_fw_env)
 
     def toggle_secrets(self) -> None:
         self._show_secrets = not self._show_secrets
@@ -1197,8 +1679,12 @@ class LauncherApp:
         if not tok:
             messagebox.showinfo("ngrok Authtoken", "Paste an authtoken first.")
             return
+        ngrok_cmd = self._ngrok_base_cmd()
+        if not ngrok_cmd:
+            messagebox.showerror("ngrok Authtoken", "ngrok not found. Install ngrok first.")
+            return
         try:
-            subprocess.check_call(["ngrok", "config", "add-authtoken", tok])
+            subprocess.check_call(ngrok_cmd + ["config", "add-authtoken", tok])
             messagebox.showinfo("ngrok Authtoken", "Authtoken set. Restart ngrok to apply.")
         except Exception as e:
             messagebox.showerror("ngrok Authtoken", f"Failed to set authtoken.\n{e}")
