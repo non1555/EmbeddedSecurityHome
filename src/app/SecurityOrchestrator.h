@@ -44,6 +44,7 @@ private:
   void processRemoteCommand(const String& payload);
   bool processManualActuatorEvent(const Event& e);
   bool processDoorHoldWarnSilenceEvent(const Event& e);
+  void syncAutoSecurityMode(uint32_t nowMs);
   void startDoorUnlockSession(uint32_t nowMs);
   void clearDoorUnlockSession(bool stopBuzzer);
   void updateDoorUnlockSession(uint32_t nowMs);
@@ -53,4 +54,5 @@ private:
   uint8_t badDoorCodeAttempts_ = 0;
 
   bool servo1WasLocked_ = false;
+  bool doorWasOpen_ = false;
 };

@@ -1,4 +1,5 @@
 #include "app/SecurityOrchestrator.h"
+#include "automation/presence.h"
 
 namespace {
 static String normalize(String s) {
@@ -23,6 +24,10 @@ static bool tryLockWindow(EventCollector& collector, Servo& servo, Notify& notif
   }
   servo.lock();
   return true;
+}
+
+static bool isModeEvent(EventType t) {
+  return t == EventType::disarm || t == EventType::arm_night || t == EventType::arm_away;
 }
 } // namespace
 
@@ -60,6 +65,15 @@ void SecurityOrchestrator::updateDoorUnlockSession(uint32_t nowMs) {
                       notifySvc_);
 }
 
+void SecurityOrchestrator::syncAutoSecurityMode(uint32_t nowMs) {
+  const Presence::State p = Presence::state();
+  const Mode target = (p == Presence::State::away) ? Mode::away : Mode::night;
+  if (state_.mode == target) return;
+
+  const EventType modeEvent = (target == Mode::away) ? EventType::arm_away : EventType::arm_night;
+  applyDecision({modeEvent, nowMs, 99});
+}
+
 void SecurityOrchestrator::begin() {
   logger_.begin();
   notifySvc_.begin();
@@ -71,6 +85,9 @@ void SecurityOrchestrator::begin() {
   servo1_.begin();
   servo2_.begin();
   servo1WasLocked_ = servo1_.isLocked();
+  doorWasOpen_ = collector_.isDoorOpen();
+  Presence::init();
+  syncAutoSecurityMode(millis());
 
   Serial.println("READY");
   Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN D=DOOR_TOGGLE W=WINDOW_TOGGLE");
@@ -117,27 +134,10 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
     return;
   }
 
-  if (cmd == "disarm" || cmd == "mode disarm") {
-    const Event e{EventType::disarm, millis(), 9};
-    applyDecision(e);
-    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
-    mqttBus_.publishAck("disarm", true, "ok");
-    return;
-  }
-
-  if (cmd == "arm night" || cmd == "arm_night" || cmd == "mode night") {
-    const Event e{EventType::arm_night, millis(), 9};
-    applyDecision(e);
-    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
-    mqttBus_.publishAck("arm night", true, "ok");
-    return;
-  }
-
-  if (cmd == "arm away" || cmd == "arm_away" || cmd == "mode away") {
-    const Event e{EventType::arm_away, millis(), 9};
-    applyDecision(e);
-    Serial.printf("[REMOTE] mode command=%s -> mode=%d level=%d\n", cmd.c_str(), (int)state_.mode, (int)state_.level);
-    mqttBus_.publishAck("arm away", true, "ok");
+  if (cmd == "disarm" || cmd == "mode disarm" ||
+      cmd == "arm night" || cmd == "arm_night" || cmd == "mode night" ||
+      cmd == "arm away" || cmd == "arm_away" || cmd == "mode away") {
+    mqttBus_.publishAck("mode", false, "auto mode enabled");
     return;
   }
 
@@ -204,6 +204,7 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
 
   if (cmd == "unlock door") {
     servo1_.unlock();
+    Presence::onDoorUnlock(nowMs);
     clearDoorUnlockSession(true);
     if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
     char detail[32];
@@ -223,6 +224,7 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
 
   if (cmd == "unlock all") {
     servo1_.unlock();
+    Presence::onDoorUnlock(nowMs);
     clearDoorUnlockSession(true);
     if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
     state_.keep_window_locked_when_disarmed = false;
@@ -249,6 +251,7 @@ bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
   if (e.type == EventType::manual_door_toggle) {
     if (servo1_.isLocked()) {
       servo1_.unlock();
+      Presence::onDoorUnlock(e.ts_ms);
       clearDoorUnlockSession(true);
       if (!collector_.isDoorOpen()) startDoorUnlockSession(e.ts_ms);
       notifySvc_.send("manual door: unlocked");
@@ -301,6 +304,7 @@ bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
 
   if (e.type == EventType::manual_unlock_request) {
     servo1_.unlock();
+    Presence::onDoorUnlock(e.ts_ms);
     clearDoorUnlockSession(true);
     if (!collector_.isDoorOpen()) startDoorUnlockSession(e.ts_ms);
     state_.keep_window_locked_when_disarmed = false;
@@ -327,9 +331,20 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
       servo1WasLocked_ &&
       !servo1LockedNow &&
       !collector_.isDoorOpen()) {
+    Presence::onDoorUnlock(nowMs);
     startDoorUnlockSession(nowMs);
   }
   servo1WasLocked_ = servo1LockedNow;
+
+  const bool doorOpenNow = collector_.isDoorOpen();
+  if (!doorWasOpen_ && doorOpenNow) {
+    Presence::onDoorOpen(nowMs);
+  } else if (doorWasOpen_ && !doorOpenNow) {
+    Presence::onDoorClose(nowMs);
+  }
+  doorWasOpen_ = doorOpenNow;
+  Presence::tick(nowMs);
+  syncAutoSecurityMode(nowMs);
 
   bool cdActive = false;
   uint32_t cdDeadline = 0;
@@ -389,37 +404,25 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
       return;
     }
     if (e.type == EventType::door_code_unlock) {
-      // Always issue a DISARM event first. It's idempotent when already disarmed,
-      // and guarantees "code -> disarm" works even if mode tracking gets out of sync.
-      const Mode before = state_.mode;
       badDoorCodeAttempts_ = 0;
-      applyDecision({EventType::disarm, nowMs, 9});
-
-      // Variant B: disarm + unlock door (entry UX).
       servo1_.unlock();
-      // Keep window locked while disarmed; allow a timed door-unlock session.
+      Presence::onDoorUnlock(nowMs);
       state_.keep_window_locked_when_disarmed = true;
       servo2_.lock();
       clearDoorUnlockSession(true);
       if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
-
-      if (before == Mode::disarm) notifySvc_.send("door code accepted");
-      else notifySvc_.send("disarmed by code");
-
-      if (state_.mode != Mode::disarm) {
-        Serial.print("[KEYPAD] WARN: disarm by code failed, mode=");
-        Serial.println(toString(state_.mode));
-      }
+      notifySvc_.send("door code accepted");
+      updateDoorUnlockSession(nowMs);
+      return;
+    }
+    if (isModeEvent(e.type)) {
+      Serial.print("[KEYPAD] mode command ignored (auto): ");
+      Serial.println((int)e.type);
       updateDoorUnlockSession(nowMs);
       return;
     }
     if (EventGate::allowKeypadEvent(e)) {
       applyDecision(e);
-      if (e.type == EventType::disarm) {
-        state_.keep_window_locked_when_disarmed = true;
-        servo2_.lock();
-        if (!collector_.isDoorOpen()) startDoorUnlockSession(nowMs);
-      }
       updateDoorUnlockSession(nowMs);
       return;
     }
@@ -435,7 +438,17 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   const bool hasEvent = collector_.pollSensorOrSerial(nowMs, e);
   updateDoorUnlockSession(nowMs);
   if (!hasEvent) return;
+  if (e.type == EventType::motion) {
+    Presence::onPirDetected(e.ts_ms);
+  } else if (e.type == EventType::chokepoint && e.src == cfg_.door_ultrasonic_src) {
+    Presence::onDoorUltrasonic(e.ts_ms);
+  }
   if (processDoorHoldWarnSilenceEvent(e)) return;
   if (processManualActuatorEvent(e)) return;
+  if (isModeEvent(e.type)) {
+    Serial.print("[SERIAL] mode command ignored (auto): ");
+    Serial.println((int)e.type);
+    return;
+  }
   applyDecision(e);
 }

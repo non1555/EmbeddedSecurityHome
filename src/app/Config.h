@@ -9,6 +9,7 @@ struct Config {
   uint32_t correlation_window_ms = 20000;
   uint32_t suspicion_decay_step_ms = 5000;
   uint8_t suspicion_decay_points = 8;
+  uint8_t door_ultrasonic_src = 1;
 
   // Door auto-relock session after keypad disarm.
   uint32_t door_unlock_timeout_ms = 15000;
