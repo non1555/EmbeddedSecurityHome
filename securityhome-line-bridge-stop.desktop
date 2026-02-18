@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SecurityHome LINE Stop
+Comment=Stop LINE bridge with UI notifications
+Exec=/home/non/SecurityHome/SecurityHome/tools/linux_ui/stop_line_bridge_ui.sh
+Path=/home/non/SecurityHome/SecurityHome
+Terminal=false
+Icon=media-playback-stop
+Categories=Utility;
+StartupNotify=true

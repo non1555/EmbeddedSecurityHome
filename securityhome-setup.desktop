@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SecurityHome Launcher
+Comment=Open SecurityHome launcher UI
+Exec=/home/non/SecurityHome/SecurityHome/tools/linux_ui/open_launcher_ui.sh
+Path=/home/non/SecurityHome/SecurityHome
+Terminal=false
+Icon=applications-system
+Categories=Utility;
+StartupNotify=true

@@ -5,6 +5,7 @@ import json
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import paho.mqtt.client as mqtt
@@ -32,18 +33,21 @@ def env(name: str, default: str = "") -> str:
 
 
 load_env_file(".env")
+ROOT = Path(__file__).resolve().parent
 
 MQTT_BROKER = env("MQTT_BROKER", "127.0.0.1")
 MQTT_PORT = int(env("MQTT_PORT", "1883"))
 MQTT_USERNAME = env("MQTT_USERNAME")
 MQTT_PASSWORD = env("MQTT_PASSWORD")
 MQTT_CLIENT_ID = env("MQTT_CLIENT_ID", "esh-line-bridge")
-MQTT_TOPIC_CMD = env("MQTT_TOPIC_CMD", "esh/cmd")
-MQTT_TOPIC_EVENT = env("MQTT_TOPIC_EVENT", "esh/event")
-MQTT_TOPIC_STATUS = env("MQTT_TOPIC_STATUS", "esh/status")
-MQTT_TOPIC_ACK = env("MQTT_TOPIC_ACK", "esh/ack")
-MQTT_TOPIC_METRICS = env("MQTT_TOPIC_METRICS", "esh/metrics")
+MQTT_TOPIC_CMD = env("MQTT_TOPIC_CMD", "esh/main/cmd")
+MQTT_TOPIC_EVENT = env("MQTT_TOPIC_EVENT", "esh/main/event")
+MQTT_TOPIC_STATUS = env("MQTT_TOPIC_STATUS", "esh/main/status")
+MQTT_TOPIC_ACK = env("MQTT_TOPIC_ACK", "esh/main/ack")
+MQTT_TOPIC_METRICS = env("MQTT_TOPIC_METRICS", "esh/main/metrics")
 METRICS_PUSH_PERIOD_S = max(5, int(env("METRICS_PUSH_PERIOD_S", "30")))
+BRIDGE_CMD_TOKEN = env("BRIDGE_CMD_TOKEN", env("FW_CMD_TOKEN", "")).strip()
+NONCE_STATE_FILE = Path(env("BRIDGE_NONCE_STATE_FILE", str(ROOT / ".nonce_state")))
 
 LINE_CHANNEL_ACCESS_TOKEN = env("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = env("LINE_CHANNEL_SECRET")
@@ -55,6 +59,15 @@ CMD_DEBOUNCE_MS = max(0, int(env("CMD_DEBOUNCE_MS", "600")))
 
 HTTP_HOST = env("HTTP_HOST", "0.0.0.0")
 HTTP_PORT = int(env("HTTP_PORT", "8080"))
+
+LOCK_COMMANDS = {
+    "lock door",
+    "unlock door",
+    "lock window",
+    "unlock window",
+    "lock all",
+    "unlock all",
+}
 
 
 def get_line_target() -> Optional[str]:
@@ -156,12 +169,10 @@ def menu_message() -> Dict[str, Any]:
     # Backward-compatible quick reply menu (kept as fallback).
     items = [
         {"type": "action", "action": {"type": "postback", "label": "Home", "data": "ui=home"}},
-        {"type": "action", "action": {"type": "postback", "label": "Status", "data": "cmd=status"}},
-        {"type": "action", "action": {"type": "postback", "label": "Disarm", "data": "cmd=disarm"}},
-        {"type": "action", "action": {"type": "postback", "label": "Arm Night", "data": "cmd=arm night"}},
-        {"type": "action", "action": {"type": "postback", "label": "Arm Away", "data": "cmd=arm away"}},
         {"type": "action", "action": {"type": "postback", "label": "Lock Door", "data": "cmd=lock door"}},
         {"type": "action", "action": {"type": "postback", "label": "Unlock Door", "data": "cmd=unlock door"}},
+        {"type": "action", "action": {"type": "postback", "label": "Lock Window", "data": "cmd=lock window"}},
+        {"type": "action", "action": {"type": "postback", "label": "Unlock Window", "data": "cmd=unlock window"}},
         {"type": "action", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
         {"type": "action", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
     ]
@@ -223,19 +234,14 @@ def flex_home() -> Dict[str, Any]:
                             {
                                 "type": "button",
                                 "style": "primary",
-                                "action": {"type": "postback", "label": "Mode", "data": "ui=mode"},
+                                "action": {"type": "postback", "label": "Lock", "data": "ui=lock"},
                             },
                             {
                                 "type": "button",
                                 "style": "secondary",
-                                "action": {"type": "postback", "label": "Lock", "data": "ui=lock"},
+                                "action": {"type": "postback", "label": "Notify", "data": "ui=mode"},
                             },
                         ],
-                    },
-                    {
-                        "type": "button",
-                        "style": "link",
-                        "action": {"type": "postback", "label": "Refresh Status", "data": "cmd=status"},
                     },
                 ],
             },
@@ -244,9 +250,10 @@ def flex_home() -> Dict[str, Any]:
 
 
 def flex_mode() -> Dict[str, Any]:
+    # Kept for backward compatibility with old rich menu mapping (ui=mode).
     return {
         "type": "flex",
-        "altText": "Mode menu",
+        "altText": "Notify view",
         "contents": {
             "type": "bubble",
             "size": "kilo",
@@ -255,12 +262,11 @@ def flex_mode() -> Dict[str, Any]:
                 "layout": "vertical",
                 "spacing": "md",
                 "contents": [
-                    {"type": "text", "text": "Mode", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": "Notify", "weight": "bold", "size": "lg"},
                     {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "separator"},
-                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": "Disarm", "data": "cmd=disarm"}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Night", "data": "cmd=arm night"}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Away", "data": "cmd=arm away"}},
+                    {"type": "text", "text": "LINE bridge mode: monitor notify/event/status/ack", "size": "sm", "wrap": True},
+                    {"type": "text", "text": "Allowed commands: lock/unlock only", "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
                 ],
             },
@@ -277,8 +283,8 @@ def flex_lock() -> Dict[str, Any]:
         door_label = "Lock Door"
         door_cmd = "cmd=lock door"
     else:
-        door_label = "Door (refresh)"
-        door_cmd = "cmd=status"
+        door_label = "Lock Door"
+        door_cmd = "cmd=lock door"
 
     if state.dev_window_locked is True:
         win_label = "Unlock Window"
@@ -287,8 +293,8 @@ def flex_lock() -> Dict[str, Any]:
         win_label = "Lock Window"
         win_cmd = "cmd=lock window"
     else:
-        win_label = "Window (refresh)"
-        win_cmd = "cmd=status"
+        win_label = "Lock Window"
+        win_cmd = "cmd=lock window"
 
     return {
         "type": "flex",
@@ -308,7 +314,6 @@ def flex_lock() -> Dict[str, Any]:
                     {"type": "button", "style": "primary", "action": {"type": "postback", "label": win_label, "data": win_cmd}},
                     {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
                     {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
-                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Refresh Status", "data": "cmd=status"}},
                     {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
                 ],
             },
@@ -344,6 +349,51 @@ state = BridgeState()
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID, clean_session=True)
 
 _last_cmd_at_by_source_ms: Dict[str, int] = {}
+
+
+def _load_nonce_state() -> int:
+    try:
+        raw = NONCE_STATE_FILE.read_text(encoding="utf-8", errors="replace").strip()
+        v = int(raw or "0")
+        return v if v > 0 else 0
+    except Exception:
+        return 0
+
+
+def _save_nonce_state(value: int) -> None:
+    try:
+        NONCE_STATE_FILE.write_text(str(int(value)), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_last_cmd_nonce: int = _load_nonce_state()
+
+
+def _next_cmd_nonce() -> int:
+    global _last_cmd_nonce
+    candidate = int(time.time()) & 0xFFFFFFFF
+    if candidate <= 0:
+        candidate = 1
+    if candidate <= _last_cmd_nonce:
+        candidate = (_last_cmd_nonce + 1) & 0xFFFFFFFF
+        if candidate == 0:
+            candidate = 1
+    _last_cmd_nonce = candidate
+    _save_nonce_state(_last_cmd_nonce)
+    return candidate
+
+
+def _encode_command_payload(cmd: str) -> str:
+    text = cmd.strip().lower()
+    if not BRIDGE_CMD_TOKEN:
+        return text
+    nonce = _next_cmd_nonce()
+    return f"{BRIDGE_CMD_TOKEN}|{nonce}|{text}"
+
+
+def command_auth_ready() -> bool:
+    return bool(BRIDGE_CMD_TOKEN)
 
 
 def source_key(ev: Dict[str, Any]) -> str:
@@ -385,36 +435,21 @@ def debounce_ok(src_key: str, cmd: str, ev_ts_ms: int) -> bool:
     return True
 
 
-def publish_cmd(cmd: str) -> None:
+def publish_cmd(cmd: str) -> bool:
     text = cmd.strip().lower()
-    if not text:
-        return
-    mqtt_client.publish(MQTT_TOPIC_CMD, payload=text, qos=0, retain=False)
+    if not text or not is_supported_cmd(text):
+        return False
+    if not command_auth_ready():
+        return False
+    payload = _encode_command_payload(text)
+    mqtt_client.publish(MQTT_TOPIC_CMD, payload=payload, qos=0, retain=False)
     state.last_cmd = text
     state.last_cmd_at = time.time()
+    return True
 
 
 def is_supported_cmd(text: str) -> bool:
-    allowed = {
-        "status",
-        "disarm",
-        "arm night",
-        "arm away",
-        "buzz",
-        "buzz warn",
-        "buzz alarm",
-        "alarm",
-        "alarm on",
-        "alarm off",
-        "silence",
-        "lock door",
-        "unlock door",
-        "lock window",
-        "unlock window",
-        "lock all",
-        "unlock all",
-    }
-    return text in allowed
+    return text in LOCK_COMMANDS
 
 
 def verify_line_signature(raw_body: bytes, signature: str) -> bool:
@@ -567,12 +602,12 @@ def get_state() -> Dict[str, Any]:
 async def http_cmd(request: Request) -> Dict[str, Any]:
     data = await request.json()
     cmd = str((data or {}).get("cmd", "")).strip().lower()
+    if not command_auth_ready():
+        raise HTTPException(status_code=503, detail="command auth token missing")
     if not cmd or not is_supported_cmd(cmd):
         raise HTTPException(status_code=400, detail="unsupported cmd")
-    # Publish to firmware.
-    mqtt_client.publish(MQTT_TOPIC_CMD, cmd, qos=0, retain=False)
-    state.last_cmd = cmd
-    state.last_cmd_at = time.time()
+    if not publish_cmd(cmd):
+        raise HTTPException(status_code=503, detail="command publish blocked")
     return {"ok": True, "cmd": cmd}
 
 
@@ -597,6 +632,8 @@ def health() -> Dict[str, Any]:
         problems.append("line_channel_secret_missing")
     if not line_target_ok:
         problems.append("line_target_missing")
+    if not command_auth_ready():
+        problems.append("cmd_auth_token_missing")
 
     ready = bool(state.mqtt_connected and line_push_ready and line_webhook_ready)
     return {
@@ -611,6 +648,7 @@ def health() -> Dict[str, Any]:
         "line_webhook_ready": line_webhook_ready,
         "line_push_ready": line_push_ready,
         "line_target_configured": bool(target),
+        "cmd_auth_token_configured": bool(BRIDGE_CMD_TOKEN),
     }
 
 
@@ -657,12 +695,17 @@ async def line_webhook(
                 reply_line_messages(reply_token, [flex_home()])
                 continue
             if not is_supported_cmd(cmd):
-                reply_line_text(reply_token, "unsupported cmd, send 'menu'")
+                reply_line_text(reply_token, "unsupported cmd (lock/unlock only), send 'menu'")
+                continue
+            if not command_auth_ready():
+                reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
                 continue
             if not debounce_ok(src_k, cmd, ev_ts_ms):
                 # Silent debounce: no chat spam.
                 continue
-            publish_cmd(cmd)
+            if not publish_cmd(cmd):
+                reply_line_text(reply_token, "command blocked")
+                continue
             # Keep chat clean: show menu again instead of "sent: ..."
             reply_line_messages(reply_token, [flex_home()])
             continue
@@ -680,14 +723,19 @@ async def line_webhook(
             continue
 
         if not is_supported_cmd(text):
-            reply_line_text(reply_token, "unsupported cmd, send 'menu'")
+            reply_line_text(reply_token, "unsupported cmd (lock/unlock only), send 'menu'")
+            continue
+        if not command_auth_ready():
+            reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
             continue
 
         if not debounce_ok(src_k, text, ev_ts_ms):
             reply_line_text(reply_token, "ignored (debounce), try again")
             continue
 
-        publish_cmd(text)
+        if not publish_cmd(text):
+            reply_line_text(reply_token, "command blocked")
+            continue
         reply_line_messages(reply_token, [flex_home()])
 
     return {"ok": True}

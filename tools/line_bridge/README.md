@@ -1,10 +1,10 @@
 # MQTT <-> LINE Bridge
 
-This bridge connects your ESP32 MQTT topics to LINE Official Account:
+This bridge connects your main-board MQTT topics to LINE Official Account:
 
-- MQTT `esh/event`, `esh/status`, `esh/ack` -> push message to LINE
-- MQTT `esh/metrics` -> summarized push to LINE (throttled)
-- LINE webhook text command -> publish to MQTT `esh/cmd`
+- MQTT `esh/main/event`, `esh/main/status`, `esh/main/ack` -> push message to LINE
+- MQTT `esh/main/metrics` -> summarized push to LINE (throttled)
+- LINE webhook text command -> publish to MQTT `esh/main/cmd`
 
 ## 1) Prepare LINE OA
 
@@ -39,6 +39,9 @@ Important fields:
 - `NGROK_AUTHTOKEN` (required)
 - optional target (for push pinning): `LINE_TARGET_USER_ID` or `LINE_TARGET_GROUP_ID` or `LINE_TARGET_ROOM_ID`
 - metrics throttle: `METRICS_PUSH_PERIOD_S` (default 30s)
+- command auth: `FW_CMD_TOKEN` (or `BRIDGE_CMD_TOKEN` for bridge-only override)
+- optional nonce state file: `BRIDGE_NONCE_STATE_FILE` (default `tools/line_bridge/.nonce_state`)
+- when token is empty, bridge blocks lock/unlock commands (fail-closed)
 
 Notes:
 - If you do not set any `LINE_TARGET_*`, the bridge will automatically learn a push target from the first LINE webhook it receives (send any message in the chat you want to receive pushes to).
@@ -106,6 +109,9 @@ UI Launcher (no terminal):
 - Firmware UI: use the `Firmware` tab to set ESP Wi-Fi/MQTT values, then click `Build`/`Upload`.
 - Firmware UI supports separate `Build Env` and `Upload Env` (board/profile), with env details shown under each selector.
   - Recommended: `main-board` for main firmware, `automation-board` for automation firmware.
+- Firmware UI also exposes:
+  - `FW_CMD_TOKEN` for secure `token|nonce|cmd` command payload
+  - separate MQTT client IDs for main-board and automation-board (prevents broker client-id collision)
 - Launcher saves your values in `tools/line_bridge/.env`.
   - `platformio.ini` reads `.env` via `tools/pio_env.py` (PlatformIO pre-build script).
   - `platformio.ini` is not edited by launcher.
@@ -122,7 +128,7 @@ LINE "Rich menu" (the bottom bar UI) requires an image. This project generates o
    - Windows: `tools\\line_bridge\\.venv\\Scripts\\python.exe tools\\line_bridge\\richmenu_setup.py`
    - Linux: `tools/line_bridge/.venv/bin/python3 tools/line_bridge/richmenu_setup.py`
 
-The bottom bar buttons open the in-chat Flex UI (`Mode` / `Lock`).
+The bottom bar buttons open the in-chat Flex UI (`Notify` / `Lock`).
 `richmenu_setup.py` now regenerates `richmenu.png` by default every run.
 If you want to keep your own image file, run with `--use-existing-image`.
 
@@ -151,21 +157,23 @@ Health check:
 
 ## 4) Supported LINE commands
 
-- `status`
 - `lock door`
 - `unlock door`
 - `lock window`
 - `unlock window`
 - `lock all`
 - `unlock all`
-- `help`
+- `help` / `menu` (UI only)
 
-These commands are published to MQTT topic `esh/cmd`.
+These lock/unlock commands are published to MQTT topic `esh/main/cmd`.
+If `FW_CMD_TOKEN` is set, bridge publishes secure payload format:
+- `<token>|<nonce>|<cmd>`
+- example: `mytoken|1708250123|lock door`
 
 ## 5) Topic contract (from firmware)
 
-- `esh/cmd` (subscribe by ESP32): plain text command
-- `esh/event` (publish by ESP32): JSON event snapshot
-- `esh/status` (publish by ESP32): JSON status snapshot
-- `esh/ack` (publish by ESP32): JSON command ack
-- `esh/metrics` (publish by ESP32): JSON metrics (bridge forwards summary)
+- `esh/main/cmd` (subscribe by main-board ESP32): command payload (plain text or `token|nonce|cmd`)
+- `esh/main/event` (publish by main-board ESP32): JSON event snapshot
+- `esh/main/status` (publish by main-board ESP32): JSON status snapshot
+- `esh/main/ack` (publish by main-board ESP32): JSON command ack
+- `esh/main/metrics` (publish by main-board ESP32): JSON metrics (bridge forwards summary)

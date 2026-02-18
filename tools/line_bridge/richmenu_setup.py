@@ -95,9 +95,9 @@ def generate_image(out_path: Path) -> None:
     d.text((pad + 60, 90), "EmbeddedSecurity", fill=(255, 255, 255), font=font_title)
     d.text((pad + 60, 200), "Tap a button", fill=(52, 66, 84), font=font_small)
 
-    # Left: MODE (Windows-style app tile icon)
-    d.text((pad + 200, top + 190), "MODE", fill=(36, 54, 76), font=font_big)
-    d.text((pad + 210, top + 450), "Disarm / Night / Away", fill=(90, 100, 115), font=font_small)
+    # Left: NOTIFY (monitoring view)
+    d.text((pad + 120, top + 190), "NOTIFY", fill=(36, 54, 76), font=font_big)
+    d.text((pad + 140, top + 450), "Event / Status / ACK", fill=(90, 100, 115), font=font_small)
     x = pad + 250
     y = bottom - 470
     c = (36, 54, 76)
@@ -151,7 +151,7 @@ def create_richmenu(name: str, chat_bar_text: str) -> str:
             {
                 "bounds": {"x": 0, "y": 0, "width": 1250, "height": 1686},
                 # LINE API currently requires non-empty displayText for postback actions.
-                "action": {"type": "postback", "data": "ui=mode", "displayText": "Mode"},
+                "action": {"type": "postback", "data": "ui=mode", "displayText": "Notify"},
             },
             {
                 "bounds": {"x": 1250, "y": 0, "width": 1250, "height": 1686},
@@ -204,7 +204,7 @@ def main() -> int:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="EmbeddedSecurityHome")
-    ap.add_argument("--chatbar", default="Mode / Lock")
+    ap.add_argument("--chatbar", default="Notify / Lock")
     ap.add_argument("--image", default=str(ROOT / "richmenu.png"))
     ap.add_argument("--delete-all", action="store_true", help="Delete all existing rich menus first")
     ap.add_argument("--use-existing-image", action="store_true", help="Do not regenerate image; use --image as-is")

@@ -57,6 +57,15 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+Linux (แบบกดจาก UI ไม่ต้องพิมพ์คำสั่ง):
+
+1. ดับเบิลคลิก `tools/linux_ui/install_desktop_launchers.sh` แล้วเลือก Run
+2. จะได้ shortcut บน Desktop:
+- `securityhome-setup.desktop`
+- `securityhome-line-bridge-start.desktop`
+- `securityhome-line-bridge-stop.desktop`
+- `securityhome-native-tests.desktop`
+
 ## 4) เปิด UI Launcher
 
 Windows (แนะนำ):
@@ -72,6 +81,10 @@ Linux:
 ```bash
 tools/line_bridge/.venv/bin/python3 tools/line_bridge/launcher.pyw
 ```
+
+Linux (แบบกดจาก UI):
+
+- ดับเบิลคลิก `securityhome-line-bridge-start.desktop`
 
 ## 5) ตั้งค่าใน UI (ครั้งแรก)
 

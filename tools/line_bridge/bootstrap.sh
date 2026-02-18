@@ -14,6 +14,43 @@ if [[ ! -f "$ENV_FILE" && -f "$ENV_EXAMPLE" ]]; then
   cp -f "$ENV_EXAMPLE" "$ENV_FILE"
 fi
 
+generate_cmd_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16
+    return 0
+  fi
+  if command -v od >/dev/null 2>&1; then
+    od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
+    return 0
+  fi
+  tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
+}
+
+ensure_cmd_token() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return
+  fi
+  local current=""
+  current="$(grep -E '^FW_CMD_TOKEN=' "$ENV_FILE" | tail -n1 | cut -d= -f2- | tr -d '\r\n[:space:]' || true)"
+  if [[ -n "$current" ]]; then
+    return
+  fi
+  local token
+  token="$(generate_cmd_token)"
+  if [[ -z "$token" ]]; then
+    echo "WARN: unable to generate FW_CMD_TOKEN automatically."
+    return
+  fi
+  if grep -q '^FW_CMD_TOKEN=' "$ENV_FILE"; then
+    sed -i "s/^FW_CMD_TOKEN=.*/FW_CMD_TOKEN=$token/" "$ENV_FILE"
+  else
+    printf '\nFW_CMD_TOKEN=%s\n' "$token" >>"$ENV_FILE"
+  fi
+  echo "Generated FW_CMD_TOKEN in .env"
+}
+
+ensure_cmd_token
+
 PY=""
 if command -v python3 >/dev/null 2>&1; then
   PY="python3"

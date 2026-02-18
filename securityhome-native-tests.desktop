@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SecurityHome Native Tests
+Comment=Run native flow tests with UI notifications
+Exec=/home/non/SecurityHome/SecurityHome/tools/linux_ui/run_native_tests_ui.sh
+Path=/home/non/SecurityHome/SecurityHome
+Terminal=false
+Icon=utilities-terminal
+Categories=Utility;
+StartupNotify=true

@@ -1,0 +1,45 @@
+#pragma once
+
+#include <Arduino.h>
+
+#include "app/Commands.h"
+#include "app/Events.h"
+#include "app/SystemState.h"
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+
+namespace RtosQueues {
+
+enum class PublishKind : uint8_t {
+  event,
+  status,
+  ack
+};
+
+struct PublishMsg {
+  PublishKind kind = PublishKind::event;
+  Event e{};
+  SystemState st{};
+  Command cmd{CommandType::none, 0};
+  bool ok = false;
+  char text1[32]{};
+  char text2[32]{};
+};
+
+struct CmdMsg {
+  char payload[128]{};
+};
+
+struct ChokepointMsg {
+  Event e{};
+  int cm = -1;
+};
+
+extern QueueHandle_t mqttPubQ;
+extern QueueHandle_t mqttCmdQ;
+extern QueueHandle_t chokepointQ;
+
+bool init();
+
+} // namespace RtosQueues

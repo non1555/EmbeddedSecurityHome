@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SecurityHome LINE Start
+Comment=Start LINE bridge with UI notifications
+Exec=/home/non/SecurityHome/SecurityHome/tools/linux_ui/start_line_bridge_ui.sh
+Path=/home/non/SecurityHome/SecurityHome
+Terminal=false
+Icon=media-playback-start
+Categories=Utility;
+StartupNotify=true
