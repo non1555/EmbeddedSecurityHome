@@ -1,0 +1,608 @@
+﻿graph TD
+
+subgraph EXT_INPUTS[External Inputs]
+  IN_LINE[LINE User Text Or Postback]
+  IN_HTTP_CMD[Bridge HTTP Cmd Endpoint]
+  IN_MQTT_CMD[MQTT Main Cmd Topic]
+  IN_KEYPAD[Keypad Key Press]
+  IN_BTN_DOOR[Manual Door Button]
+  IN_BTN_WIN[Manual Window Button]
+  IN_REED_DOOR[Door Reed Sensor]
+  IN_REED_WIN[Window Reed Sensor]
+  IN_PIR1[PIR1]
+  IN_PIR2[PIR2]
+  IN_PIR3[PIR3 Outdoor]
+  IN_VIB[Vibration Sensor]
+  IN_US1[Ultrasonic Chokepoint 1]
+  IN_US2[Ultrasonic Chokepoint 2]
+  IN_US3[Ultrasonic Chokepoint 3]
+  IN_SERIAL[Serial Synthetic Char]
+  IN_MAIN_STATUS[MQTT Main Status Topic]
+  IN_LUX[BH1750 Lux Sample]
+  IN_TEMP[DHT Temp Hum Sample]
+
+  IN_FROM_BRIDGE_MAIN_CMD[[From BRIDGE.Publish Cmd To MQTT]]
+  IN_FROM_OUT_MAIN_STATUS[[From SYSTEM_OUTPUTS.Main Status MQTT]]
+  IN_TO_BRIDGE_WEBHOOK[[To BRIDGE.Webhook Handler]]
+  IN_TO_BRIDGE_HTTP[[To BRIDGE.HTTP Cmd Handler]]
+  IN_TO_MAIN_REMOTE[[To MAIN_BOARD.Remote Command Poll]]
+  IN_TO_MAIN_KEYPAD[[To MAIN_BOARD.Keypad Poll]]
+  IN_TO_MAIN_SENSOR[[To MAIN_BOARD.Sensor Manual Serial Poll]]
+  IN_TO_AUTO_STATUS[[To AUTO_BOARD.Main Status Rx]]
+end
+
+subgraph BRIDGE[LINE Bridge]
+  B_FROM_EXT_WEBHOOK[[From EXT_INPUTS.LINE User Text]]
+  B_FROM_EXT_HTTP[[From EXT_INPUTS.Bridge HTTP Cmd Endpoint]]
+  B_FROM_OUT_MQTT[[From SYSTEM_OUTPUTS.Main Auto MQTT Topics]]
+
+  B_WEBHOOK[Webhook Handler]
+  B_HTTP[HTTP Cmd Handler]
+  B_SIG{LINE Signature Valid}
+  B_CMD_SUP{Command Supported}
+  B_CMD_AUTH{Mutating Command Token Ready}
+  B_DEBOUNCE{Debounce Pass}
+  B_PUB[Publish Cmd to MQTT]
+  B_PUB_OK{MQTT Publish OK}
+  B_REPLY_OK[Reply Flex Home]
+  B_REPLY_ERR[Reply Reject]
+  B_HEALTH[Health Endpoint]
+  B_MQTT_RX[MQTT On Message]
+  B_RX_TOPIC{Topic Branch}
+  B_RX_STATUS[Update Status Snapshot]
+  B_RX_EVENT[Update Event Snapshot]
+  B_RX_ACK[Parse Compact Lock Detail]
+  B_RX_MET[Throttle Metrics Push]
+  B_PUSH[Push LINE Message]
+
+  B_TO_EXT_MAIN_CMD[[To EXT_INPUTS.MQTT Main Cmd Topic]]
+  B_TO_OUT_LINE[[To SYSTEM_OUTPUTS.LINE Message Out]]
+end
+
+subgraph MAIN_BOARD[Main Board Firmware]
+
+  subgraph MB_LOOP[Main Loop Tick Pipeline]
+    MB_FROM_EXT_REMOTE[[From EXT_INPUTS.MQTT Main Cmd Topic]]
+    MB_FROM_EXT_KEYPAD[[From EXT_INPUTS.Keypad Press]]
+    MB_FROM_EXT_SENSOR[[From EXT_INPUTS.Sensor Manual Serial Inputs]]
+
+    MB_TICK[SecurityOrchestrator Tick]
+    MB_ACT_UPDATE[Update Buzzer and Servo Waveform]
+    MB_SESSION_AUTO{Door Lock Transition Starts Session}
+    MB_HEALTH[Update Sensor Health]
+    MB_SESSION[Update Door Unlock Session]
+    MB_LOCKOUT_EXPIRE{Keypad Lockout Expired}
+    MB_OLED[Update OLED Status]
+    MB_MQTT_UPD[MQTT Bus Update]
+    MB_HEARTBEAT{Status Heartbeat Due}
+    MB_STATUS_PERIODIC[Publish Periodic Status]
+    MB_REMOTE_POLL{MQTT Command Available}
+    MB_KEYPAD_POLL{Keypad Event Available}
+    MB_TIMEOUT_POLL{Entry Timeout Event}
+    MB_SENSOR_POLL{Sensor Manual Serial Event Available}
+  end
+
+  subgraph MB_REMOTE[Remote Command Branch]
+    MB_REMOTE_PARSE[Parse Authorized Remote Command]
+    MB_REMOTE_AUTH_OK{Auth Parse OK}
+    MB_REMOTE_NONCE_OK{Nonce Replay Monotonic OK}
+    MB_REMOTE_CMD[Normalized Remote Command]
+    MB_RC_STATUS{Cmd Status}
+    MB_RC_BUZZ_WARN{Cmd Buzz Warn}
+    MB_RC_ALARM{Cmd Alarm}
+    MB_RC_SILENCE{Cmd Silence}
+    MB_RC_DISARM{Cmd Disarm}
+    MB_RC_ARM_NIGHT{Cmd Arm Night}
+    MB_RC_ARM_AWAY{Cmd Arm Away}
+    MB_RC_LOCK_DOOR{Cmd Lock Door}
+    MB_RC_LOCK_WIN{Cmd Lock Window}
+    MB_RC_LOCK_ALL{Cmd Lock All}
+    MB_RC_UNLOCK_DOOR{Cmd Unlock Door}
+    MB_RC_UNLOCK_WIN{Cmd Unlock Window}
+    MB_RC_UNLOCK_ALL{Cmd Unlock All}
+    MB_RC_UNKNOWN[Unsupported Remote Command]
+
+    MB_RC_LOCK_DOOR_C{Door Closed}
+    MB_RC_LOCK_WIN_C{Window Closed}
+    MB_RC_LOCK_ALL_C1{Door Closed}
+    MB_RC_LOCK_ALL_C2{Window Closed}
+    MB_RC_UNLOCK_MODE{Mode Is Disarm}
+    MB_RC_UNLOCK_FAULT{Sensor Fault Allows Unlock}
+
+    MB_ACK_OK[Publish Ack OK]
+    MB_ACK_FAIL[Publish Ack Fail]
+    MB_REMOTE_STATUS[Publish Remote Status Reason]
+  end
+
+  subgraph MB_KEYPAD[Keypad Branch]
+    MB_KP_EVENT[Keypad Event]
+    MB_KP_SILENCE{Door Hold Warn Silence Event}
+    MB_KP_BAD{Bad Door Code Event}
+    MB_KP_UNLOCK{Unlock Door Code Event}
+    MB_KP_MODE{Keypad Mode Event}
+    MB_KP_LOCKOUT{Keypad Lockout Active}
+    MB_KP_BAD_INC[Increment Bad Attempt Counter]
+    MB_KP_BAD_LIMIT{Bad Attempt Limit Reached}
+    MB_KP_LOCKOUT_SET[Set Keypad Lockout]
+    MB_KP_UNLOCK_FAULT{Sensor Fault Blocks Unlock}
+    MB_KP_UNLOCK_DISARM[Force Disarm if Needed]
+    MB_KP_UNLOCK_ACT[Unlock Door Lock Window Start Session]
+    MB_KP_BLOCK[Block Unsupported Keypad Command]
+  end
+
+  subgraph MB_SERIAL[Serial Policy Gate]
+    MB_SER_EVENT[Serial Synthetic Event]
+    MB_SER_MODE{Serial Mode Allowed}
+    MB_SER_MAN{Serial Manual Allowed}
+    MB_SER_SEN{Serial Sensor Allowed}
+    MB_SER_BLOCK[Publish Serial Blocked Status]
+  end
+
+  subgraph MB_MANUAL[Manual Actuator Branch]
+    MB_MAN_EVENT[Manual Event]
+    MB_MAN_DOOR_TOG{Manual Door Toggle}
+    MB_MAN_WIN_TOG{Manual Window Toggle}
+    MB_MAN_LOCK_REQ{Manual Lock Request}
+    MB_MAN_UNLOCK_REQ{Manual Unlock Request}
+
+    MB_MAN_UNLOCK_MODE{Mode Is Disarm}
+    MB_MAN_UNLOCK_FAULT{Sensor Fault Allows Unlock}
+    MB_MAN_DOOR_CLOSED{Door Closed For Lock}
+    MB_MAN_WIN_CLOSED{Window Closed For Lock}
+
+    MB_MAN_ACT[Apply Manual Servo Changes]
+    MB_MAN_NOTIFY[Manual Notify and Status Event]
+  end
+
+  subgraph MB_RULE[Rule Engine Decision]
+    MB_RULE_IN[Event To Rule Engine]
+    MB_RULE_DECAY[Apply Suspicion Decay]
+
+    MB_RULE_DISARM{Event Disarm}
+    MB_RULE_ARM_NIGHT{Event Arm Night}
+    MB_RULE_ARM_AWAY{Event Arm Away}
+    MB_RULE_DOOR_OPEN{Armed Door Open}
+    MB_RULE_ENTRY_TO{Armed Entry Timeout}
+    MB_RULE_WIN_OPEN{Armed Window Open}
+    MB_RULE_MOTION{Armed Motion Or Chokepoint}
+    MB_RULE_VIB{Armed Vibration}
+    MB_RULE_TAMP{Armed Door Tamper}
+
+    MB_RULE_SCORE[Update Suspicion Score Correlation]
+    MB_RULE_LEVEL[Derive Alarm Level]
+    MB_RULE_CMD[Derive Command Type]
+    MB_RULE_STATE[Write Next System State]
+  end
+
+  subgraph MB_OUTPUT[Main Output Layer]
+    MB_CMD_DISPATCH[Command Dispatcher]
+    MB_MODE_POLICY[Mode Based Lock Policy]
+    MB_CMD_POLICY[Command Type Action]
+    MB_OUT_BUZZ[Buzzer Warn Alert Stop]
+    MB_OUT_SERVO[Servo Lock Unlock Motion]
+    MB_OUT_NOTIFY[Notify Service]
+    MB_OUT_LOG[Logger]
+    MB_PUB_EVENT[Publish Event Topic]
+    MB_PUB_STATUS[Publish Status Topic]
+    MB_PUB_ACK[Publish Ack Topic]
+    MB_PUB_MET[Publish Metrics Topic]
+
+    MB_TO_OUT_STATUS[[To SYSTEM_OUTPUTS.Main Status MQTT]]
+    MB_TO_OUT_EVENT[[To SYSTEM_OUTPUTS.Main Event MQTT]]
+    MB_TO_OUT_ACK[[To SYSTEM_OUTPUTS.Main Ack MQTT]]
+    MB_TO_OUT_MET[[To SYSTEM_OUTPUTS.Main Metrics MQTT]]
+    MB_TO_OUT_DOOR[[To SYSTEM_OUTPUTS.Door Lock Physical]]
+    MB_TO_OUT_WIN[[To SYSTEM_OUTPUTS.Window Lock Physical]]
+    MB_TO_OUT_BUZZ[[To SYSTEM_OUTPUTS.Buzzer Audible]]
+  end
+
+end
+
+subgraph AUTO_BOARD[Automation Board Firmware]
+
+  subgraph AB_NET[Task Net]
+    AB_NET_LOOP[Task Net Loop]
+    AB_WIFI[Connect Wifi]
+    AB_MQTT[Connect MQTT]
+    AB_MQTT_OK{MQTT Connected}
+    AB_MQTT_LOOP[MQTT Loop Callback]
+    AB_STATUS_PERIOD{Periodic Status Publish}
+  end
+
+  subgraph AB_MQTT_RX[MQTT Message Branch]
+    AB_FROM_EXT_STATUS[[From EXT_INPUTS.MQTT Main Status Topic]]
+
+    AB_RX_TOPIC{Topic Branch}
+    AB_RX_MAIN[Main Status Context Parse]
+    AB_RX_MAIN_OK{Mode Or Presence Field Valid}
+    AB_CTX_WRITE[Write Main Context Timestamps]
+    AB_CMD_PARSE[Parse Authorized Auto Command]
+    AB_CMD_AUTH_OK{Auto Command Auth OK}
+    AB_CMD_TOPIC[Normalized Auto Command]
+
+    AB_CMD_LIGHT_AUTO{Cmd Light Auto}
+    AB_CMD_LIGHT_ON{Cmd Light On}
+    AB_CMD_LIGHT_OFF{Cmd Light Off}
+    AB_CMD_FAN_AUTO{Cmd Fan Auto}
+    AB_CMD_FAN_ON{Cmd Fan On}
+    AB_CMD_FAN_OFF{Cmd Fan Off}
+    AB_CMD_STATUS{Cmd Status}
+    AB_CMD_UNKNOWN[Unsupported Auto Command]
+
+    AB_CMD_STATE_BUSY{State Mutex Acquired}
+    AB_CMD_WRITE[Write Light Fan Auto States]
+    AB_CMD_APPLY[Apply Outputs]
+    AB_CMD_ACK[Publish Auto Ack]
+    AB_CMD_STAT[Publish Auto Status]
+  end
+
+  subgraph AB_CTRL[Task Control]
+    AB_CTRL_LOOP[Task Control Loop]
+    AB_PRES_TICK[Presence Tick]
+
+    AB_LUX_DUE{Lux Sample Due And Ready}
+    AB_LUX_READ[Read Lux Sensor]
+    AB_LUX_STATE[Read Current Light Auto State]
+    AB_GATE_MODE[Allow By Main Mode]
+    AB_GATE_HOME[Allow By Main Presence]
+    AB_LIGHT_NEXT[Compute Next Light Hysteresis]
+    AB_LIGHT_CHG{Light State Changed}
+    AB_LIGHT_SET[Write Light State]
+    AB_LIGHT_APPLY[Apply Output Light]
+
+    AB_TEMP_DUE{Temp Sample Due And Available}
+    AB_TEMP_READ[Read Temp Hum Sensor]
+    AB_FAN_STATE[Read Current Fan Auto State]
+    AB_FAN_NEXT[Compute Next Fan Hysteresis]
+    AB_FAN_CHG{Fan State Changed}
+    AB_FAN_SET[Write Fan State]
+    AB_FAN_APPLY[Apply Output Fan]
+
+    AB_LOG[Log Light Climate Network]
+  end
+
+  subgraph AB_OUTPUT[Automation Output]
+    AB_OUT_LED[LED Output]
+    AB_OUT_FAN[L293D Fan Output]
+    AB_OUT_STATUS[Auto Status Topic]
+    AB_OUT_ACK[Auto Ack Topic]
+
+    AB_TO_OUT_STATUS[[To SYSTEM_OUTPUTS.Auto Status MQTT]]
+    AB_TO_OUT_ACK[[To SYSTEM_OUTPUTS.Auto Ack MQTT]]
+    AB_TO_OUT_LIGHT[[To SYSTEM_OUTPUTS.Light Physical State]]
+    AB_TO_OUT_FAN[[To SYSTEM_OUTPUTS.Fan Physical State]]
+  end
+
+end
+
+subgraph SYSTEM_OUTPUTS[Observable Outputs]
+  OUT_FROM_BRIDGE_LINE[[From BRIDGE.LINE Replies and Push]]
+  OUT_FROM_MAIN_STATUS[[From MAIN_BOARD.Main Status Topic]]
+  OUT_FROM_MAIN_EVENT[[From MAIN_BOARD.Main Event Topic]]
+  OUT_FROM_MAIN_ACK[[From MAIN_BOARD.Main Ack Topic]]
+  OUT_FROM_MAIN_MET[[From MAIN_BOARD.Main Metrics Topic]]
+  OUT_FROM_MAIN_DOOR[[From MAIN_BOARD.Door Lock Output]]
+  OUT_FROM_MAIN_WIN[[From MAIN_BOARD.Window Lock Output]]
+  OUT_FROM_MAIN_BUZZ[[From MAIN_BOARD.Buzzer Output]]
+  OUT_FROM_AUTO_STATUS[[From AUTO_BOARD.Auto Status Topic]]
+  OUT_FROM_AUTO_ACK[[From AUTO_BOARD.Auto Ack Topic]]
+  OUT_FROM_AUTO_LIGHT[[From AUTO_BOARD.Light Output]]
+  OUT_FROM_AUTO_FAN[[From AUTO_BOARD.Fan Output]]
+
+  OUT_LINE[LINE Message Out]
+  OUT_MAIN_STATUS[Main Status MQTT]
+  OUT_MAIN_EVENT[Main Event MQTT]
+  OUT_MAIN_ACK[Main Ack MQTT]
+  OUT_MAIN_MET[Main Metrics MQTT]
+  OUT_AUTO_STATUS[Auto Status MQTT]
+  OUT_AUTO_ACK[Auto Ack MQTT]
+  OUT_DOOR_LOCK[Door Lock Physical State]
+  OUT_WIN_LOCK[Window Lock Physical State]
+  OUT_BUZZ[Buzzer Audible State]
+  OUT_LIGHT[Light Physical State]
+  OUT_FAN[Fan Physical State]
+
+  OUT_TO_EXT_MAIN_STATUS[[To EXT_INPUTS.MQTT Main Status Topic]]
+  OUT_TO_BRIDGE_MQTT[[To BRIDGE.MQTT On Message]]
+end
+
+IN_LINE --> IN_TO_BRIDGE_WEBHOOK
+IN_HTTP_CMD --> IN_TO_BRIDGE_HTTP
+IN_FROM_BRIDGE_MAIN_CMD --> IN_MQTT_CMD
+IN_FROM_OUT_MAIN_STATUS --> IN_MAIN_STATUS
+
+IN_MQTT_CMD --> IN_TO_MAIN_REMOTE
+IN_KEYPAD --> IN_TO_MAIN_KEYPAD
+IN_BTN_DOOR --> IN_TO_MAIN_SENSOR
+IN_BTN_WIN --> IN_TO_MAIN_SENSOR
+IN_REED_DOOR --> IN_TO_MAIN_SENSOR
+IN_REED_WIN --> IN_TO_MAIN_SENSOR
+IN_PIR1 --> IN_TO_MAIN_SENSOR
+IN_PIR2 --> IN_TO_MAIN_SENSOR
+IN_PIR3 --> IN_TO_MAIN_SENSOR
+IN_VIB --> IN_TO_MAIN_SENSOR
+IN_US1 --> IN_TO_MAIN_SENSOR
+IN_US2 --> IN_TO_MAIN_SENSOR
+IN_US3 --> IN_TO_MAIN_SENSOR
+IN_SERIAL --> IN_TO_MAIN_SENSOR
+IN_MAIN_STATUS --> IN_TO_AUTO_STATUS
+
+B_FROM_EXT_WEBHOOK --> B_WEBHOOK
+B_FROM_EXT_HTTP --> B_HTTP
+
+B_WEBHOOK --> B_SIG
+B_SIG -->|ok| B_CMD_SUP
+B_SIG -->|fail| B_REPLY_ERR
+B_HTTP --> B_CMD_SUP
+B_CMD_SUP -->|yes| B_CMD_AUTH
+B_CMD_SUP -->|no| B_REPLY_ERR
+B_CMD_AUTH -->|ok| B_DEBOUNCE
+B_CMD_AUTH -->|fail| B_REPLY_ERR
+B_DEBOUNCE -->|ok| B_PUB
+B_DEBOUNCE -->|fail| B_REPLY_ERR
+B_PUB --> B_PUB_OK
+B_PUB_OK -->|ok| B_REPLY_OK
+B_PUB_OK -->|fail| B_REPLY_ERR
+B_REPLY_OK --> B_TO_OUT_LINE
+B_REPLY_ERR --> B_TO_OUT_LINE
+B_PUB --> B_TO_EXT_MAIN_CMD
+
+MB_FROM_EXT_REMOTE --> MB_REMOTE_POLL
+MB_FROM_EXT_KEYPAD --> MB_KEYPAD_POLL
+MB_FROM_EXT_SENSOR --> MB_SENSOR_POLL
+
+MB_TICK --> MB_ACT_UPDATE
+MB_ACT_UPDATE --> MB_SESSION_AUTO
+MB_SESSION_AUTO --> MB_HEALTH
+MB_HEALTH --> MB_SESSION
+MB_SESSION --> MB_LOCKOUT_EXPIRE
+MB_LOCKOUT_EXPIRE --> MB_OLED
+MB_OLED --> MB_MQTT_UPD
+MB_MQTT_UPD --> MB_HEARTBEAT
+MB_HEARTBEAT -->|due| MB_STATUS_PERIODIC
+MB_STATUS_PERIODIC --> MB_PUB_STATUS
+MB_HEARTBEAT --> MB_REMOTE_POLL
+MB_REMOTE_POLL -->|yes| MB_REMOTE_PARSE
+MB_REMOTE_POLL -->|no| MB_KEYPAD_POLL
+
+MB_REMOTE_PARSE --> MB_REMOTE_AUTH_OK
+MB_REMOTE_AUTH_OK -->|fail| MB_ACK_FAIL
+MB_REMOTE_AUTH_OK -->|ok| MB_REMOTE_NONCE_OK
+MB_REMOTE_NONCE_OK -->|fail| MB_ACK_FAIL
+MB_REMOTE_NONCE_OK -->|ok| MB_REMOTE_CMD
+
+MB_REMOTE_CMD --> MB_RC_STATUS
+MB_REMOTE_CMD --> MB_RC_BUZZ_WARN
+MB_REMOTE_CMD --> MB_RC_ALARM
+MB_REMOTE_CMD --> MB_RC_SILENCE
+MB_REMOTE_CMD --> MB_RC_DISARM
+MB_REMOTE_CMD --> MB_RC_ARM_NIGHT
+MB_REMOTE_CMD --> MB_RC_ARM_AWAY
+MB_REMOTE_CMD --> MB_RC_LOCK_DOOR
+MB_REMOTE_CMD --> MB_RC_LOCK_WIN
+MB_REMOTE_CMD --> MB_RC_LOCK_ALL
+MB_REMOTE_CMD --> MB_RC_UNLOCK_DOOR
+MB_REMOTE_CMD --> MB_RC_UNLOCK_WIN
+MB_REMOTE_CMD --> MB_RC_UNLOCK_ALL
+MB_REMOTE_CMD --> MB_RC_UNKNOWN
+
+MB_RC_LOCK_DOOR --> MB_RC_LOCK_DOOR_C
+MB_RC_LOCK_WIN --> MB_RC_LOCK_WIN_C
+MB_RC_LOCK_ALL --> MB_RC_LOCK_ALL_C1
+MB_RC_LOCK_ALL_C1 --> MB_RC_LOCK_ALL_C2
+MB_RC_UNLOCK_DOOR --> MB_RC_UNLOCK_MODE
+MB_RC_UNLOCK_WIN --> MB_RC_UNLOCK_MODE
+MB_RC_UNLOCK_ALL --> MB_RC_UNLOCK_MODE
+MB_RC_UNLOCK_MODE --> MB_RC_UNLOCK_FAULT
+
+MB_RC_STATUS --> MB_ACK_OK
+MB_RC_BUZZ_WARN --> MB_ACK_OK
+MB_RC_ALARM --> MB_ACK_OK
+MB_RC_SILENCE --> MB_ACK_OK
+MB_RC_DISARM --> MB_RULE_IN
+MB_RC_ARM_NIGHT --> MB_RULE_IN
+MB_RC_ARM_AWAY --> MB_RULE_IN
+MB_RC_LOCK_DOOR_C --> MB_ACK_OK
+MB_RC_LOCK_WIN_C --> MB_ACK_OK
+MB_RC_LOCK_ALL_C2 --> MB_ACK_OK
+MB_RC_UNLOCK_FAULT --> MB_ACK_OK
+MB_RC_UNKNOWN --> MB_ACK_FAIL
+
+MB_ACK_OK --> MB_REMOTE_STATUS
+MB_ACK_FAIL --> MB_REMOTE_STATUS
+MB_REMOTE_STATUS --> MB_PUB_ACK
+MB_REMOTE_STATUS --> MB_PUB_STATUS
+
+MB_KEYPAD_POLL -->|yes| MB_KP_EVENT
+MB_KEYPAD_POLL -->|no| MB_TIMEOUT_POLL
+MB_KP_EVENT --> MB_KP_SILENCE
+MB_KP_EVENT --> MB_KP_BAD
+MB_KP_EVENT --> MB_KP_UNLOCK
+MB_KP_EVENT --> MB_KP_MODE
+MB_KP_EVENT --> MB_KP_BLOCK
+
+MB_KP_BAD --> MB_KP_LOCKOUT
+MB_KP_LOCKOUT --> MB_KP_BAD_INC
+MB_KP_BAD_INC --> MB_KP_BAD_LIMIT
+MB_KP_BAD_LIMIT --> MB_KP_LOCKOUT_SET
+MB_KP_UNLOCK --> MB_KP_LOCKOUT
+MB_KP_UNLOCK --> MB_KP_UNLOCK_FAULT
+MB_KP_UNLOCK_FAULT --> MB_KP_UNLOCK_DISARM
+MB_KP_UNLOCK_DISARM --> MB_KP_UNLOCK_ACT
+MB_KP_MODE --> MB_RULE_IN
+
+MB_TIMEOUT_POLL -->|yes| MB_RULE_IN
+MB_TIMEOUT_POLL -->|no| MB_SENSOR_POLL
+
+MB_SENSOR_POLL -->|yes| MB_SER_EVENT
+MB_SENSOR_POLL -->|no| MB_MAN_EVENT
+MB_SER_EVENT --> MB_SER_MODE
+MB_SER_EVENT --> MB_SER_MAN
+MB_SER_EVENT --> MB_SER_SEN
+MB_SER_MODE --> MB_SER_BLOCK
+MB_SER_MAN --> MB_SER_BLOCK
+MB_SER_SEN --> MB_SER_BLOCK
+
+MB_MAN_EVENT --> MB_MAN_DOOR_TOG
+MB_MAN_EVENT --> MB_MAN_WIN_TOG
+MB_MAN_EVENT --> MB_MAN_LOCK_REQ
+MB_MAN_EVENT --> MB_MAN_UNLOCK_REQ
+MB_MAN_DOOR_TOG --> MB_MAN_UNLOCK_MODE
+MB_MAN_DOOR_TOG --> MB_MAN_DOOR_CLOSED
+MB_MAN_WIN_TOG --> MB_MAN_UNLOCK_MODE
+MB_MAN_WIN_TOG --> MB_MAN_WIN_CLOSED
+MB_MAN_LOCK_REQ --> MB_MAN_DOOR_CLOSED
+MB_MAN_LOCK_REQ --> MB_MAN_WIN_CLOSED
+MB_MAN_UNLOCK_REQ --> MB_MAN_UNLOCK_MODE
+MB_MAN_UNLOCK_MODE --> MB_MAN_UNLOCK_FAULT
+MB_MAN_UNLOCK_FAULT --> MB_MAN_ACT
+MB_MAN_DOOR_CLOSED --> MB_MAN_ACT
+MB_MAN_WIN_CLOSED --> MB_MAN_ACT
+MB_MAN_ACT --> MB_MAN_NOTIFY
+MB_MAN_NOTIFY --> MB_PUB_EVENT
+MB_MAN_NOTIFY --> MB_PUB_STATUS
+
+MB_RULE_IN --> MB_RULE_DECAY
+MB_RULE_DECAY --> MB_RULE_DISARM
+MB_RULE_DECAY --> MB_RULE_ARM_NIGHT
+MB_RULE_DECAY --> MB_RULE_ARM_AWAY
+MB_RULE_DECAY --> MB_RULE_DOOR_OPEN
+MB_RULE_DECAY --> MB_RULE_ENTRY_TO
+MB_RULE_DECAY --> MB_RULE_WIN_OPEN
+MB_RULE_DECAY --> MB_RULE_MOTION
+MB_RULE_DECAY --> MB_RULE_VIB
+MB_RULE_DECAY --> MB_RULE_TAMP
+MB_RULE_DOOR_OPEN --> MB_RULE_SCORE
+MB_RULE_ENTRY_TO --> MB_RULE_SCORE
+MB_RULE_WIN_OPEN --> MB_RULE_SCORE
+MB_RULE_MOTION --> MB_RULE_SCORE
+MB_RULE_VIB --> MB_RULE_SCORE
+MB_RULE_TAMP --> MB_RULE_SCORE
+MB_RULE_SCORE --> MB_RULE_LEVEL
+MB_RULE_LEVEL --> MB_RULE_CMD
+MB_RULE_CMD --> MB_RULE_STATE
+MB_RULE_STATE --> MB_CMD_DISPATCH
+
+MB_CMD_DISPATCH --> MB_MODE_POLICY
+MB_CMD_DISPATCH --> MB_CMD_POLICY
+MB_MODE_POLICY --> MB_OUT_SERVO
+MB_MODE_POLICY --> MB_OUT_BUZZ
+MB_CMD_POLICY --> MB_OUT_SERVO
+MB_CMD_POLICY --> MB_OUT_BUZZ
+MB_CMD_POLICY --> MB_OUT_NOTIFY
+MB_CMD_POLICY --> MB_OUT_LOG
+MB_OUT_SERVO --> MB_PUB_EVENT
+MB_OUT_BUZZ --> MB_PUB_EVENT
+MB_OUT_NOTIFY --> MB_PUB_EVENT
+MB_PUB_EVENT --> MB_TO_OUT_EVENT
+MB_PUB_STATUS --> MB_TO_OUT_STATUS
+MB_PUB_ACK --> MB_TO_OUT_ACK
+MB_PUB_MET --> MB_TO_OUT_MET
+MB_OUT_SERVO --> MB_TO_OUT_DOOR
+MB_OUT_SERVO --> MB_TO_OUT_WIN
+MB_OUT_BUZZ --> MB_TO_OUT_BUZZ
+
+AB_FROM_EXT_STATUS --> AB_RX_TOPIC
+AB_RX_TOPIC --> AB_RX_MAIN
+AB_RX_MAIN --> AB_RX_MAIN_OK
+AB_RX_MAIN_OK -->|yes| AB_CTX_WRITE
+AB_RX_TOPIC --> AB_CMD_PARSE
+AB_CMD_PARSE --> AB_CMD_AUTH_OK
+AB_CMD_AUTH_OK -->|ok| AB_CMD_TOPIC
+AB_CMD_AUTH_OK -->|fail| AB_CMD_ACK
+AB_CMD_AUTH_OK -->|fail| AB_CMD_STAT
+
+AB_CMD_TOPIC --> AB_CMD_LIGHT_AUTO
+AB_CMD_TOPIC --> AB_CMD_LIGHT_ON
+AB_CMD_TOPIC --> AB_CMD_LIGHT_OFF
+AB_CMD_TOPIC --> AB_CMD_FAN_AUTO
+AB_CMD_TOPIC --> AB_CMD_FAN_ON
+AB_CMD_TOPIC --> AB_CMD_FAN_OFF
+AB_CMD_TOPIC --> AB_CMD_STATUS
+AB_CMD_TOPIC --> AB_CMD_UNKNOWN
+
+AB_CMD_LIGHT_AUTO --> AB_CMD_STATE_BUSY
+AB_CMD_LIGHT_ON --> AB_CMD_STATE_BUSY
+AB_CMD_LIGHT_OFF --> AB_CMD_STATE_BUSY
+AB_CMD_FAN_AUTO --> AB_CMD_STATE_BUSY
+AB_CMD_FAN_ON --> AB_CMD_STATE_BUSY
+AB_CMD_FAN_OFF --> AB_CMD_STATE_BUSY
+AB_CMD_STATUS --> AB_CMD_ACK
+AB_CMD_STATUS --> AB_CMD_STAT
+AB_CMD_UNKNOWN --> AB_CMD_ACK
+AB_CMD_UNKNOWN --> AB_CMD_STAT
+AB_CMD_STATE_BUSY --> AB_CMD_WRITE
+AB_CMD_WRITE --> AB_CMD_APPLY
+AB_CMD_APPLY --> AB_CMD_ACK
+AB_CMD_APPLY --> AB_CMD_STAT
+
+AB_NET_LOOP --> AB_WIFI
+AB_WIFI --> AB_MQTT
+AB_MQTT --> AB_MQTT_OK
+AB_MQTT_OK -->|yes| AB_MQTT_LOOP
+AB_MQTT_LOOP --> AB_RX_TOPIC
+AB_NET_LOOP --> AB_STATUS_PERIOD
+AB_STATUS_PERIOD --> AB_OUT_STATUS
+
+AB_CTRL_LOOP --> AB_PRES_TICK
+AB_CTRL_LOOP --> AB_LUX_DUE
+AB_LUX_DUE -->|yes| AB_LUX_READ
+AB_LUX_READ --> AB_LUX_STATE
+AB_LUX_STATE --> AB_GATE_MODE
+AB_GATE_MODE --> AB_GATE_HOME
+AB_GATE_HOME --> AB_LIGHT_NEXT
+AB_LIGHT_NEXT --> AB_LIGHT_CHG
+AB_LIGHT_CHG -->|yes| AB_LIGHT_SET
+AB_LIGHT_SET --> AB_LIGHT_APPLY
+
+AB_CTRL_LOOP --> AB_TEMP_DUE
+AB_TEMP_DUE -->|yes| AB_TEMP_READ
+AB_TEMP_READ --> AB_FAN_STATE
+AB_FAN_STATE --> AB_FAN_NEXT
+AB_FAN_NEXT --> AB_FAN_CHG
+AB_FAN_CHG -->|yes| AB_FAN_SET
+AB_FAN_SET --> AB_FAN_APPLY
+AB_CTRL_LOOP --> AB_LOG
+
+AB_LIGHT_APPLY --> AB_OUT_LED
+AB_FAN_APPLY --> AB_OUT_FAN
+AB_CMD_ACK --> AB_OUT_ACK
+AB_CMD_STAT --> AB_OUT_STATUS
+AB_OUT_STATUS --> AB_TO_OUT_STATUS
+AB_OUT_ACK --> AB_TO_OUT_ACK
+AB_OUT_LED --> AB_TO_OUT_LIGHT
+AB_OUT_FAN --> AB_TO_OUT_FAN
+
+OUT_FROM_BRIDGE_LINE --> OUT_LINE
+OUT_FROM_MAIN_STATUS --> OUT_MAIN_STATUS
+OUT_FROM_MAIN_EVENT --> OUT_MAIN_EVENT
+OUT_FROM_MAIN_ACK --> OUT_MAIN_ACK
+OUT_FROM_MAIN_MET --> OUT_MAIN_MET
+OUT_FROM_MAIN_DOOR --> OUT_DOOR_LOCK
+OUT_FROM_MAIN_WIN --> OUT_WIN_LOCK
+OUT_FROM_MAIN_BUZZ --> OUT_BUZZ
+OUT_FROM_AUTO_STATUS --> OUT_AUTO_STATUS
+OUT_FROM_AUTO_ACK --> OUT_AUTO_ACK
+OUT_FROM_AUTO_LIGHT --> OUT_LIGHT
+OUT_FROM_AUTO_FAN --> OUT_FAN
+
+OUT_MAIN_STATUS --> OUT_TO_EXT_MAIN_STATUS
+OUT_MAIN_STATUS --> OUT_TO_BRIDGE_MQTT
+OUT_MAIN_EVENT --> OUT_TO_BRIDGE_MQTT
+OUT_MAIN_ACK --> OUT_TO_BRIDGE_MQTT
+OUT_MAIN_MET --> OUT_TO_BRIDGE_MQTT
+OUT_AUTO_STATUS --> OUT_TO_BRIDGE_MQTT
+OUT_AUTO_ACK --> OUT_TO_BRIDGE_MQTT
+
+B_FROM_OUT_MQTT --> B_MQTT_RX
+
+B_MQTT_RX --> B_RX_TOPIC
+B_RX_TOPIC --> B_RX_STATUS
+B_RX_TOPIC --> B_RX_EVENT
+B_RX_TOPIC --> B_RX_ACK
+B_RX_TOPIC --> B_RX_MET
+B_RX_STATUS --> B_PUSH
+B_RX_EVENT --> B_PUSH
+B_RX_ACK --> B_PUSH
+B_RX_MET --> B_PUSH
+B_PUSH --> B_TO_OUT_LINE

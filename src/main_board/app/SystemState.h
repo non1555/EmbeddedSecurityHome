@@ -41,4 +41,8 @@ struct SystemState {
   uint32_t last_door_event_ms = 0;
 
   bool keep_window_locked_when_disarmed = false;
+  bool door_locked = false;
+  bool window_locked = false;
+  bool door_open = false;
+  bool window_open = false;
 };

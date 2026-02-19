@@ -21,11 +21,11 @@ bool pinConfigured(uint8_t pin) {
 
 EventCollector::EventCollector()
 : us1_(HwCfg::PIN_US_TRIG, HwCfg::PIN_US_ECHO),
-  chokep1_(&us1_, 1, 35, 55, 200, 1500),
+  chokep1_(&us1_, 1, 5, 10, 200, 1500),
   us2_(HwCfg::PIN_US_TRIG_2, HwCfg::PIN_US_ECHO_2),
-  chokep2_(&us2_, 2, 35, 55, 200, 1500),
+  chokep2_(&us2_, 2, 5, 10, 200, 1500),
   us3_(HwCfg::PIN_US_TRIG_3, HwCfg::PIN_US_ECHO_3),
-  chokep3_(&us3_, 3, 35, 55, 200, 1500),
+  chokep3_(&us3_, 3, 5, 10, 200, 1500),
   reedDoor_(HwCfg::PIN_REED_1, 1, EventType::door_open, true, 80),
   reedWindow_(HwCfg::PIN_REED_2, 2, EventType::window_open, true, 80),
   pir1_(HwCfg::PIN_PIR_1, 1, 1500),
@@ -92,6 +92,10 @@ bool EventCollector::pollKeypad(uint32_t nowMs, Event& out) {
     out = {EventType::door_hold_warn_silence, nowMs, 0};
     return true;
   }
+  if (k == 'B') {
+    out = {EventType::keypad_help_request, nowMs, 0};
+    return true;
+  }
   if (k) {
     keypadIn_.feedKey(k, nowMs);
     oled_.showCode(keypadIn_.buf(), keypadIn_.len());
@@ -131,6 +135,7 @@ bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const 
   if (c == '4') { out = {EventType::motion, nowMs, kSerialSyntheticSrc}; return true; }
   if (c == '5') { out = {EventType::chokepoint, nowMs, kSerialSyntheticSrc}; return true; }
   if (c == 'S' || c == 's') { out = {EventType::door_hold_warn_silence, nowMs, kSerialSyntheticSrc}; return true; }
+  if (c == 'H' || c == 'h') { out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrc}; return true; }
   if (c == 'D' || c == 'd') { out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrc}; return true; }
   if (c == 'W' || c == 'w') { out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrc}; return true; }
   if (c == 'L' || c == 'l') { out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrc}; return true; }

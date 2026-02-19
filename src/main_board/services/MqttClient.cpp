@@ -159,7 +159,15 @@ bool MqttClient::publishEvent(const Event& e, const SystemState& st, const Comma
   payload += someoneHomeFromMode(st.mode) ? "true" : "false";
   payload += ",\"level\":\"";
   payload += levelText(st.level);
-  payload += "\",\"ts_ms\":";
+  payload += "\",\"door_locked\":";
+  payload += st.door_locked ? "true" : "false";
+  payload += ",\"window_locked\":";
+  payload += st.window_locked ? "true" : "false";
+  payload += ",\"door_open\":";
+  payload += st.door_open ? "true" : "false";
+  payload += ",\"window_open\":";
+  payload += st.window_open ? "true" : "false";
+  payload += ",\"ts_ms\":";
   payload += String(e.ts_ms);
   payload += "}";
 
@@ -177,7 +185,15 @@ bool MqttClient::publishStatus(const SystemState& st, const char* reason) {
   payload += someoneHomeFromMode(st.mode) ? "true" : "false";
   payload += ",\"level\":\"";
   payload += levelText(st.level);
-  payload += "\",\"uptime_ms\":";
+  payload += "\",\"door_locked\":";
+  payload += st.door_locked ? "true" : "false";
+  payload += ",\"window_locked\":";
+  payload += st.window_locked ? "true" : "false";
+  payload += ",\"door_open\":";
+  payload += st.door_open ? "true" : "false";
+  payload += ",\"window_open\":";
+  payload += st.window_open ? "true" : "false";
+  payload += ",\"uptime_ms\":";
   payload += String(millis());
   payload += "}";
 

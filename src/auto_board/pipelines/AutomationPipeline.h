@@ -11,6 +11,12 @@ bool nextLight(
   bool allowByMainPresence
 );
 
-bool nextFan(bool autoEnabled, bool currentFanOn, float tempC);
+bool nextFan(
+  bool autoEnabled,
+  bool currentFanOn,
+  float tempC,
+  bool allowByMainMode,
+  bool allowByMainPresence
+);
 
 } // namespace AutomationPipeline

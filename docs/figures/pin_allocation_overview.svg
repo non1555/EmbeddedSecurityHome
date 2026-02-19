@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+  <defs>
+    <style>
+      .title { font: 700 52px 'Segoe UI', Arial, sans-serif; fill: #151515; }
+      .panelTitle { font: 700 32px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .head { font: 700 24px 'Segoe UI', Arial, sans-serif; fill: #1a1a1a; }
+      .txt { font: 500 22px 'Segoe UI', Arial, sans-serif; fill: #1a1a1a; }
+      .gpio { font: 700 22px 'Segoe UI', Arial, sans-serif; fill: #1a1a1a; }
+      .small { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #2a2a2a; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="1100" fill="#f0f0f0"/>
+
+  <text x="36" y="72" class="title">PIN ALLOCATION OVERVIEW</text>
+  <text x="38" y="106" class="small">Source: src/main_board/app/HardwareConfig.h, src/auto_board/hardware/AutoHardwareConfig.h</text>
+
+  <rect x="48" y="142" width="730" height="908" rx="18" fill="#d9f5ef" stroke="#222" stroke-width="3"/>
+  <rect x="48" y="142" width="730" height="70" rx="18" fill="#2cbfa8"/>
+  <text x="304" y="188" class="panelTitle">MAIN BOARD (ESP32)</text>
+
+  <rect x="84" y="236" width="500" height="52" fill="#ffe39f" stroke="#444" stroke-width="1"/>
+  <rect x="584" y="236" width="160" height="52" fill="#ffd3a7" stroke="#444" stroke-width="1"/>
+  <text x="106" y="270" class="head">Function</text>
+  <text x="640" y="270" class="head">GPIO</text>
+
+  <rect x="84" y="288" width="500" height="50" fill="#fff5cf" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="288" width="160" height="50" fill="#fff5cf" stroke="#555" stroke-width="1"/>
+  <text x="100" y="321" class="txt">Buzzer</text><text x="648" y="321" class="gpio">25</text>
+
+  <rect x="84" y="338" width="500" height="50" fill="#e7f3ff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="338" width="160" height="50" fill="#e7f3ff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="371" class="txt">Servo Door Lock</text><text x="648" y="371" class="gpio">26</text>
+
+  <rect x="84" y="388" width="500" height="50" fill="#e7f3ff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="388" width="160" height="50" fill="#e7f3ff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="421" class="txt">Servo Window Lock</text><text x="648" y="421" class="gpio">27</text>
+
+  <rect x="84" y="438" width="500" height="50" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="438" width="160" height="50" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <text x="100" y="471" class="txt">Reed Door</text><text x="648" y="471" class="gpio">32</text>
+
+  <rect x="84" y="488" width="500" height="50" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="488" width="160" height="50" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <text x="100" y="521" class="txt">Reed Window</text><text x="648" y="521" class="gpio">19</text>
+
+  <rect x="84" y="538" width="500" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="538" width="160" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="571" class="txt">PIR 1</text><text x="648" y="571" class="gpio">35</text>
+
+  <rect x="84" y="588" width="500" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="588" width="160" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="621" class="txt">PIR 2</text><text x="648" y="621" class="gpio">36</text>
+
+  <rect x="84" y="638" width="500" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="638" width="160" height="50" fill="#f4eaff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="671" class="txt">PIR 3 (Outdoor)</text><text x="648" y="671" class="gpio">39</text>
+
+  <rect x="84" y="688" width="500" height="50" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="688" width="160" height="50" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <text x="100" y="721" class="txt">Vibration Combined</text><text x="648" y="721" class="gpio">34</text>
+
+  <rect x="84" y="738" width="500" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="738" width="160" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="771" class="txt">Ultrasonic #1 TRIG / ECHO</text><text x="620" y="771" class="gpio">13 / 14</text>
+
+  <rect x="84" y="788" width="500" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="788" width="160" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="821" class="txt">Ultrasonic #2 TRIG / ECHO</text><text x="620" y="821" class="gpio">16 / 17</text>
+
+  <rect x="84" y="838" width="500" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="838" width="160" height="50" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <text x="100" y="871" class="txt">Ultrasonic #3 TRIG / ECHO</text><text x="632" y="871" class="gpio">4 / 5</text>
+
+  <rect x="84" y="888" width="500" height="50" fill="#fff1e1" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="888" width="160" height="50" fill="#fff1e1" stroke="#555" stroke-width="1"/>
+  <text x="100" y="921" class="txt">Manual Door / Window Button</text><text x="620" y="921" class="gpio">33 / 18</text>
+
+  <rect x="84" y="938" width="500" height="50" fill="#f1fff1" stroke="#555" stroke-width="1"/>
+  <rect x="584" y="938" width="160" height="50" fill="#f1fff1" stroke="#555" stroke-width="1"/>
+  <text x="100" y="971" class="txt">I2C SDA / SCL</text><text x="620" y="971" class="gpio">21 / 22</text>
+
+  <rect x="824" y="142" width="728" height="908" rx="18" fill="#dff0ff" stroke="#222" stroke-width="3"/>
+  <rect x="824" y="142" width="728" height="70" rx="18" fill="#3b86d8"/>
+  <text x="1042" y="188" class="panelTitle">AUTOMATION BOARD (ESP32)</text>
+
+  <rect x="860" y="236" width="500" height="52" fill="#ffe39f" stroke="#444" stroke-width="1"/>
+  <rect x="1360" y="236" width="156" height="52" fill="#ffd3a7" stroke="#444" stroke-width="1"/>
+  <text x="882" y="270" class="head">Function</text>
+  <text x="1410" y="270" class="head">GPIO</text>
+
+  <rect x="860" y="288" width="500" height="58" fill="#fff5cf" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="288" width="156" height="58" fill="#fff5cf" stroke="#555" stroke-width="1"/>
+  <text x="878" y="324" class="txt">Light LED Output</text><text x="1422" y="324" class="gpio">27</text>
+
+  <rect x="860" y="346" width="500" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="346" width="156" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <text x="878" y="382" class="txt">L293D IN1 (Fan)</text><text x="1422" y="382" class="gpio">25</text>
+
+  <rect x="860" y="404" width="500" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="404" width="156" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <text x="878" y="440" class="txt">L293D IN2 (Fan)</text><text x="1422" y="440" class="gpio">26</text>
+
+  <rect x="860" y="462" width="500" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="462" width="156" height="58" fill="#ffe7ee" stroke="#555" stroke-width="1"/>
+  <text x="878" y="498" class="txt">L293D EN (Optional)</text><text x="1422" y="498" class="gpio">33</text>
+
+  <rect x="860" y="520" width="500" height="58" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="520" width="156" height="58" fill="#eaffea" stroke="#555" stroke-width="1"/>
+  <text x="878" y="556" class="txt">DHT Data</text><text x="1422" y="556" class="gpio">32</text>
+
+  <rect x="860" y="578" width="500" height="58" fill="#f1fff1" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="578" width="156" height="58" fill="#f1fff1" stroke="#555" stroke-width="1"/>
+  <text x="878" y="614" class="txt">I2C SDA / SCL</text><text x="1400" y="614" class="gpio">21 / 22</text>
+
+  <rect x="860" y="636" width="500" height="58" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="636" width="156" height="58" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <text x="878" y="672" class="txt">BH1750 I2C Address (Primary)</text><text x="1410" y="672" class="gpio">0x23</text>
+
+  <rect x="860" y="694" width="500" height="58" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <rect x="1360" y="694" width="156" height="58" fill="#e3fbff" stroke="#555" stroke-width="1"/>
+  <text x="878" y="730" class="txt">BH1750 I2C Address (Secondary)</text><text x="1410" y="730" class="gpio">0x5C</text>
+
+  <rect x="860" y="772" width="656" height="244" rx="12" fill="#ffffff" stroke="#2e5d8f" stroke-width="2"/>
+  <text x="886" y="814" class="head">Automation Thresholds (Current)</text>
+  <text x="890" y="856" class="txt">Light: ON if lux &lt; 120, OFF if lux &gt; 180</text>
+  <text x="890" y="896" class="txt">Fan:   ON if temp &gt;= 20 C, OFF if temp &lt;= 15 C</text>
+  <text x="890" y="936" class="txt">Sampling: Light 400 ms, Temp 2000 ms</text>
+  <text x="890" y="976" class="small">Defined in src/auto_board/hardware/AutoHardwareConfig.h</text>
+</svg>

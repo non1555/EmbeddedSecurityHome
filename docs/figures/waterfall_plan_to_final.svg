@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="930" viewBox="0 0 1300 930">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c1c1c"/>
+    </marker>
+    <style>
+      .title { font: 700 50px 'Segoe UI', Arial, sans-serif; fill: #111; }
+      .boxTxt { font: 600 36px 'Segoe UI', Arial, sans-serif; fill: #232323; }
+      .subTxt { font: 500 24px 'Segoe UI', Arial, sans-serif; fill: #333; }
+      .arrow { stroke: #1c1c1c; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="930" fill="#efefef"/>
+  <text x="34" y="74" class="title">PROJECT WATERFALL: PLAN TO FINAL WORK</text>
+
+  <rect x="42" y="118" width="220" height="96" rx="16" fill="#fff4cf" stroke="#c3a550" stroke-width="6"/>
+  <text x="85" y="176" class="boxTxt">Planning</text>
+
+  <rect x="150" y="236" width="240" height="110" rx="16" fill="#ffe4e4" stroke="#c06a6a" stroke-width="6"/>
+  <text x="198" y="282" class="boxTxt">Requirements</text>
+  <text x="204" y="314" class="subTxt">and Scope</text>
+
+  <rect x="300" y="378" width="235" height="104" rx="16" fill="#efe3ff" stroke="#9070af" stroke-width="6"/>
+  <text x="345" y="442" class="boxTxt">Architecture</text>
+
+  <rect x="442" y="520" width="280" height="120" rx="16" fill="#dcead7" stroke="#7cae67" stroke-width="6"/>
+  <text x="488" y="572" class="boxTxt">Implementation</text>
+  <text x="536" y="606" class="subTxt">Main + Auto + Bridge</text>
+
+  <rect x="616" y="670" width="220" height="104" rx="16" fill="#dce9fb" stroke="#6f92c4" stroke-width="6"/>
+  <text x="658" y="734" class="boxTxt">Integration</text>
+
+  <rect x="808" y="752" width="230" height="108" rx="16" fill="#f2f2f2" stroke="#7f7f7f" stroke-width="6"/>
+  <text x="862" y="816" class="boxTxt">Testing</text>
+
+  <rect x="1020" y="784" width="220" height="100" rx="16" fill="#fff0d8" stroke="#d8a03e" stroke-width="6"/>
+  <text x="1082" y="846" class="boxTxt">Tuning</text>
+
+  <rect x="1066" y="640" width="220" height="112" rx="16" fill="#ffe0de" stroke="#dc7a72" stroke-width="6"/>
+  <text x="1104" y="688" class="boxTxt">Final Work</text>
+  <text x="1092" y="722" class="subTxt">Docs + Demo + Handoff</text>
+
+  <path class="arrow" d="M262 166 L320 166 L320 236"/>
+  <path class="arrow" d="M390 292 L450 292 L450 378"/>
+  <path class="arrow" d="M535 430 L584 430 L584 520"/>
+  <path class="arrow" d="M722 580 L770 580 L770 670"/>
+  <path class="arrow" d="M836 724 L880 724 L880 752"/>
+  <path class="arrow" d="M1038 806 L1078 806 L1078 784"/>
+  <path class="arrow" d="M1240 834 L1268 834 L1268 696 L1286 696"/>
+
+  <text x="70" y="894" class="subTxt">Flow style follows the example submission: simple, high-contrast, staircase progression.</text>
+</svg>

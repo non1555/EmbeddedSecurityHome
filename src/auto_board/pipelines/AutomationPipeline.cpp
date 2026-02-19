@@ -23,8 +23,20 @@ bool nextLight(
   );
 }
 
-bool nextFan(bool autoEnabled, bool currentFanOn, float tempC) {
-  return TempSystem::nextFanState(autoEnabled, currentFanOn, tempC);
+bool nextFan(
+  bool autoEnabled,
+  bool currentFanOn,
+  float tempC,
+  bool allowByMainMode,
+  bool allowByMainPresence
+) {
+  return TempSystem::nextFanState(
+    autoEnabled,
+    currentFanOn,
+    tempC,
+    allowByMainMode,
+    allowByMainPresence
+  );
 }
 
 } // namespace AutomationPipeline

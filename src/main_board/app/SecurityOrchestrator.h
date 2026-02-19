@@ -46,12 +46,16 @@ private:
   void processRemoteCommand(const String& payload);
   bool processManualActuatorEvent(const Event& e);
   bool processDoorHoldWarnSilenceEvent(const Event& e);
+  bool processKeypadHelpRequestEvent(const Event& e);
   bool processModeEvent(const Event& e, const char* origin);
   bool acceptRemoteNonce(const String& nonce, uint32_t nowMs, bool persistMonotonicFloor);
   void updateSensorHealth(uint32_t nowMs);
   void startDoorUnlockSession(uint32_t nowMs);
   void clearDoorUnlockSession(bool stopBuzzer);
   void updateDoorUnlockSession(uint32_t nowMs);
+  void syncLiveSnapshot();
+  void publishStateStatus(const char* reason);
+  void publishStateEvent(const Event& e, const Command& cmd);
 
   DoorUnlockSession doorSession_;
 

@@ -41,7 +41,7 @@ Important fields:
 - metrics throttle: `METRICS_PUSH_PERIOD_S` (default 30s)
 - command auth: `FW_CMD_TOKEN` (or `BRIDGE_CMD_TOKEN` for bridge-only override)
 - optional nonce state file: `BRIDGE_NONCE_STATE_FILE` (default `tools/line_bridge/.nonce_state`)
-- when token is empty, bridge blocks lock/unlock commands (fail-closed)
+- when token is empty, bridge blocks lock/unlock commands (fail-closed) but still allows read-only `status`
 
 Notes:
 - If you do not set any `LINE_TARGET_*`, the bridge will automatically learn a push target from the first LINE webhook it receives (send any message in the chat you want to receive pushes to).
@@ -163,6 +163,7 @@ Health check:
 - `unlock window`
 - `lock all`
 - `unlock all`
+- `status`
 - `help` / `menu` (UI only)
 
 These lock/unlock commands are published to MQTT topic `esh/main/cmd`.

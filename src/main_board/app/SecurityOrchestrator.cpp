@@ -132,13 +132,30 @@ void SecurityOrchestrator::printEventDecision(const Event& e, const Decision& d)
   Serial.print(" | ENTRY "); Serial.println(d.next.entry_pending ? "pending" : "none");
 }
 
+void SecurityOrchestrator::syncLiveSnapshot() {
+  state_.door_locked = servo1_.isLocked();
+  state_.window_locked = servo2_.isLocked();
+  state_.door_open = collector_.isDoorOpen();
+  state_.window_open = collector_.isWindowOpen();
+}
+
+void SecurityOrchestrator::publishStateStatus(const char* reason) {
+  syncLiveSnapshot();
+  mqttBus_.publishStatus(state_, reason);
+}
+
+void SecurityOrchestrator::publishStateEvent(const Event& e, const Command& cmd) {
+  syncLiveSnapshot();
+  mqttBus_.publishEvent(e, state_, cmd);
+}
+
 void SecurityOrchestrator::applyDecision(const Event& e) {
   const Decision d = engine_.handle(state_, cfg_, e);
   state_ = d.next;
   applyCommand(d.cmd, state_, acts_, &notifySvc_, &logger_);
   if (isArmedMode(state_.mode)) clearDoorUnlockSession(true);
-  mqttBus_.publishEvent(e, state_, d.cmd);
-  mqttBus_.publishStatus(state_, toString(e.type));
+  publishStateEvent(e, d.cmd);
+  publishStateStatus(toString(e.type));
   printEventDecision(e, d);
 }
 
@@ -187,7 +204,7 @@ void SecurityOrchestrator::updateSensorHealth(uint32_t nowMs) {
       sensorFaultActive_ = false;
       sensorFaultDetail_ = "";
       notifySvc_.send("sensor health recovered");
-      mqttBus_.publishStatus(state_, "sensor_health_recovered");
+      publishStateStatus("sensor_health_recovered");
     }
     return;
   }
@@ -218,7 +235,7 @@ void SecurityOrchestrator::updateSensorHealth(uint32_t nowMs) {
       sensorFaultActive_ = false;
       sensorFaultDetail_ = "";
       notifySvc_.send("sensor health recovered");
-      mqttBus_.publishStatus(state_, "sensor_health_recovered");
+      publishStateStatus("sensor_health_recovered");
     }
     return;
   }
@@ -230,7 +247,7 @@ void SecurityOrchestrator::updateSensorHealth(uint32_t nowMs) {
   if (shouldNotify) {
     lastSensorFaultNotifyMs_ = nowMs;
     notifySvc_.send(String("sensor health degraded: ") + sensorFaultDetail_);
-    mqttBus_.publishStatus(state_, "sensor_health_fault");
+    publishStateStatus("sensor_health_fault");
     if (isArmedMode(state_.mode)) {
       buzzer_.warn();
     }
@@ -272,11 +289,11 @@ void SecurityOrchestrator::begin() {
   }
   servo1WasLocked_ = servo1_.isLocked();
   updateSensorHealth(millis());
-  mqttBus_.publishStatus(state_, "boot");
+  publishStateStatus("boot");
   nextStatusHeartbeatMs_ = 0;
 
   Serial.println("READY");
-  Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN D=DOOR_TOGGLE W=WINDOW_TOGGLE");
+  Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN H=HELP_REQUEST D=DOOR_TOGGLE W=WINDOW_TOGGLE");
   Serial.println("Policy: keypad code disarms+unlocks.");
   Serial.printf("Manual toggle button pins (active LOW): DOOR=%u WINDOW=%u\n",
                 HwCfg::PIN_BTN_DOOR_TOGGLE,
@@ -312,7 +329,7 @@ void SecurityOrchestrator::processRemoteCommand(const String& payload) {
     );
   };
   auto publishRemoteStatus = [&](const char* reason) {
-    mqttBus_.publishStatus(state_, reason);
+    publishStateStatus(reason);
   };
 
   if (configuredToken.length() == 0 && !cfg_.allow_remote_without_token) {
@@ -538,10 +555,19 @@ bool SecurityOrchestrator::processDoorHoldWarnSilenceEvent(const Event& e) {
   return true;
 }
 
+bool SecurityOrchestrator::processKeypadHelpRequestEvent(const Event& e) {
+  if (e.type != EventType::keypad_help_request) return false;
+
+  notifySvc_.send("HELP requested from keypad");
+  publishStateEvent(e, {CommandType::none, e.ts_ms});
+  publishStateStatus("keypad_help_request");
+  return true;
+}
+
 bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
   auto emitManualTelemetry = [&](const char* reason) {
-    mqttBus_.publishEvent(e, state_, {CommandType::none, e.ts_ms});
-    mqttBus_.publishStatus(state_, reason);
+    publishStateEvent(e, {CommandType::none, e.ts_ms});
+    publishStateStatus(reason);
   };
 
   if (e.type == EventType::manual_door_toggle) {
@@ -675,7 +701,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
     keypadLockoutUntilMs_ = 0;
     lastKeypadLockoutNotifyMs_ = nowMs;
     notifySvc_.send("keypad lockout expired");
-    mqttBus_.publishStatus(state_, "keypad_lockout_expired");
+    publishStateStatus("keypad_lockout_expired");
   }
 
   bool cdActive = false;
@@ -697,7 +723,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   mqttBus_.update(nowMs);
   if (nextStatusHeartbeatMs_ == 0 || reached(nowMs, nextStatusHeartbeatMs_)) {
     nextStatusHeartbeatMs_ = nowMs + STATUS_HEARTBEAT_MS;
-    mqttBus_.publishStatus(state_, "periodic");
+    publishStateStatus("periodic");
   }
 
   String remoteCmd;
@@ -723,6 +749,10 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
       updateDoorUnlockSession(nowMs);
       return;
     }
+    if (processKeypadHelpRequestEvent(e)) {
+      updateDoorUnlockSession(nowMs);
+      return;
+    }
     const bool keypadLockedOut =
       (keypadLockoutUntilMs_ != 0) && !reached(nowMs, keypadLockoutUntilMs_);
     const uint8_t badLimit = (cfg_.keypad_bad_attempt_limit == 0) ? 1 : cfg_.keypad_bad_attempt_limit;
@@ -736,7 +766,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
           notifySvc_.send("door code rejected: keypad lockout active");
         }
         mqttBus_.publishAck("door_code", false, "keypad lockout");
-        mqttBus_.publishStatus(state_, "keypad_unlock_reject_lockout");
+        publishStateStatus("keypad_unlock_reject_lockout");
         updateDoorUnlockSession(nowMs);
         return;
       }
@@ -755,7 +785,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
           keypadLockoutUntilMs_ = nowMs + cfg_.keypad_lockout_ms;
           lastKeypadLockoutNotifyMs_ = nowMs;
           notifySvc_.send("keypad lockout enabled");
-          mqttBus_.publishStatus(state_, "keypad_lockout_enabled");
+          publishStateStatus("keypad_lockout_enabled");
         }
         badDoorCodeAttempts_ = 0;
       }
@@ -769,7 +799,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
           notifySvc_.send("door code accepted: unlock blocked (keypad lockout)");
         }
         mqttBus_.publishAck("door_code", false, "keypad lockout");
-        mqttBus_.publishStatus(state_, "keypad_unlock_reject_lockout");
+        publishStateStatus("keypad_unlock_reject_lockout");
         updateDoorUnlockSession(nowMs);
         return;
       }
@@ -782,7 +812,7 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
         clearDoorUnlockSession(true);
         notifySvc_.send("door code accepted: unlock blocked (sensor fault)");
         mqttBus_.publishAck("door_code", false, "sensor fault");
-        mqttBus_.publishStatus(state_, "keypad_unlock_reject_sensor_fault");
+        publishStateStatus("keypad_unlock_reject_sensor_fault");
         updateDoorUnlockSession(nowMs);
         return;
       }
@@ -823,21 +853,22 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
 
   if (e.src == kSerialSyntheticSrc && isModeEvent(e.type) && !cfg_.allow_serial_mode_commands) {
     Serial.println("[SERIAL] mode blocked by policy");
-    mqttBus_.publishStatus(state_, "serial_mode_blocked");
+    publishStateStatus("serial_mode_blocked");
     return;
   }
   if (e.src == kSerialSyntheticSrc && isManualActuatorEvent(e.type) && !cfg_.allow_serial_manual_commands) {
     Serial.println("[SERIAL] manual actuator blocked by policy");
-    mqttBus_.publishStatus(state_, "serial_manual_blocked");
+    publishStateStatus("serial_manual_blocked");
     return;
   }
   if (e.src == kSerialSyntheticSrc && isSerialSyntheticSensorEvent(e.type) && !cfg_.allow_serial_sensor_commands) {
     Serial.println("[SERIAL] sensor event blocked by policy");
-    mqttBus_.publishStatus(state_, "serial_sensor_blocked");
+    publishStateStatus("serial_sensor_blocked");
     return;
   }
 
   if (processDoorHoldWarnSilenceEvent(e)) return;
+  if (processKeypadHelpRequestEvent(e)) return;
   if (processManualActuatorEvent(e)) return;
   if (isModeEvent(e.type)) {
     processModeEvent(e, "SERIAL");

@@ -7,8 +7,16 @@ namespace TempSystem {
 
 void init() {}
 
-bool nextFanState(bool autoEnabled, bool currentFanOn, float tempC) {
-  if (!autoEnabled || isnan(tempC)) return currentFanOn;
+bool nextFanState(
+  bool autoEnabled,
+  bool currentFanOn,
+  float tempC,
+  bool allowByMainMode,
+  bool allowByMainPresence
+) {
+  if (!autoEnabled) return currentFanOn;
+  if (!allowByMainMode || !allowByMainPresence) return false;
+  if (isnan(tempC)) return currentFanOn;
 
   if (!currentFanOn && tempC >= AutoHw::FAN_ON_C) return true;
   if (currentFanOn && tempC <= AutoHw::FAN_OFF_C) return false;

@@ -671,10 +671,11 @@ void taskControl(void*) {
         lastLux = lux;
         doAuto = lightAuto;
         curLight = lightOn;
-        const bool modeFresh = contextFresh(hasMainMode, lastMainModeMs, now);
-        const bool presenceFresh = contextFresh(hasMainPresence, lastMainPresenceMs, now);
-        allowByMainMode = !modeFresh || lastMainMode != MainMode::away;
-        allowByMainPresence = !presenceFresh || isSomeoneHome;
+        // Policy:
+        // - If main context exists, keep using the latest known values even when stale.
+        // - If no context has ever been received, use conservative fallback (keep auto-light off).
+        allowByMainMode = hasMainMode && lastMainMode != MainMode::away;
+        allowByMainPresence = hasMainPresence && isSomeoneHome;
         unlockState();
       } else {
         doAuto = false;
@@ -706,15 +707,28 @@ void taskControl(void*) {
 
       bool doFanAuto = false;
       bool curFan = false;
+      bool allowByMainMode = true;
+      bool allowByMainPresence = true;
       if (tryLockState(now, "taskControl dht")) {
         lastTempC = t;
         lastHum = h;
         doFanAuto = fanAuto;
         curFan = fanOn;
+        // Policy:
+        // - If main context exists, keep using the latest known values even when stale.
+        // - If no context has ever been received, use conservative fallback (keep auto-fan off).
+        allowByMainMode = hasMainMode && lastMainMode != MainMode::away;
+        allowByMainPresence = hasMainPresence && isSomeoneHome;
         unlockState();
       }
 
-      const bool newFan = AutomationPipeline::nextFan(doFanAuto, curFan, t);
+      const bool newFan = AutomationPipeline::nextFan(
+        doFanAuto,
+        curFan,
+        t,
+        allowByMainMode,
+        allowByMainPresence
+      );
       if (newFan != curFan) {
         if (tryLockState(now, "taskControl set fan")) {
           fanOn = newFan;

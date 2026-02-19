@@ -46,6 +46,7 @@ MQTT_TOPIC_STATUS = env("MQTT_TOPIC_STATUS", "esh/main/status")
 MQTT_TOPIC_ACK = env("MQTT_TOPIC_ACK", "esh/main/ack")
 MQTT_TOPIC_METRICS = env("MQTT_TOPIC_METRICS", "esh/main/metrics")
 METRICS_PUSH_PERIOD_S = max(5, int(env("METRICS_PUSH_PERIOD_S", "30")))
+INTRUDER_NOTIFY_COOLDOWN_S = max(0, int(env("INTRUDER_NOTIFY_COOLDOWN_S", "20")))
 BRIDGE_CMD_TOKEN = env("BRIDGE_CMD_TOKEN", env("FW_CMD_TOKEN", "")).strip()
 NONCE_STATE_FILE = Path(env("BRIDGE_NONCE_STATE_FILE", str(ROOT / ".nonce_state")))
 
@@ -67,6 +68,19 @@ LOCK_COMMANDS = {
     "unlock window",
     "lock all",
     "unlock all",
+}
+READ_ONLY_COMMANDS = {"status"}
+SUPPORTED_COMMANDS = LOCK_COMMANDS | READ_ONLY_COMMANDS
+
+INTRUDER_LEVELS = {"alert", "critical"}
+INTRUDER_EVENT_TRIGGERS = {
+    "door_open",
+    "window_open",
+    "door_tamper",
+    "vib_spike",
+    "motion",
+    "chokepoint",
+    "entry_timeout",
 }
 
 
@@ -119,6 +133,48 @@ def format_mqtt_to_text(topic: str, payload: str) -> str:
             f"detail={obj.get('detail', '-')}"
         )
     return f"[MQTT]\ntopic={topic}\npayload={payload}"
+
+
+def _norm_text(v: Any) -> str:
+    return str(v or "").strip().lower()
+
+
+def _is_intruder_signal(topic: str, obj: Dict[str, Any]) -> bool:
+    level = _norm_text(obj.get("level", ""))
+    if level not in INTRUDER_LEVELS:
+        return False
+
+    if topic == MQTT_TOPIC_EVENT:
+        return _norm_text(obj.get("event", "")) in INTRUDER_EVENT_TRIGGERS
+    if topic == MQTT_TOPIC_STATUS:
+        return _norm_text(obj.get("reason", "")) in INTRUDER_EVENT_TRIGGERS
+    return False
+
+
+def _is_keypad_help_signal(topic: str, obj: Dict[str, Any]) -> bool:
+    if topic != MQTT_TOPIC_EVENT:
+        return False
+    return _norm_text(obj.get("event", "")) == "keypad_help_request"
+
+
+def _format_keypad_help_alert(obj: Dict[str, Any]) -> str:
+    return (
+        "[HELP]\n"
+        "keypad assistance requested\n"
+        f"mode={_norm_text(obj.get('mode', '')) or '-'}\n"
+        f"level={_norm_text(obj.get('level', '')) or '-'}"
+    )
+
+
+def _format_intruder_alert(topic: str, obj: Dict[str, Any]) -> str:
+    trigger = _norm_text(obj.get("event", "")) if topic == MQTT_TOPIC_EVENT else _norm_text(obj.get("reason", ""))
+    return (
+        "[ALERT]\n"
+        "possible intruder detected\n"
+        f"trigger={trigger or '-'}\n"
+        f"mode={_norm_text(obj.get('mode', '')) or '-'}\n"
+        f"level={_norm_text(obj.get('level', '')) or '-'}"
+    )
 
 
 def line_api_headers() -> Dict[str, str]:
@@ -175,6 +231,7 @@ def menu_message() -> Dict[str, Any]:
         {"type": "action", "action": {"type": "postback", "label": "Unlock Window", "data": "cmd=unlock window"}},
         {"type": "action", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
         {"type": "action", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
+        {"type": "action", "action": {"type": "postback", "label": "Status", "data": "cmd=status"}},
     ]
     mode = state.dev_mode or state.last_status_mode or "unknown"
     return {"type": "text", "text": f"Menu (mode={mode})", "quickReply": {"items": items}}
@@ -228,9 +285,14 @@ def flex_home() -> Dict[str, Any]:
                     {"type": "separator"},
                     {
                         "type": "box",
-                        "layout": "horizontal",
+                        "layout": "vertical",
                         "spacing": "md",
                         "contents": [
+                            {
+                                "type": "button",
+                                "style": "secondary",
+                                "action": {"type": "postback", "label": "Notify", "data": "ui=mode"},
+                            },
                             {
                                 "type": "button",
                                 "style": "primary",
@@ -238,8 +300,8 @@ def flex_home() -> Dict[str, Any]:
                             },
                             {
                                 "type": "button",
-                                "style": "secondary",
-                                "action": {"type": "postback", "label": "Notify", "data": "ui=mode"},
+                                "style": "link",
+                                "action": {"type": "postback", "label": "Status", "data": "cmd=status"},
                             },
                         ],
                     },
@@ -266,7 +328,7 @@ def flex_mode() -> Dict[str, Any]:
                     {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "separator"},
                     {"type": "text", "text": "LINE bridge mode: monitor notify/event/status/ack", "size": "sm", "wrap": True},
-                    {"type": "text", "text": "Allowed commands: lock/unlock only", "size": "sm", "wrap": True, "color": "#666666"},
+                    {"type": "text", "text": "Allowed commands: lock/unlock/status", "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
                 ],
             },
@@ -330,6 +392,7 @@ class BridgeState:
         self.last_cmd = ""
         self.last_cmd_at = 0.0
         self.last_metrics_push_at = 0.0
+        self.last_intruder_push_at = 0.0
         self.last_status_mode = ""
         self.last_status_level = ""
         self.last_status_at = 0.0
@@ -396,6 +459,10 @@ def command_auth_ready() -> bool:
     return bool(BRIDGE_CMD_TOKEN)
 
 
+def is_read_only_cmd(text: str) -> bool:
+    return text in READ_ONLY_COMMANDS
+
+
 def source_key(ev: Dict[str, Any]) -> str:
     src = ev.get("source", {}) if isinstance(ev.get("source", {}), dict) else {}
     return (
@@ -435,21 +502,86 @@ def debounce_ok(src_key: str, cmd: str, ev_ts_ms: int) -> bool:
     return True
 
 
+def mqtt_publish_ok(topic: str, payload: str, qos: int = 0, retain: bool = False) -> bool:
+    try:
+        info = mqtt_client.publish(topic, payload=payload, qos=qos, retain=retain)
+    except Exception:
+        return False
+
+    rc = getattr(info, "rc", None)
+    if rc is None and isinstance(info, tuple) and info:
+        rc = info[0]
+    if rc is None:
+        # Best-effort fallback for unknown client adapters.
+        return True
+    return int(rc) == int(mqtt.MQTT_ERR_SUCCESS)
+
+
 def publish_cmd(cmd: str) -> bool:
     text = cmd.strip().lower()
     if not text or not is_supported_cmd(text):
         return False
-    if not command_auth_ready():
+    if not command_auth_ready() and not is_read_only_cmd(text):
         return False
-    payload = _encode_command_payload(text)
-    mqtt_client.publish(MQTT_TOPIC_CMD, payload=payload, qos=0, retain=False)
+    payload = _encode_command_payload(text) if command_auth_ready() else text
+    if not mqtt_publish_ok(MQTT_TOPIC_CMD, payload=payload, qos=0, retain=False):
+        return False
     state.last_cmd = text
     state.last_cmd_at = time.time()
     return True
 
 
 def is_supported_cmd(text: str) -> bool:
-    return text in LOCK_COMMANDS
+    return text in SUPPORTED_COMMANDS
+
+
+def _json_bool(obj: Dict[str, Any], key: str) -> Optional[bool]:
+    if key not in obj:
+        return None
+    v = obj.get(key)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"true", "1", "yes", "on"}:
+            return True
+        if s in {"false", "0", "no", "off"}:
+            return False
+    return None
+
+
+def _apply_snapshot_from_obj(obj: Dict[str, Any]) -> None:
+    updated = False
+    mode = str(obj.get("mode", "") or "")
+    level = str(obj.get("level", "") or "")
+    if mode:
+        state.dev_mode = mode
+        updated = True
+    if level:
+        state.dev_level = level
+        updated = True
+
+    dl = _json_bool(obj, "door_locked")
+    wl = _json_bool(obj, "window_locked")
+    do = _json_bool(obj, "door_open")
+    wo = _json_bool(obj, "window_open")
+    if dl is not None:
+        state.dev_door_locked = dl
+        updated = True
+    if wl is not None:
+        state.dev_window_locked = wl
+        updated = True
+    if do is not None:
+        state.dev_door_open = do
+        updated = True
+    if wo is not None:
+        state.dev_window_open = wo
+        updated = True
+
+    if updated:
+        state.dev_at = time.time()
 
 
 def verify_line_signature(raw_body: bytes, signature: str) -> bool:
@@ -493,18 +625,10 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
         state.last_status_mode = str(obj.get("mode", "") or "")
         state.last_status_level = str(obj.get("level", "") or "")
         state.last_status_at = time.time()
-        state.dev_mode = state.last_status_mode
-        state.dev_level = state.last_status_level
-        state.dev_at = time.time()
+        _apply_snapshot_from_obj(obj)
     if topic == MQTT_TOPIC_EVENT:
         obj = parse_json_payload(payload)
-        m = str(obj.get("mode", "") or "")
-        lv = str(obj.get("level", "") or "")
-        if m:
-            state.dev_mode = m
-        if lv:
-            state.dev_level = lv
-        state.dev_at = time.time()
+        _apply_snapshot_from_obj(obj)
     if topic == MQTT_TOPIC_ACK:
         obj = parse_json_payload(payload)
         detail = str(obj.get("detail", "") or "")
@@ -554,6 +678,17 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
           f"q_store={obj.get('q_store', '-')}"
       )
       return
+    if topic == MQTT_TOPIC_EVENT or topic == MQTT_TOPIC_STATUS:
+        obj = parse_json_payload(payload)
+        if _is_keypad_help_signal(topic, obj):
+            push_line_text(_format_keypad_help_alert(obj))
+            return
+        if _is_intruder_signal(topic, obj):
+            now = time.time()
+            if INTRUDER_NOTIFY_COOLDOWN_S == 0 or (now - state.last_intruder_push_at) >= INTRUDER_NOTIFY_COOLDOWN_S:
+                state.last_intruder_push_at = now
+                push_line_text(_format_intruder_alert(topic, obj))
+            return
     # Avoid spamming LINE with UI-driven polling.
     if topic == MQTT_TOPIC_ACK:
         obj = parse_json_payload(payload)
@@ -602,10 +737,10 @@ def get_state() -> Dict[str, Any]:
 async def http_cmd(request: Request) -> Dict[str, Any]:
     data = await request.json()
     cmd = str((data or {}).get("cmd", "")).strip().lower()
-    if not command_auth_ready():
-        raise HTTPException(status_code=503, detail="command auth token missing")
     if not cmd or not is_supported_cmd(cmd):
         raise HTTPException(status_code=400, detail="unsupported cmd")
+    if not command_auth_ready() and not is_read_only_cmd(cmd):
+        raise HTTPException(status_code=503, detail="command auth token missing")
     if not publish_cmd(cmd):
         raise HTTPException(status_code=503, detail="command publish blocked")
     return {"ok": True, "cmd": cmd}
@@ -695,9 +830,9 @@ async def line_webhook(
                 reply_line_messages(reply_token, [flex_home()])
                 continue
             if not is_supported_cmd(cmd):
-                reply_line_text(reply_token, "unsupported cmd (lock/unlock only), send 'menu'")
+                reply_line_text(reply_token, "unsupported cmd (lock/unlock/status), send 'menu'")
                 continue
-            if not command_auth_ready():
+            if not command_auth_ready() and not is_read_only_cmd(cmd):
                 reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
                 continue
             if not debounce_ok(src_k, cmd, ev_ts_ms):
@@ -723,9 +858,9 @@ async def line_webhook(
             continue
 
         if not is_supported_cmd(text):
-            reply_line_text(reply_token, "unsupported cmd (lock/unlock only), send 'menu'")
+            reply_line_text(reply_token, "unsupported cmd (lock/unlock/status), send 'menu'")
             continue
-        if not command_auth_ready():
+        if not command_auth_ready() and not is_read_only_cmd(text):
             reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
             continue
 
