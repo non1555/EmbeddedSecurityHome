@@ -41,6 +41,20 @@ static uint8_t normalizeMotionSource(uint8_t src) {
   if (src == kSerialSyntheticSrcPir3) return 3;
   return src;
 }
+
+static void resetForMode(SystemState& st, Mode mode, uint32_t nowMs) {
+  st.mode = mode;
+  st.level = AlarmLevel::off;
+  st.entry_pending = false;
+  st.entry_deadline_ms = 0;
+  st.suspicion_score = 0;
+  st.last_suspicion_update_ms = nowMs;
+  st.last_outdoor_motion_ms = 0;
+  st.last_window_event_ms = 0;
+  st.last_vibration_ms = 0;
+  st.last_door_event_ms = 0;
+  st.keep_window_locked_when_disarmed = false;
+}
 } // namespace
 
 Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event& e) const {
@@ -48,32 +62,12 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
   applyDecay(d.next, cfg, e.ts_ms);
 
   if (e.type == EventType::disarm) {
-    d.next.mode = Mode::disarm;
-    d.next.level = AlarmLevel::off;
-    d.next.entry_pending = false;
-    d.next.entry_deadline_ms = 0;
-    d.next.suspicion_score = 0;
-    d.next.last_suspicion_update_ms = e.ts_ms;
-    d.next.last_outdoor_motion_ms = 0;
-    d.next.last_window_event_ms = 0;
-    d.next.last_vibration_ms = 0;
-    d.next.last_door_event_ms = 0;
-    d.next.keep_window_locked_when_disarmed = false;
+    resetForMode(d.next, Mode::disarm, e.ts_ms);
     return d;
   }
 
   if (e.type == EventType::arm_away) {
-    d.next.mode = Mode::away;
-    d.next.level = AlarmLevel::off;
-    d.next.entry_pending = false;
-    d.next.entry_deadline_ms = 0;
-    d.next.suspicion_score = 0;
-    d.next.last_suspicion_update_ms = e.ts_ms;
-    d.next.last_outdoor_motion_ms = 0;
-    d.next.last_window_event_ms = 0;
-    d.next.last_vibration_ms = 0;
-    d.next.last_door_event_ms = 0;
-    d.next.keep_window_locked_when_disarmed = false;
+    resetForMode(d.next, Mode::away, e.ts_ms);
     return d;
   }
 
@@ -86,6 +80,27 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     d.next.level = AlarmLevel::alert;
     d.cmd.type = CommandType::buzzer_alert;
     return d;
+  }
+
+  if (s.mode == Mode::disarm && cfg.auto_arm_away_on_exit_sequence) {
+    // Exit sequence auto-arm:
+    // door_open -> (outdoor motion OR door chokepoint) within window.
+    if (e.type == EventType::door_open) {
+      d.next.last_door_event_ms = e.ts_ms;
+    }
+
+    const uint8_t motionSrc = normalizeMotionSource(e.src);
+    const bool outdoorExitMotion =
+      (e.type == EventType::motion) && (motionSrc == cfg.outdoor_pir_src);
+    const bool doorZoneChokepoint =
+      (e.type == EventType::chokepoint) && (e.src == cfg.door_ultrasonic_src);
+
+    if (cfg.auto_arm_exit_sequence_window_ms > 0 &&
+        (outdoorExitMotion || doorZoneChokepoint) &&
+        within(e.ts_ms, s.last_door_event_ms, cfg.auto_arm_exit_sequence_window_ms)) {
+      resetForMode(d.next, Mode::away, e.ts_ms);
+      return d;
+    }
   }
 
   if (s.mode == Mode::away && e.type == EventType::door_open) {

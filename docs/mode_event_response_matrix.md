@@ -9,6 +9,7 @@ Source of truth remains `docs/business_rules.md`.
 |---|---|---|---|---|---|
 | any | `disarm` | accepted command/event | set mode `disarm`, clear pending, reset risk | none | `System Event` |
 | any | `arm_away` | accepted command/event | set mode `away`, clear pending, reset risk | none | `System Event` |
+| `disarm` | `door_open` -> (`motion` outdoor or `chokepoint` door source) | sequence within `auto_arm_exit_sequence_window_ms`, and `auto_arm_away_on_exit_sequence=true` | auto-switch mode to `away`, clear pending, reset risk | lock servos via armed policy | `System Event` |
 | any | `door_open` | `door_locked=true` | force `level=alert`, `score=100`, clear pending | `buzzer_alert` | `Security Alert` |
 | `away` | `door_open` | `door_locked=false` and gate passed | start entry delay (`entry_pending=true`) | `buzzer_warn` | `System Event` |
 | `away` | `entry_timeout` | timeout while armed | escalate to `level=alert`, `score=100` | `buzzer_alert` | `Security Alert` |

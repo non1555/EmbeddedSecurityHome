@@ -12,6 +12,7 @@ All rules below describe runtime behavior of the main security controller and it
 | ID | Rule | Trigger | Required Behavior |
 |---|---|---|---|
 | BR-01 | Disarm reset | `disarm` event | Set mode to `disarm`, clear entry pending, reset suspicion score to 0, clear recent correlation timestamps. |
+| BR-02 | Exit-sequence auto arm | While `mode=disarm`, event sequence `door_open` then (`motion` from outdoor source OR `chokepoint` from door source) within configured window | If `auto_arm_away_on_exit_sequence=true`, switch to `away` and reset risk/correlation state exactly as `arm_away`. |
 | BR-03 | Arm away reset | `arm_away` event | Set mode to `away`, clear entry pending, reset suspicion score and correlation timestamps. |
 | BR-04 | Forced door-open alert | `door_open` while `door_locked=true` (any mode) | Treat as immediate intrusion: set level to `alert`, set suspicion to 100, clear entry pending, and trigger alert buzzer output. |
 | BR-04A | Armed entry warning gate | `door_open` while armed and door not locked | Start entry delay only if no current entry is pending and no indoor activity is within grace window. |
@@ -50,7 +51,7 @@ All rules below describe runtime behavior of the main security controller and it
 
 | ID | Rule | Trigger | Required Behavior |
 |---|---|---|---|
-| BR-29 | Boot mode baseline | Controller boot sequence | Start with baseline mode `disarm`; do not auto-enter armed mode without explicit command or valid persisted mode restore. |
+| BR-29 | Boot mode baseline | Controller boot sequence | Start with baseline mode `disarm`; auto-enter armed mode only via valid persisted mode restore or enabled event-sequence auto-arm policy. |
 | BR-30 | Mode persistence and restore | Mode transition accepted or next boot | Persist mode only when it changes; on boot, restore only valid persisted values (`disarm`/`away`), otherwise fallback to `disarm` and emit warning telemetry. |
 
 ### Telemetry and Contract Rules

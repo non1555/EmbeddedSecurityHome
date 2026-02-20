@@ -42,6 +42,7 @@ Important fields:
 - command auth: `FW_CMD_TOKEN` (or `BRIDGE_CMD_TOKEN` for bridge-only override)
 - optional nonce state file: `BRIDGE_NONCE_STATE_FILE` (default `tools/line_bridge/.nonce_state`)
 - when token is empty, bridge blocks lock/unlock commands (fail-closed) but still allows read-only `status`
+- if `BRIDGE_CMD_TOKEN` is blank, bridge automatically falls back to `FW_CMD_TOKEN`
 
 Notes:
 - If you do not set any `LINE_TARGET_*`, the bridge will automatically learn a push target from the first LINE webhook it receives (send any message in the chat you want to receive pushes to).

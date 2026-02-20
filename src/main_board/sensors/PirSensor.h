@@ -17,4 +17,5 @@ private:
   uint32_t last_fire_ms_;
   bool last_active_;
   uint32_t active_since_ms_ = 0;
+  bool seen_inactive_since_begin_ = false;
 };

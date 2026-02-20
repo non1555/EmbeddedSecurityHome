@@ -20,7 +20,8 @@ ChokepointSensor::ChokepointSensor(UltrasonicDriver* drv, uint8_t id,
   last_cm_(-1),
   inside_(false),
   consecutive_no_echo_(0),
-  last_valid_ms_(0)
+  last_valid_ms_(0),
+  seen_valid_once_(false)
 {}
 
 void ChokepointSensor::begin() {
@@ -30,6 +31,7 @@ void ChokepointSensor::begin() {
   inside_ = false;
   consecutive_no_echo_ = 0;
   last_valid_ms_ = 0;
+  seen_valid_once_ = false;
 }
 
 int ChokepointSensor::lastCm() const {
@@ -51,6 +53,7 @@ bool ChokepointSensor::poll(uint32_t nowMs, Event& out) {
   }
   consecutive_no_echo_ = 0;
   last_valid_ms_ = nowMs;
+  seen_valid_once_ = true;
 
   // hysteresis: enter when <= near, exit when >= far
   if (!inside_) {
@@ -73,15 +76,11 @@ bool ChokepointSensor::poll(uint32_t nowMs, Event& out) {
 }
 
 bool ChokepointSensor::isOffline(uint32_t nowMs, uint32_t noValidMs, uint16_t noEchoCount) const {
+  if (!seen_valid_once_) return false;
   const bool noEchoTooMany = (noEchoCount > 0 && consecutive_no_echo_ >= noEchoCount);
   if (noValidMs == 0) return noEchoTooMany;
 
-  bool noValidTooLong = false;
-  if (last_valid_ms_ == 0) {
-    noValidTooLong = (int32_t)(nowMs - noValidMs) >= 0;
-  } else {
-    noValidTooLong = (int32_t)(nowMs - (last_valid_ms_ + noValidMs)) >= 0;
-  }
+  const bool noValidTooLong = (int32_t)(nowMs - (last_valid_ms_ + noValidMs)) >= 0;
   return noEchoTooMany || noValidTooLong;
 }
 

@@ -181,6 +181,8 @@ bool MqttClient::publishEvent(const Event& e, const SystemState& st, const Comma
   payload += String(e.src);
   payload += ",\"cmd\":\"";
   payload += toString(cmd.type);
+  payload += "\",\"mode\":\"";
+  payload += toString(st.mode);
   payload += "\",\"level\":\"";
   payload += levelText(st.level);
   payload += "\",\"door_locked\":";
@@ -203,6 +205,8 @@ bool MqttClient::publishStatus(const SystemState& st, const char* reason) {
 
   String payload = "{\"reason\":\"";
   payload += (reason ? reason : "unknown");
+  payload += "\",\"mode\":\"";
+  payload += toString(st.mode);
   payload += "\",\"level\":\"";
   payload += levelText(st.level);
   payload += "\",\"door_locked\":";

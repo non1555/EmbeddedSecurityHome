@@ -11,14 +11,11 @@ cd "$ROOT"
 PY="$ROOT/.venv/bin/python3"
 ENV_FILE="$ROOT/.env"
 ENV_EXAMPLE="$ROOT/.env.example"
+REQ_FILE="$ROOT/requirements.txt"
 
 if [[ ! -x "$PY" ]]; then
-  echo "ERROR: venv python not found: $PY"
-  echo "Fix:"
-  echo "  cd tools/line_bridge"
-  echo "  python3 -m venv .venv"
-  echo "  .venv/bin/python3 -m pip install -r requirements.txt"
-  exit 2
+  echo "Creating venv..."
+  python3 -m venv "$ROOT/.venv"
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -27,6 +24,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
     cp -f "$ENV_EXAMPLE" "$ENV_FILE"
   fi
   echo "Please edit $ENV_FILE then run this again."
+  exit 2
+fi
+
+if [[ ! -f "$REQ_FILE" ]]; then
+  echo "ERROR: requirements.txt missing: $REQ_FILE"
   exit 2
 fi
 
@@ -40,11 +42,8 @@ echo "Port: $HTTP_PORT"
 echo
 
 "$PY" -c "import fastapi,uvicorn,requests,paho.mqtt.client as mqtt" >/dev/null 2>&1 || {
-  echo "ERROR: Python dependencies not installed in venv."
-  echo "Fix:"
-  echo "  cd tools/line_bridge"
-  echo "  .venv/bin/python3 -m pip install -r requirements.txt"
-  exit 2
+  echo "Installing Python dependencies in venv..."
+  "$PY" -m pip install -r "$REQ_FILE"
 }
 
 command -v ngrok >/dev/null 2>&1 || {

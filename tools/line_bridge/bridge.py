@@ -3,14 +3,57 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import paho.mqtt.client as mqtt
-import requests
-from fastapi import FastAPI, Header, HTTPException, Request
+SCRIPT_PATH = Path(__file__).resolve()
+SCRIPT_DIR = SCRIPT_PATH.parent
+
+
+def _venv_python_candidates(root: Path) -> list[Path]:
+    return [
+        root / ".venv" / "bin" / "python3",
+        root / ".venv" / "bin" / "python",
+        root / ".venv" / "Scripts" / "python.exe",
+    ]
+
+
+def _rerun_with_venv_or_raise(missing_module: str) -> None:
+    current_py = Path(sys.executable)
+    venv_root = SCRIPT_DIR / ".venv"
+    in_local_venv = str(current_py).startswith(str(venv_root))
+
+    if not in_local_venv:
+        for py in _venv_python_candidates(SCRIPT_DIR):
+            if not py.exists():
+                continue
+
+            print(f"[bridge] Missing module '{missing_module}' in {current_py}.")
+            print(f"[bridge] Re-launching with {py} ...")
+            os.execv(str(py), [str(py), str(SCRIPT_PATH), *sys.argv[1:]])
+
+    print(f"[bridge] Missing module '{missing_module}' in {current_py}.")
+    print("[bridge] Install dependencies:")
+    print(f"  cd {SCRIPT_DIR}")
+    if os.name == "nt":
+        print("  python -m venv .venv")
+        print("  .venv\\Scripts\\python.exe -m pip install -r requirements.txt")
+    else:
+        print("  python3 -m venv .venv")
+        print("  .venv/bin/python3 -m pip install -r requirements.txt")
+    raise ModuleNotFoundError(missing_module)
+
+
+try:
+    import paho.mqtt.client as mqtt
+    import requests
+    from fastapi import FastAPI, Header, HTTPException, Request
+except ModuleNotFoundError as exc:
+    _rerun_with_venv_or_raise(exc.name or "unknown")
+    raise
 
 
 def load_env_file(path: str) -> None:
@@ -32,22 +75,46 @@ def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-load_env_file(".env")
-ROOT = Path(__file__).resolve().parent
+# Always load .env next to bridge.py, regardless of current working directory.
+load_env_file(str(SCRIPT_DIR / ".env"))
+ROOT = SCRIPT_DIR
 
-MQTT_BROKER = env("MQTT_BROKER", "127.0.0.1")
-MQTT_PORT = int(env("MQTT_PORT", "1883"))
-MQTT_USERNAME = env("MQTT_USERNAME")
-MQTT_PASSWORD = env("MQTT_PASSWORD")
+def _prefer_fw_if_default(name: str, default: str, fw_name: str) -> str:
+    v = env(name, default).strip()
+    fw = env(fw_name, "").strip()
+    if v == default and fw:
+        return fw
+    return v
+
+
+def _normalize_topic(value: str, fallback: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return fallback
+    legacy = {
+        "esh/cmd": "esh/main/cmd",
+        "esh/event": "esh/main/event",
+        "esh/status": "esh/main/status",
+        "esh/ack": "esh/main/ack",
+        "esh/metrics": "esh/main/metrics",
+    }
+    return legacy.get(raw, raw)
+
+
+MQTT_BROKER = _prefer_fw_if_default("MQTT_BROKER", "127.0.0.1", "FW_MQTT_BROKER")
+MQTT_PORT = int(_prefer_fw_if_default("MQTT_PORT", "1883", "FW_MQTT_PORT") or "1883")
+MQTT_USERNAME = _prefer_fw_if_default("MQTT_USERNAME", "", "FW_MQTT_USERNAME")
+MQTT_PASSWORD = _prefer_fw_if_default("MQTT_PASSWORD", "", "FW_MQTT_PASSWORD")
 MQTT_CLIENT_ID = env("MQTT_CLIENT_ID", "esh-line-bridge")
-MQTT_TOPIC_CMD = env("MQTT_TOPIC_CMD", "esh/main/cmd")
-MQTT_TOPIC_EVENT = env("MQTT_TOPIC_EVENT", "esh/main/event")
-MQTT_TOPIC_STATUS = env("MQTT_TOPIC_STATUS", "esh/main/status")
-MQTT_TOPIC_ACK = env("MQTT_TOPIC_ACK", "esh/main/ack")
-MQTT_TOPIC_METRICS = env("MQTT_TOPIC_METRICS", "esh/main/metrics")
+MQTT_TOPIC_CMD = _normalize_topic(env("MQTT_TOPIC_CMD", "esh/main/cmd"), "esh/main/cmd")
+MQTT_TOPIC_EVENT = _normalize_topic(env("MQTT_TOPIC_EVENT", "esh/main/event"), "esh/main/event")
+MQTT_TOPIC_STATUS = _normalize_topic(env("MQTT_TOPIC_STATUS", "esh/main/status"), "esh/main/status")
+MQTT_TOPIC_ACK = _normalize_topic(env("MQTT_TOPIC_ACK", "esh/main/ack"), "esh/main/ack")
+MQTT_TOPIC_METRICS = _normalize_topic(env("MQTT_TOPIC_METRICS", "esh/main/metrics"), "esh/main/metrics")
 METRICS_PUSH_PERIOD_S = max(5, int(env("METRICS_PUSH_PERIOD_S", "30")))
 INTRUDER_NOTIFY_COOLDOWN_S = max(0, int(env("INTRUDER_NOTIFY_COOLDOWN_S", "20")))
-BRIDGE_CMD_TOKEN = env("BRIDGE_CMD_TOKEN", env("FW_CMD_TOKEN", "")).strip()
+LINE_PUSH_PERIODIC_STATUS = env("LINE_PUSH_PERIODIC_STATUS", "0").strip().lower() in {"1", "true", "yes", "on"}
+BRIDGE_CMD_TOKEN = _prefer_fw_if_default("BRIDGE_CMD_TOKEN", "", "FW_CMD_TOKEN")
 NONCE_STATE_FILE = Path(env("BRIDGE_NONCE_STATE_FILE", str(ROOT / ".nonce_state")))
 
 LINE_CHANNEL_ACCESS_TOKEN = env("LINE_CHANNEL_ACCESS_TOKEN")
@@ -760,6 +827,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 state.last_intruder_push_at = now
                 push_line_text(_format_intruder_alert(topic, obj))
             return
+    if topic == MQTT_TOPIC_STATUS:
+        obj = parse_json_payload(payload)
+        reason = _norm_text(obj.get("reason", ""))
+        if reason == "periodic" and not LINE_PUSH_PERIODIC_STATUS:
+            return
     # Avoid spamming LINE with UI-driven polling.
     if topic == MQTT_TOPIC_ACK:
         obj = parse_json_payload(payload)
@@ -821,6 +893,7 @@ async def http_cmd(request: Request) -> Dict[str, Any]:
 def health() -> Dict[str, Any]:
     target = get_line_target()
     problems = []
+    warnings = []
 
     if not state.mqtt_connected:
         problems.append("mqtt_disconnected")
@@ -836,16 +909,21 @@ def health() -> Dict[str, Any]:
         problems.append("line_access_token_missing")
     if not line_secret_ok:
         problems.append("line_channel_secret_missing")
+    # Optional capabilities:
+    # - line_target_missing: push alerts are disabled until a target is configured/learned.
+    # - cmd_auth_token_missing: mutating commands are disabled, read-only status still works.
     if not line_target_ok:
-        problems.append("line_target_missing")
+        warnings.append("line_target_missing")
     if not command_auth_ready():
-        problems.append("cmd_auth_token_missing")
+        warnings.append("cmd_auth_token_missing")
 
-    ready = bool(state.mqtt_connected and line_push_ready and line_webhook_ready)
+    # Core bridge readiness: MQTT connected and LINE webhook verification ready.
+    ready = bool(state.mqtt_connected and line_webhook_ready)
     return {
         "ok": True,
         "ready": ready,
         "problems": problems,
+        "warnings": warnings,
         "mqtt_connected": state.mqtt_connected,
         "mqtt_broker": MQTT_BROKER,
         "mqtt_port": MQTT_PORT,

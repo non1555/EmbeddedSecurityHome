@@ -1007,7 +1007,8 @@ class LauncherApp:
             j = http_get_json(f"http://127.0.0.1:{self.http_port}/health", timeout_s=0.8)
             ready = j.get("ready")
             probs = j.get("problems", [])
-            self.health_var.set(f"Health: ready={ready} problems={probs}")
+            warns = j.get("warnings", [])
+            self.health_var.set(f"Health: ready={ready} problems={probs} warnings={warns}")
         except Exception:
             self.health_var.set("Health: (not reachable)")
 

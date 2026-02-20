@@ -35,4 +35,5 @@ private:
   bool inside_;
   uint16_t consecutive_no_echo_;
   uint32_t last_valid_ms_;
+  bool seen_valid_once_;
 };

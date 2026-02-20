@@ -66,6 +66,7 @@ private:
   uint32_t lastKeypadLockoutNotifyMs_ = 0;
 
   bool servo1WasLocked_ = false;
+  bool servo2WasLocked_ = false;
   uint32_t nextStatusHeartbeatMs_ = 0;
   ReplayGuard remoteNonceGuard_;
   uint32_t nextSensorHealthCheckMs_ = 0;

@@ -6,7 +6,8 @@ VibrationSensor::VibrationSensor(uint8_t pin, uint8_t id, uint32_t cooldown_ms)
   id_(id),
   cooldown_ms_(cooldown_ms),
   last_fire_ms_(0),
-  last_active_(false)
+  last_active_(false),
+  seen_inactive_since_begin_(false)
 {}
 
 void VibrationSensor::begin() {
@@ -14,6 +15,7 @@ void VibrationSensor::begin() {
     last_fire_ms_ = 0;
     last_active_ = false;
     active_since_ms_ = 0;
+    seen_inactive_since_begin_ = true;
     return;
   }
   pinMode(pin_, INPUT_PULLUP);
@@ -21,6 +23,9 @@ void VibrationSensor::begin() {
   // INPUT_PULLUP means an open circuit reads HIGH. We only fire on a transition.
   last_active_ = (digitalRead(pin_) == HIGH);
   active_since_ms_ = last_active_ ? millis() : 0;
+  // Require at least one observed inactive sample before flagging stuck-active.
+  // This prevents false sensor-faults when a channel boots floating/high.
+  seen_inactive_since_begin_ = !last_active_;
 }
 
 bool VibrationSensor::poll(uint32_t nowMs, Event& out) {
@@ -30,6 +35,7 @@ bool VibrationSensor::poll(uint32_t nowMs, Event& out) {
     active_since_ms_ = nowMs;
   } else if (!active) {
     active_since_ms_ = 0;
+    seen_inactive_since_begin_ = true;
   }
   const bool rising_edge = (active && !last_active_);
   last_active_ = active;
@@ -43,6 +49,6 @@ bool VibrationSensor::poll(uint32_t nowMs, Event& out) {
 }
 
 bool VibrationSensor::isStuckActive(uint32_t nowMs, uint32_t thresholdMs) const {
-  if (!last_active_ || active_since_ms_ == 0 || thresholdMs == 0) return false;
+  if (!seen_inactive_since_begin_ || !last_active_ || active_since_ms_ == 0 || thresholdMs == 0) return false;
   return (int32_t)(nowMs - (active_since_ms_ + thresholdMs)) >= 0;
 }

@@ -369,6 +369,7 @@ void SecurityOrchestrator::begin() {
     servo2_.lock();
   }
   servo1WasLocked_ = servo1_.isLocked();
+  servo2WasLocked_ = servo2_.isLocked();
   updateSensorHealth(millis());
   publishStateStatus("boot");
   nextStatusHeartbeatMs_ = 0;
@@ -723,14 +724,23 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
 
   // If something unlocked the door while it's closed (e.g., DISARM command path),
   // start the auto-lock countdown.
+  const bool prevServo1Locked = servo1WasLocked_;
+  const bool prevServo2Locked = servo2WasLocked_;
   const bool servo1LockedNow = servo1_.isLocked();
+  const bool servo2LockedNow = servo2_.isLocked();
   if (!doorSession_.isActive() &&
-      servo1WasLocked_ &&
+      prevServo1Locked &&
       !servo1LockedNow &&
       !collector_.isDoorOpen()) {
     startDoorUnlockSession(nowMs);
   }
   servo1WasLocked_ = servo1LockedNow;
+  servo2WasLocked_ = servo2LockedNow;
+
+  // Publish immediately when lock state changes (do not wait for periodic heartbeat).
+  if ((servo1LockedNow != prevServo1Locked) || (servo2LockedNow != prevServo2Locked)) {
+    publishStateStatus("actuator_lock_state_changed");
+  }
 
   updateSensorHealth(nowMs);
   updateDoorUnlockSession(nowMs);

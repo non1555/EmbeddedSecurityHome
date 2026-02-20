@@ -14,6 +14,8 @@ struct Config {
   uint32_t suspicion_decay_step_ms = 5000;
   uint8_t suspicion_decay_points = 8;
   uint8_t door_ultrasonic_src = 1;
+  bool auto_arm_away_on_exit_sequence = true;
+  uint32_t auto_arm_exit_sequence_window_ms = 20000;
   bool allow_remote_without_token = false;
   bool require_remote_nonce = true;
   bool require_remote_monotonic_nonce = true;
