@@ -31,6 +31,9 @@ project_dir = Path(env["PROJECT_DIR"])
 env_file = project_dir / "tools" / "line_bridge" / ".env"
 cfg = _read_env(env_file)
 
+if not env_file.exists():
+    print(f"[pio_env] WARN: missing {env_file}; using built-in defaults")
+
 wifi_ssid = cfg.get("FW_WIFI_SSID", "")
 wifi_password = cfg.get("FW_WIFI_PASSWORD", "")
 mqtt_broker = cfg.get("FW_MQTT_BROKER", "127.0.0.1")
@@ -43,6 +46,11 @@ door_code = cfg.get("FW_DOOR_CODE", "")
 base_client_id = cfg.get("FW_MQTT_CLIENT_ID", "") or "embedded-security-esp32"
 main_client_id = cfg.get("FW_MQTT_CLIENT_ID_MAIN", "") or base_client_id
 mqtt_client_id = main_client_id
+
+if not wifi_ssid:
+    print("[pio_env] WARN: FW_WIFI_SSID is empty")
+if not mqtt_broker or mqtt_broker in ("127.0.0.1", "localhost"):
+    print(f"[pio_env] WARN: FW_MQTT_BROKER is '{mqtt_broker}'")
 
 env.Append(
     CPPDEFINES=[

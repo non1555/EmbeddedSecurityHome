@@ -14,7 +14,7 @@ Do not keep temporary diagram files (`tmp_*`) at root.
 ## Source (`src/`)
 
 - `src/main_board/`: active firmware target and all runtime logic
-- `src/auto_board/`: parked/legacy firmware module (kept for future re-enable)
+- `src/auto_board/`: legacy archive (not part of active build/test flow)
 
 ## Documentation (`docs/`)
 

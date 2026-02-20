@@ -129,20 +129,15 @@ void EventCollector::printSerialHelp() const {
   Serial.println("[SERIAL-TEST] Send one code then newline");
   Serial.println("[SERIAL-TEST] Modes");
   Serial.println("  100 disarm");
-  Serial.println("  101 arm_night");
   Serial.println("  102 arm_away");
   Serial.println("[SERIAL-TEST] Command and control");
   Serial.println("  200 manual_door_toggle");
   Serial.println("  201 manual_window_toggle");
-  Serial.println("  202 manual_lock_request");
-  Serial.println("  203 manual_unlock_request");
   Serial.println("  204 door_hold_warn_silence");
   Serial.println("  205 keypad_help_request");
   Serial.println("  206 door_code_unlock");
   Serial.println("  207 door_code_bad");
   Serial.println("  208 entry_timeout");
-  Serial.println("  900 serial_test_enable (allow serial mode/manual/sensor)");
-  Serial.println("  901 serial_test_disable (restore serial policy defaults)");
   Serial.println("[SERIAL-TEST] Sensor inputs");
   Serial.println("  300 door_open");
   Serial.println("  301 window_open");
@@ -159,7 +154,6 @@ void EventCollector::printSerialHelp() const {
 
 bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const {
   if (c == '0') { out = {EventType::disarm, nowMs, kSerialSyntheticSrcGeneric}; return true; }
-  if (c == '1') { out = {EventType::arm_night, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == '6') { out = {EventType::arm_away, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == '8') { out = {EventType::door_open, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == '2') { out = {EventType::window_open, nowMs, kSerialSyntheticSrcGeneric}; return true; }
@@ -171,8 +165,6 @@ bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const 
   if (c == 'H' || c == 'h') { out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == 'D' || c == 'd') { out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == 'W' || c == 'w') { out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true; }
-  if (c == 'L' || c == 'l') { out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
-  if (c == 'U' || c == 'u') { out = {EventType::manual_unlock_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
   if (c == '?') {
     Serial.println("[SERIAL-TEST] help requested");
     printSerialHelp();
@@ -184,20 +176,15 @@ bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const 
 bool EventCollector::parseSerialCode(uint16_t code, uint32_t nowMs, Event& out) const {
   switch (code) {
     case 100: out = {EventType::disarm, nowMs, kSerialSyntheticSrcGeneric}; return true;
-    case 101: out = {EventType::arm_night, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 102: out = {EventType::arm_away, nowMs, kSerialSyntheticSrcGeneric}; return true;
 
     case 200: out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 201: out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true;
-    case 202: out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
-    case 203: out = {EventType::manual_unlock_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 204: out = {EventType::door_hold_warn_silence, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 205: out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 206: out = {EventType::door_code_unlock, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 207: out = {EventType::door_code_bad, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 208: out = {EventType::entry_timeout, nowMs, kSerialSyntheticSrcGeneric}; return true;
-    case 900: out = {EventType::serial_test_enable, nowMs, kSerialSyntheticSrcGeneric}; return true;
-    case 901: out = {EventType::serial_test_disable, nowMs, kSerialSyntheticSrcGeneric}; return true;
 
     case 300: out = {EventType::door_open, nowMs, kSerialSyntheticSrcGeneric}; return true;
     case 301: out = {EventType::window_open, nowMs, kSerialSyntheticSrcGeneric}; return true;

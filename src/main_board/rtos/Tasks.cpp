@@ -248,6 +248,14 @@ void startIfReady() {
   }
 }
 
+bool mqttWorkerStarted() {
+  return mqttStarted;
+}
+
+bool chokepointWorkerStarted() {
+  return chokepointStarted;
+}
+
 void setSensorTelemetry(uint32_t drops, uint32_t depth) {
   gSensorDrops = drops;
   gSensorDepth = depth;

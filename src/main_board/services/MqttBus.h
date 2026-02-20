@@ -33,5 +33,5 @@ public:
 private:
   class Impl;
   Impl* impl_ = nullptr;
+  bool useRtos_ = false;
 };
-

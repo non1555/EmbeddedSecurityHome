@@ -118,7 +118,8 @@ Linux (แบบกดจาก UI):
 - ตัวอย่างถ้า broker อยู่เครื่องเดียวกับ Launcher:
   - `FW_MQTT_BROKER = 192.168.x.x` (IP เครื่องคุณ)
   - `FW_MQTT_PORT = 1883`
-3. กด `Save to .env`
+3. ใส่ `Door Code (4 digits)` สำหรับรหัสปลดล็อกผ่าน keypad
+4. กด `Save to .env`
 
 หมายเหตุ: ไม่ต้องแก้ไฟล์โค้ดหรือ `platformio.ini`
 

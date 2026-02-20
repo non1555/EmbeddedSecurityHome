@@ -24,6 +24,22 @@ static const char* wlStatusText(wl_status_t st) {
   }
 }
 
+static const char* mqttStateText(int rc) {
+  switch (rc) {
+    case MQTT_CONNECTION_TIMEOUT:     return "CONNECTION_TIMEOUT";
+    case MQTT_CONNECTION_LOST:        return "CONNECTION_LOST";
+    case MQTT_CONNECT_FAILED:         return "CONNECT_FAILED";
+    case MQTT_DISCONNECTED:           return "DISCONNECTED";
+    case MQTT_CONNECTED:              return "CONNECTED";
+    case MQTT_CONNECT_BAD_PROTOCOL:   return "BAD_PROTOCOL";
+    case MQTT_CONNECT_BAD_CLIENT_ID:  return "BAD_CLIENT_ID";
+    case MQTT_CONNECT_UNAVAILABLE:    return "SERVER_UNAVAILABLE";
+    case MQTT_CONNECT_BAD_CREDENTIALS:return "BAD_CREDENTIALS";
+    case MQTT_CONNECT_UNAUTHORIZED:   return "UNAUTHORIZED";
+    default:                          return "UNKNOWN";
+  }
+}
+
 static const char* levelText(AlarmLevel lv) {
   switch (lv) {
     case AlarmLevel::off:      return "off";
@@ -48,11 +64,23 @@ void MqttClient::begin(CommandCallback cb) {
   mqtt_.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt_.setSocketTimeout(MQTT_SOCKET_TIMEOUT_S);
   mqtt_.setCallback(onMqttMessage);
+
+  Serial.printf("[MQTT] cfg broker=%s port=%u client_id=%s auth=%s\n",
+                MQTT_BROKER,
+                (unsigned)MQTT_PORT,
+                MQTT_CLIENT_ID,
+                (strlen(MQTT_USERNAME) > 0) ? "on" : "off");
 }
 
 void MqttClient::connectWifi(uint32_t nowMs) {
   const wl_status_t st = WiFi.status();
   if (st != lastWifiStatus_) {
+    Serial.print("[WIFI] status=");
+    Serial.println(wlStatusText(st));
+    if (st == WL_CONNECTED) {
+      Serial.print("[WIFI] ip=");
+      Serial.println(WiFi.localIP());
+    }
     lastWifiStatus_ = st;
   }
 
@@ -62,8 +90,14 @@ void MqttClient::connectWifi(uint32_t nowMs) {
   nextWifiRetryMs_ = nowMs + WIFI_RECONNECT_MS;
 
   if (strlen(WIFI_SSID) == 0) {
+    static bool warnedEmptySsid = false;
+    if (!warnedEmptySsid) {
+      warnedEmptySsid = true;
+      Serial.println("[WIFI] SSID empty; set FW_WIFI_SSID/FW_WIFI_PASSWORD");
+    }
     return;
   }
+  Serial.printf("[WIFI] connect ssid=%s\n", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
@@ -76,6 +110,11 @@ void MqttClient::connectMqtt(uint32_t nowMs) {
 
   const bool hasAuth = strlen(MQTT_USERNAME) > 0;
   bool connected = false;
+
+  Serial.printf("[MQTT] connect attempt %s:%u client_id=%s\n",
+                MQTT_BROKER,
+                (unsigned)MQTT_PORT,
+                MQTT_CLIENT_ID);
 
   if (hasAuth) {
     connected = mqtt_.connect(
@@ -98,15 +137,21 @@ void MqttClient::connectMqtt(uint32_t nowMs) {
   }
 
   if (!connected) {
+    const int rc = mqtt_.state();
     Serial.print("[MQTT] connect failed rc=");
-    Serial.println(mqtt_.state());
+    Serial.print(rc);
+    Serial.print(" ");
+    Serial.println(mqttStateText(rc));
     return;
   }
 
-  mqtt_.subscribe(MQTT_TOPIC_CMD);
+  if (!mqtt_.subscribe(MQTT_TOPIC_CMD)) {
+    Serial.println("[MQTT] WARN subscribe failed");
+  }
 
   lastConnected_ = true;
   mqtt_.publish(MQTT_TOPIC_STATUS, "{\"reason\":\"online\"}", false);
+  Serial.println("[MQTT] connected");
 }
 
 void MqttClient::update(uint32_t nowMs) {

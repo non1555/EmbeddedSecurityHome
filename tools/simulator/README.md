@@ -11,7 +11,7 @@ python tools/simulator/serial_test_simulator.py
 Or run a quick scripted sequence:
 
 ```bash
-python tools/simulator/serial_test_simulator.py 900 101 310 300 +16000 208
+python tools/simulator/serial_test_simulator.py 102 310 300 +16000 208
 ```
 
 ## Input

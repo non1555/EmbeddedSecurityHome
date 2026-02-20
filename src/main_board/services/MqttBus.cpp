@@ -21,15 +21,22 @@ void MqttBus::begin() {
   if (!impl_) impl_ = reinterpret_cast<Impl*>(1); // initialized marker
   RtosTasks::attachMqtt(&gClient);
   RtosTasks::startIfReady();
-  if (!RtosQueues::mqttCmdQ) gClient.begin(onDirectCommand);
+  useRtos_ = RtosTasks::mqttWorkerStarted();
+  if (useRtos_) {
+    Serial.println("[MQTTBUS] mode=rtos");
+    return;
+  }
+
+  Serial.println("[MQTTBUS] mode=direct (RTOS worker unavailable)");
+  gClient.begin(onDirectCommand);
 }
 
 void MqttBus::update(uint32_t nowMs) {
-  if (!RtosQueues::mqttCmdQ) gClient.update(nowMs);
+  if (!useRtos_) gClient.update(nowMs);
 }
 
 void MqttBus::publishEvent(const Event& e, const SystemState& st, const Command& cmd) {
-  if (!RtosQueues::mqttPubQ) {
+  if (!useRtos_) {
     gClient.publishEvent(e, st, cmd);
     return;
   }
@@ -42,7 +49,7 @@ void MqttBus::publishEvent(const Event& e, const SystemState& st, const Command&
 }
 
 void MqttBus::publishStatus(const SystemState& st, const char* reason) {
-  if (!RtosQueues::mqttPubQ) {
+  if (!useRtos_) {
     gClient.publishStatus(st, reason);
     return;
   }
@@ -57,7 +64,7 @@ void MqttBus::publishStatus(const SystemState& st, const char* reason) {
 }
 
 void MqttBus::publishAck(const char* cmd, bool ok, const char* detail) {
-  if (!RtosQueues::mqttPubQ) {
+  if (!useRtos_) {
     gClient.publishAck(cmd, ok, detail);
     return;
   }
@@ -77,7 +84,7 @@ void MqttBus::publishAck(const char* cmd, bool ok, const char* detail) {
 
 bool MqttBus::pollCommand(String& outPayload) {
   outPayload = "";
-  if (RtosQueues::mqttCmdQ) {
+  if (useRtos_) {
     RtosQueues::CmdMsg msg{};
     if (!RtosTasks::dequeueCommand(msg)) return false;
     outPayload = String(msg.payload);
@@ -90,11 +97,13 @@ bool MqttBus::pollCommand(String& outPayload) {
 }
 
 void MqttBus::setSensorTelemetry(uint32_t drops, uint32_t depth) {
+  if (!useRtos_) return;
   RtosTasks::setSensorTelemetry(drops, depth);
 }
 
 MqttBus::Stats MqttBus::stats() const {
   MqttBus::Stats out{};
+  if (!useRtos_) return out;
   const auto s = RtosTasks::stats();
   out.pubDrops = s.pubDrops;
   out.cmdDrops = s.cmdDrops;

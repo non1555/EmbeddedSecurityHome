@@ -12,7 +12,7 @@ Legacy multi-board content is archived in `docs/legacy_2026-02-19/`.
 
 | Req ID | Requirement | Mapped Business Rules |
 |---|---|---|
-| FR-01 | System shall support arming modes `night` and `away`, and `disarm`. | BR-01, BR-02, BR-03 |
+| FR-01 | System shall support arming mode `away` and `disarm`. | BR-01, BR-03 |
 | FR-02 | System shall evaluate intrusion events via deterministic suspicion scoring. | BR-06, BR-07, BR-08, BR-09, BR-10, BR-11 |
 | FR-03 | System shall manage entry delay and timeout escalation when armed. | BR-04, BR-05 |
 | FR-04 | System shall enforce safe lock/unlock behavior based on door/window physical state. | BR-12, BR-13, BR-21, BR-22 |

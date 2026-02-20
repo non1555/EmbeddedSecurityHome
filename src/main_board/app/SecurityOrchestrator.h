@@ -42,12 +42,11 @@ private:
   Actuators acts_{&buzzer_, &servo1_, &servo2_};
 
   void applyDecision(const Event& e);
-  void printEventDecision(const Event& e, const Decision& d) const;
+  void printEventDecision(const Event& e, const Decision& d, const SystemState& prev) const;
   void processRemoteCommand(const String& payload);
   bool processManualActuatorEvent(const Event& e);
   bool processDoorHoldWarnSilenceEvent(const Event& e);
   bool processKeypadHelpRequestEvent(const Event& e);
-  bool processSerialControlEvent(const Event& e);
   bool processModeEvent(const Event& e, const char* origin);
   bool acceptRemoteNonce(const String& nonce, uint32_t nowMs, bool persistMonotonicFloor);
   void updateSensorHealth(uint32_t nowMs);
@@ -77,7 +76,4 @@ private:
   Preferences noncePref_;
   bool noncePrefReady_ = false;
   uint32_t lastRemoteNonce_ = 0;
-  bool defaultAllowSerialModeCommands_ = false;
-  bool defaultAllowSerialManualCommands_ = false;
-  bool defaultAllowSerialSensorCommands_ = false;
 };

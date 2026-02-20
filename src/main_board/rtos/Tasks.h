@@ -22,6 +22,8 @@ struct Stats {
 void attachMqtt(MqttClient* client);
 void attachChokepoint(ChokepointSensor* sensor);
 void startIfReady();
+bool mqttWorkerStarted();
+bool chokepointWorkerStarted();
 
 void setSensorTelemetry(uint32_t drops, uint32_t depth);
 Stats stats();

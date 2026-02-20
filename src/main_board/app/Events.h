@@ -3,7 +3,6 @@
 
 enum class EventType {
   disarm,
-  arm_night,
   arm_away,
   door_open,
   window_open,
@@ -17,16 +16,11 @@ enum class EventType {
   door_code_bad,
   manual_door_toggle,
   manual_window_toggle,
-  manual_lock_request,
-  manual_unlock_request,
-  entry_timeout,
-  serial_test_enable,
-  serial_test_disable
+  entry_timeout
 };
 
 static const char* toString(EventType t) {
   switch (t) {
-    case EventType::arm_night:   return "arm_night";
     case EventType::arm_away:    return "arm_away";
     case EventType::disarm:      return "disarm";
     case EventType::door_open:   return "door_open";
@@ -41,11 +35,7 @@ static const char* toString(EventType t) {
     case EventType::door_code_bad: return "door_code_bad";
     case EventType::manual_door_toggle: return "manual_door_toggle";
     case EventType::manual_window_toggle: return "manual_window_toggle";
-    case EventType::manual_lock_request: return "manual_lock_request";
-    case EventType::manual_unlock_request: return "manual_unlock_request";
     case EventType::entry_timeout:return "entry_timeout";
-    case EventType::serial_test_enable: return "serial_test_enable";
-    case EventType::serial_test_disable: return "serial_test_disable";
     default:                     return "unknown";
   }
 }

@@ -4,28 +4,21 @@ Use these codes in Serial Monitor to inject events without real sensor activity.
 
 - Baud rate: `115200`
 - Recommended line ending: `Newline`
-- Send `900` first to enable serial test overrides.
-- Send `901` to restore default serial policy.
 
 ## Mode Codes
 
 - `100` -> `disarm`
-- `101` -> `arm_night`
 - `102` -> `arm_away`
 
 ## Command and Control Codes
 
 - `200` -> `manual_door_toggle`
 - `201` -> `manual_window_toggle`
-- `202` -> `manual_lock_request`
-- `203` -> `manual_unlock_request`
 - `204` -> `door_hold_warn_silence`
 - `205` -> `keypad_help_request`
 - `206` -> `door_code_unlock`
 - `207` -> `door_code_bad`
 - `208` -> `entry_timeout`
-- `900` -> enable serial test policy override
-- `901` -> disable serial test policy override
 
 ## Sensor Input Codes
 
@@ -71,7 +64,7 @@ python tools/simulator/serial_test_simulator.py
 Quick scenario example:
 
 ```bash
-python tools/simulator/serial_test_simulator.py 900 101 310 300 +16000 208
+python tools/simulator/serial_test_simulator.py 102 310 300 +16000 208
 ```
 
 ## LINE Preview Test Cases
@@ -80,13 +73,13 @@ python tools/simulator/serial_test_simulator.py 900 101 310 300 +16000 208
   `python tools/simulator/serial_test_simulator.py 205`
   -> `[TRACE] line.message=[HELP] keypad assistance requested ...`
 - Intruder alert:
-  `python tools/simulator/serial_test_simulator.py 101 310 300 +16000 208`
+  `python tools/simulator/serial_test_simulator.py 102 310 300 +16000 208`
   -> `[TRACE] line.message=[ALERT] possible intruder detected ...`
 - Forced-open while locked (any mode):
-  `python tools/simulator/serial_test_simulator.py 202 300`
+  `python tools/simulator/serial_test_simulator.py 300`
   -> `[TRACE] line.message=[ALERT] possible intruder detected | trigger=door_open ...`
 - Generic event:
-  `python tools/simulator/serial_test_simulator.py 101 310`
+  `python tools/simulator/serial_test_simulator.py 102 310`
   -> `[TRACE] line.message=[EVENT] event=motion ...`
 
 For presentation-ready selected cases, see:

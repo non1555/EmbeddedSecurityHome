@@ -4,7 +4,7 @@ No-board serial test simulator for main-board security flow.
 
 Usage:
   python tools/simulator/serial_test_simulator.py
-  python tools/simulator/serial_test_simulator.py 900 101 310 300 208
+  python tools/simulator/serial_test_simulator.py 102 310 300 208
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import sys
 
 
 MODE_DISARM = "disarm"
-MODE_NIGHT = "night"
 MODE_AWAY = "away"
 
 LEVEL_OFF = "off"
@@ -73,19 +72,15 @@ class SimState:
     last_window_event_ms: int = 0
     last_vibration_ms: int = 0
     last_door_event_ms: int = 0
-    serial_override_enabled: bool = False
 
 
 CodeMap = Dict[int, Tuple[str, int, str]]
 
 CODE_MAP: CodeMap = {
     100: ("disarm", SRC_GENERIC, "mode disarm"),
-    101: ("arm_night", SRC_GENERIC, "mode night"),
     102: ("arm_away", SRC_GENERIC, "mode away"),
     200: ("manual_door_toggle", SRC_GENERIC, "manual door toggle"),
     201: ("manual_window_toggle", SRC_GENERIC, "manual window toggle"),
-    202: ("manual_lock_request", SRC_GENERIC, "manual lock all"),
-    203: ("manual_unlock_request", SRC_GENERIC, "manual unlock all"),
     204: ("door_hold_warn_silence", SRC_GENERIC, "silence hold warning"),
     205: ("keypad_help_request", SRC_GENERIC, "help request"),
     206: ("door_code_unlock", SRC_GENERIC, "door code unlock"),
@@ -101,8 +96,6 @@ CODE_MAP: CodeMap = {
     320: ("chokepoint", SRC_US1, "chokepoint us1 door"),
     321: ("chokepoint", SRC_US2, "chokepoint us2 window"),
     322: ("chokepoint", SRC_US3, "chokepoint us3 between-room"),
-    900: ("serial_test_enable", SRC_GENERIC, "enable serial override"),
-    901: ("serial_test_disable", SRC_GENERIC, "disable serial override"),
 }
 
 
@@ -151,7 +144,7 @@ def reset_mode_state(st: SimState, mode: str, now_ms: int) -> None:
     st.last_vibration_ms = 0
     st.last_door_event_ms = 0
     st.keep_window_locked_when_disarmed = False
-    if mode in (MODE_NIGHT, MODE_AWAY):
+    if mode == MODE_AWAY:
         st.door_locked = True
         st.window_locked = True
 
@@ -169,13 +162,11 @@ def normalize_motion_src(src: int) -> int:
 def line_kind_from_result(event_type: str, command: str, score: int) -> str:
     if event_type == "keypad_help_request":
         return "help"
-    if event_type in ("serial_test_enable", "serial_test_disable"):
-        return "status"
     if command == CMD_BUZZER_WARN:
         return "warn"
     if command == CMD_BUZZER_ALERT:
         return "intruder_alert" if score >= 80 else "alert"
-    if event_type in ("disarm", "arm_night", "arm_away"):
+    if event_type in ("disarm", "arm_away"):
         return "command_ack"
     return "event"
 
@@ -189,8 +180,6 @@ def line_message_preview(event_type: str, src: int, command: str, st: SimState) 
             f"[ALERT] possible intruder detected | trigger={event_type} | "
             f"mode={st.mode} | level={st.level}"
         )
-    if event_type in ("serial_test_enable", "serial_test_disable"):
-        return f"[STATUS] reason={event_type} | mode={st.mode} | level={st.level}"
     return (
         f"[EVENT] event={event_type} | src={src} | cmd={command} | "
         f"mode={st.mode} | level={st.level}"
@@ -202,45 +191,11 @@ def handle_event(st: SimState, cfg: SimConfig, event_type: str, src: int, now_ms
     command = CMD_NONE
     notify = ""
 
-    if event_type == "serial_test_enable":
-        st.serial_override_enabled = True
-        notify = "serial test override enabled"
-        return command, notify
-    if event_type == "serial_test_disable":
-        st.serial_override_enabled = False
-        notify = "serial test override disabled"
-        return command, notify
-
     if event_type == "disarm":
         reset_mode_state(st, MODE_DISARM, now_ms)
         return command, notify
-    if event_type == "arm_night":
-        reset_mode_state(st, MODE_NIGHT, now_ms)
-        return command, notify
     if event_type == "arm_away":
         reset_mode_state(st, MODE_AWAY, now_ms)
-        return command, notify
-
-    if event_type == "manual_lock_request":
-        if st.door_open:
-            notify = "manual lock rejected: door is open"
-        elif st.window_open:
-            notify = "manual lock rejected: window is open"
-        else:
-            st.door_locked = True
-            st.window_locked = True
-            st.keep_window_locked_when_disarmed = True
-            notify = "manual lock accepted"
-        return command, notify
-
-    if event_type == "manual_unlock_request":
-        if st.mode != MODE_DISARM:
-            notify = "manual unlock blocked: disarm required"
-        else:
-            st.door_locked = False
-            st.window_locked = False
-            st.keep_window_locked_when_disarmed = False
-            notify = "manual unlock accepted"
         return command, notify
 
     if event_type == "manual_door_toggle":
@@ -310,7 +265,7 @@ def handle_event(st: SimState, cfg: SimConfig, event_type: str, src: int, now_ms
         command = CMD_BUZZER_ALERT
         return command, notify
 
-    armed = st.mode in (MODE_NIGHT, MODE_AWAY)
+    armed = st.mode == MODE_AWAY
 
     if armed and event_type == "door_open":
         if not st.entry_pending:
@@ -396,7 +351,7 @@ def handle_event(st: SimState, cfg: SimConfig, event_type: str, src: int, now_ms
 def print_help() -> None:
     print("No-board serial simulator")
     print("Input a code, '?' for list, '+ms' to advance time, 'exit' to quit")
-    print("Examples: 900 101 310 300 +16000 208")
+    print("Examples: 102 310 300 +16000 208")
     print("")
     for code in sorted(CODE_MAP.keys()):
         event_type, src, desc = CODE_MAP[code]

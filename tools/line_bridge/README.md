@@ -111,6 +111,7 @@ UI Launcher (no terminal):
   - Current project setup: use `main-board` only.
 - Firmware UI also exposes:
   - `FW_CMD_TOKEN` for secure `token|nonce|cmd` command payload
+  - `FW_DOOR_CODE` for keypad unlock password (4 digits)
   - `FW_MQTT_CLIENT_ID` for firmware MQTT client ID
 - Launcher saves your values in `tools/line_bridge/.env`.
   - `platformio.ini` reads `.env` via `tools/pio_env.py` (PlatformIO pre-build script).

@@ -36,7 +36,6 @@ flowchart LR
     in_mqtt_topic{Topic allowed?}
     in_mqtt_kind{MQTT command kind?}
     in_tok_mode_disarm[Input mode_disarm_req]
-    in_tok_mode_night[Input mode_night_req]
     in_tok_mode_away[Input mode_away_req]
     in_tok_lock_door[Input lock_door_req]
     in_tok_unlock_door[Input unlock_door_req]
@@ -116,7 +115,6 @@ flowchart LR
     ev_mode_req{Token is mode request?}
     ev_mode_kind{Mode token?}
     ev_evt_mode_disarm[Event mode_request_disarm]
-    ev_evt_mode_night[Event mode_request_night]
     ev_evt_mode_away[Event mode_request_away]
 
     ev_remote_cmd{Token is remote command?}
@@ -199,7 +197,6 @@ flowchart LR
     md_mode_auth{Mode requester authorized?}
     md_mode_target{Requested mode?}
     md_apply_disarm[Apply disarm and reset score entry correlation]
-    md_apply_night[Apply night and reset score entry correlation]
     md_apply_away[Apply away and reset score entry correlation]
     md_mode_changed{Mode changed vs previous?}
     md_persist_mode[Persist new mode to storage]
@@ -227,7 +224,6 @@ flowchart LR
     md_keypad_action{Keypad action mapping?}
     md_keypad_unlock_door[Convert to unlock_door command]
     md_keypad_mode_disarm[Convert to mode_disarm request]
-    md_keypad_mode_night[Convert to mode_night request]
     md_keypad_mode_away[Convert to mode_away request]
 
     md_is_manual_evt{Event class manual_button?}
@@ -237,7 +233,7 @@ flowchart LR
     md_apply_manual[Accept manual toggle]
 
     md_is_sensor_evt{Event class sensor_event?}
-    md_sensor_armed{Mode is night or away?}
+    md_sensor_armed{Mode is away?}
     md_door_open_armed{Event is door_open while armed?}
     md_entry_guard{No indoor motion in last 30000 ms?}
     md_set_entry_pending[Set entry_pending and start timer]
@@ -260,11 +256,6 @@ flowchart LR
     mc_disarm_evt{Disarm event group?}
     mc_disarm_control[Command set control actuator and ack]
     mc_disarm_observe[Command set observe only no alarm]
-
-    mc_night_evt{Night event group?}
-    mc_night_entry[Command set start entry delay workflow]
-    mc_night_monitor[Command set monitor and score]
-    mc_night_harden[Command set lock harden and alert prep]
 
     mc_away_evt{Away event group?}
     mc_away_monitor[Command set monitor and score]
@@ -394,7 +385,7 @@ flowchart LR
 
   subgraph CASEPATH[Walkthrough Examples Read One Case Left to Right]
     direction TB
-    ex_cases[Case A away door_open -> immediate_alarm -> score100 -> high-risk alert band -> sustained alert buzzer LINE intruder_alert MQTT event<br/>Case B night window_open -> hardened_monitor -> plus40 and correlation -> alert path -> buzzer LINE<br/>Case C disarm remote unlock_door with valid auth -> control_only -> score0 off -> unlock ack<br/>Case D keypad wrong -> bad attempts -> lockout -> reject profile -> reject ack status<br/>Case E heartbeat every 5000ms -> heartbeat event -> minus8 decay -> lower level -> status metrics<br/>Case F boot -> baseline disarm -> restore persisted away if valid else fallback disarm -> state reset -> boot status]
+    ex_cases[Case A away door_open -> immediate_alarm -> score100 -> high-risk alert band -> sustained alert buzzer LINE intruder_alert MQTT event<br/>Case B away window_open -> hardened_monitor -> plus40 and correlation -> alert path -> buzzer LINE<br/>Case C disarm remote unlock_door with valid auth -> control_only -> score0 off -> unlock ack<br/>Case D keypad wrong -> bad attempts -> lockout -> reject profile -> reject ack status<br/>Case E heartbeat every 5000ms -> heartbeat event -> minus8 decay -> lower level -> status metrics<br/>Case F boot -> baseline disarm -> restore persisted away if valid else fallback disarm -> state reset -> boot status]
   end
 
   bt_begin --> bt_default_disarm
@@ -419,7 +410,6 @@ flowchart LR
   in_mqtt_topic -->|yes| in_mqtt_kind
   in_mqtt_topic -->|no| in_none
   in_mqtt_kind -->|mode_disarm| in_tok_mode_disarm
-  in_mqtt_kind -->|mode_night| in_tok_mode_night
   in_mqtt_kind -->|mode_away| in_tok_mode_away
   in_mqtt_kind -->|lock_door| in_tok_lock_door
   in_mqtt_kind -->|unlock_door| in_tok_unlock_door
@@ -502,7 +492,6 @@ flowchart LR
   in_hb_tick -->|no| in_none
 
   in_tok_mode_disarm --> in_token
-  in_tok_mode_night --> in_token
   in_tok_mode_away --> in_token
   in_tok_lock_door --> in_token
   in_tok_unlock_door --> in_token
@@ -544,7 +533,6 @@ flowchart LR
   ev_mode_req -->|yes| ev_mode_kind
   ev_mode_req -->|no| ev_remote_cmd
   ev_mode_kind -->|mode_disarm_req| ev_evt_mode_disarm
-  ev_mode_kind -->|mode_night_req| ev_evt_mode_night
   ev_mode_kind -->|mode_away_req| ev_evt_mode_away
   ev_mode_kind -->|other| ev_drop
 
@@ -628,7 +616,6 @@ flowchart LR
   ev_hb_gate -->|no| ev_drop
 
   ev_evt_mode_disarm --> ev_complete
-  ev_evt_mode_night --> ev_complete
   ev_evt_mode_away --> ev_complete
   ev_evt_lock_door --> ev_complete
   ev_evt_unlock_door --> ev_complete
@@ -673,11 +660,9 @@ flowchart LR
   md_mode_auth -->|yes| md_mode_target
   md_mode_auth -->|no| md_reject
   md_mode_target -->|disarm| md_apply_disarm
-  md_mode_target -->|night| md_apply_night
   md_mode_target -->|away| md_apply_away
   md_mode_target -->|other| md_reject
   md_apply_disarm --> md_mode_changed
-  md_apply_night --> md_mode_changed
   md_apply_away --> md_mode_changed
   md_mode_changed -->|yes| md_persist_mode
   md_mode_changed -->|no| md_accept
@@ -728,12 +713,10 @@ flowchart LR
 
   md_keypad_action -->|unlock_door| md_keypad_unlock_door
   md_keypad_action -->|mode_disarm| md_keypad_mode_disarm
-  md_keypad_action -->|mode_night| md_keypad_mode_night
   md_keypad_action -->|mode_away| md_keypad_mode_away
   md_keypad_action -->|other| md_reject
   md_keypad_unlock_door --> md_accept
   md_keypad_mode_disarm --> md_accept
-  md_keypad_mode_night --> md_accept
   md_keypad_mode_away --> md_accept
 
   md_is_manual_evt -->|yes| md_manual_kind
@@ -770,21 +753,12 @@ flowchart LR
   mc_policy_ok -->|yes| mc_mode
 
   mc_mode -->|disarm| mc_disarm_evt
-  mc_mode -->|night| mc_night_evt
   mc_mode -->|away| mc_away_evt
 
   mc_disarm_evt -->|remote_command or keypad_command or manual_button or mode_request| mc_disarm_control
   mc_disarm_evt -->|sensor_event or system_event| mc_disarm_observe
   mc_disarm_control -->|profile control_only| mc_cmd_frame
   mc_disarm_observe -->|profile observe_only| mc_cmd_frame
-
-  mc_night_evt -->|door_open| mc_night_entry
-  mc_night_evt -->|window_open or tamper or vibration_on| mc_night_harden
-  mc_night_evt -->|motion or ultrasonic or close or heartbeat| mc_night_monitor
-  mc_night_evt -->|remote_command or keypad_command or manual_button or mode_request| mc_night_monitor
-  mc_night_entry -->|profile monitor| mc_cmd_frame
-  mc_night_monitor -->|profile monitor| mc_cmd_frame
-  mc_night_harden -->|profile hardened_monitor| mc_cmd_frame
 
   mc_away_evt -->|door_open or window_open or tamper| mc_away_immediate
   mc_away_evt -->|motion or ultrasonic or vibration_on| mc_away_harden
@@ -808,7 +782,7 @@ flowchart LR
   sc_cmd_profile -->|reject| sc_w_reject
   sc_profile_harden_bonus --> sc_evt_kind
 
-  sc_evt_kind -->|mode_request_disarm or mode_request_night or mode_request_away| sc_w_mode
+  sc_evt_kind -->|mode_request_disarm or mode_request_away| sc_w_mode
   sc_evt_kind -->|remote_lock or remote_unlock or manual_toggle or keypad_action| sc_w_command
   sc_evt_kind -->|door_open| sc_w_door_open
   sc_evt_kind -->|door_close| sc_w_door_close
@@ -960,4 +934,3 @@ flowchart LR
   out_mqtt_status --> out_mqtt_ack
   out_mqtt_ack --> out_mqtt_metrics
   out_mqtt_metrics --> out_end
-

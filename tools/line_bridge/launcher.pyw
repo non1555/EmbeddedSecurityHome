@@ -378,6 +378,7 @@ class LauncherApp:
         default_main_cid = (self.env.get("FW_MQTT_CLIENT_ID", "embedded-security-esp32") or "embedded-security-esp32").strip()
         self.fw_mqtt_client_id_main = StringVar(value=default_main_cid)
         self.fw_cmd_token = StringVar(value=self.env.get("FW_CMD_TOKEN", ""))
+        self.fw_door_code = StringVar(value=self.env.get("FW_DOOR_CODE", ""))
         self.fw_upload_port = StringVar(value=self.env.get("FW_UPLOAD_PORT", ""))
         all_envs, self.fw_env_details = parse_platformio_envs(PLATFORMIO_INI_PATH)
         self.fw_env_options = select_fw_env_options(all_envs)
@@ -655,6 +656,9 @@ class LauncherApp:
         fr += 1
         ttk.Label(firmware_tab, text="FW CMD Token").grid(row=fr, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(firmware_tab, textvariable=self.fw_cmd_token, width=36, show="*").grid(row=fr, column=1, sticky="ew", pady=(6, 0))
+        fr += 1
+        ttk.Label(firmware_tab, text="Door Code (4 digits)").grid(row=fr, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(firmware_tab, textvariable=self.fw_door_code, width=36, show="*").grid(row=fr, column=1, sticky="ew", pady=(6, 0))
         fr += 1
 
         ttk.Separator(firmware_tab).grid(row=fr, column=0, columnspan=2, sticky="ew", pady=(12, 12))
@@ -1982,6 +1986,10 @@ class LauncherApp:
         except Exception:
             messagebox.showerror("Invalid MQTT Port", "MQTT port must be an integer 1..65535")
             return False
+        door_code = self.fw_door_code.get().strip()
+        if door_code and (len(door_code) != 4 or not door_code.isdigit()):
+            messagebox.showerror("Invalid Door Code", "Door code must be exactly 4 digits or empty.")
+            return False
 
         lines = read_env_lines(ENV_PATH)
         if not lines:
@@ -1997,6 +2005,7 @@ class LauncherApp:
         lines = upsert_env_kv(lines, "FW_MQTT_CLIENT_ID", main_cid)
         lines = [ln for ln in lines if not ln.startswith("FW_MQTT_CLIENT_ID_AUTOMATION=")]
         lines = upsert_env_kv(lines, "FW_CMD_TOKEN", self.fw_cmd_token.get().strip())
+        lines = upsert_env_kv(lines, "FW_DOOR_CODE", door_code)
         selected_build_env = normalize_fw_env_name((self.fw_build_env.get() or "").strip())
         if selected_build_env not in self.fw_env_options:
             selected_build_env = self.fw_env_options[0] if self.fw_env_options else DEFAULT_FW_ENV

@@ -62,21 +62,6 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if (e.type == EventType::arm_night) {
-    d.next.mode = Mode::night;
-    d.next.level = AlarmLevel::off;
-    d.next.entry_pending = false;
-    d.next.entry_deadline_ms = 0;
-    d.next.suspicion_score = 0;
-    d.next.last_suspicion_update_ms = e.ts_ms;
-    d.next.last_outdoor_motion_ms = 0;
-    d.next.last_window_event_ms = 0;
-    d.next.last_vibration_ms = 0;
-    d.next.last_door_event_ms = 0;
-    d.next.keep_window_locked_when_disarmed = false;
-    return d;
-  }
-
   if (e.type == EventType::arm_away) {
     d.next.mode = Mode::away;
     d.next.level = AlarmLevel::off;
@@ -103,7 +88,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::door_open) {
+  if (s.mode == Mode::away && e.type == EventType::door_open) {
     // Don't keep extending entry delay / stacking score if the door stays open or chatters.
     if (s.entry_pending) return d;
     if (s.last_indoor_activity_ms != 0 &&
@@ -119,7 +104,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::entry_timeout) {
+  if (s.mode == Mode::away && e.type == EventType::entry_timeout) {
     d.next.entry_pending = false;
     d.next.entry_deadline_ms = 0;
     d.next.suspicion_score = 100;
@@ -128,7 +113,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::window_open) {
+  if (s.mode == Mode::away && e.type == EventType::window_open) {
     d.next.last_window_event_ms = e.ts_ms;
     addScore(d.next, 40);
     if (within(e.ts_ms, s.last_outdoor_motion_ms, cfg.correlation_window_ms)) addScore(d.next, 15);
@@ -138,7 +123,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) &&
+  if (s.mode == Mode::away &&
       (e.type == EventType::motion || e.type == EventType::chokepoint)) {
     const uint8_t motionSrc = normalizeMotionSource(e.src);
     const bool isIndoorActivity =
@@ -159,7 +144,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::vib_spike) {
+  if (s.mode == Mode::away && e.type == EventType::vib_spike) {
     d.next.last_vibration_ms = e.ts_ms;
     addScore(d.next, 22);
     if (within(e.ts_ms, s.last_outdoor_motion_ms, cfg.correlation_window_ms)) addScore(d.next, 12);
@@ -173,7 +158,7 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
-  if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::door_tamper) {
+  if (s.mode == Mode::away && e.type == EventType::door_tamper) {
     addScore(d.next, 65);
     if (within(e.ts_ms, s.last_outdoor_motion_ms, cfg.correlation_window_ms)) addScore(d.next, 15);
     d.next.level = levelFromScore(d.next.suspicion_score);

@@ -17,13 +17,13 @@ flowchart TB
   rej[Reject and publish<br/>ack or status reason]
 
   t{Input class?}
-  mode[Apply mode reset<br/>disarm night away]
+  mode[Apply mode reset<br/>disarm away]
   ctrl[Apply command safety gates<br/>lock unlock fault checks]
 
   fdoor{door_open while<br/>door_locked=true?}
   forced[Force immediate alert<br/>score 100 buzzer_alert]
 
-  armed{Armed path<br/>night or away?}
+  armed{Armed path<br/>away?}
   entry{door_open armed and<br/>unlocked gate passed?}
   pend[Set entry pending<br/>entry delay and buzzer_warn]
   timeout{Entry timeout reached?}

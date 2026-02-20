@@ -86,7 +86,6 @@ INTRUDER_EVENT_TRIGGERS = {
 MODE_LABELS = {
     "startup_safe": "Startup Safe",
     "disarm": "Disarmed",
-    "night": "Night Guard",
     "away": "Away Guard",
 }
 
@@ -105,7 +104,6 @@ EVENT_LABELS = {
     "chokepoint": "Chokepoint movement detected",
     "entry_timeout": "Entry delay timeout",
     "keypad_help_request": "Help requested from keypad",
-    "arm_night": "Switched to night guard",
     "arm_away": "Switched to away guard",
     "disarm": "System disarmed",
 }

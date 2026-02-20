@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum class Mode { startup_safe, disarm, away, night };
+enum class Mode { startup_safe, disarm, away };
 enum class AlarmLevel { off, warn, alert };
 
 static inline const char* toString(Mode m) {
@@ -9,7 +9,6 @@ static inline const char* toString(Mode m) {
     case Mode::startup_safe: return "startup_safe";
     case Mode::disarm: return "disarm";
     case Mode::away:   return "away";
-    case Mode::night:  return "night";
     default:           return "unknown";
   }
 }

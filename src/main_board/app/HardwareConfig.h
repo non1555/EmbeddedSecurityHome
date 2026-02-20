@@ -62,8 +62,7 @@ constexpr char KP_MAP[16] = {
 // ============================
 // Home Automation
 // ============================
-// Main board no longer owns home-automation IO.
-// Use src/auto_board/hardware/AutoHardwareConfig.h on the automation board instead.
+// Main board no longer owns home-automation IO in active single-board runtime.
 constexpr uint8_t PIN_STATUS_LED = PIN_UNUSED;
 constexpr uint8_t PIN_RELAY_LIGHT = PIN_UNUSED;
 

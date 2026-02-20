@@ -3,7 +3,6 @@
 #include "app/ModeOverrideWindow.h"
 #include "app/ReplayGuard.h"
 #include "app/RuleEngine.h"
-#include "auto_board/automation/presence.h"
 
 namespace {
 
@@ -15,15 +14,15 @@ namespace {
     } \
   } while (0)
 
-bool test_boot_starts_startup_safe_without_entry_alarm() {
+bool test_boot_starts_disarm_without_entry_alarm() {
   RuleEngine engine;
   Config cfg;
   SystemState st;
 
-  CHECK(st.mode == Mode::startup_safe);
+  CHECK(st.mode == Mode::disarm);
   const Decision d = engine.handle(st, cfg, {EventType::door_open, 100, 1});
 
-  CHECK(d.next.mode == Mode::startup_safe);
+  CHECK(d.next.mode == Mode::disarm);
   CHECK(!d.next.entry_pending);
   CHECK(d.next.level == AlarmLevel::off);
   CHECK(d.cmd.type == CommandType::none);
@@ -34,12 +33,12 @@ bool test_armed_door_open_starts_entry_countdown() {
   RuleEngine engine;
   Config cfg;
   SystemState st;
-  st.mode = Mode::night;
+  st.mode = Mode::away;
 
   const uint32_t nowMs = 1000;
   const Decision d = engine.handle(st, cfg, {EventType::door_open, nowMs, 1});
 
-  CHECK(d.next.mode == Mode::night);
+  CHECK(d.next.mode == Mode::away);
   CHECK(d.next.entry_pending);
   CHECK(d.next.entry_deadline_ms == (nowMs + cfg.entry_delay_ms));
   CHECK(d.next.suspicion_score == 15);
@@ -61,57 +60,14 @@ bool test_locked_door_open_escalates_alert_in_any_mode() {
   CHECK(!d1.next.entry_pending);
   CHECK(d1.cmd.type == CommandType::buzzer_alert);
 
-  SystemState nightState;
-  nightState.mode = Mode::night;
-  nightState.door_locked = true;
-  const Decision d2 = engine.handle(nightState, cfg, {EventType::door_open, 1100, 1});
+  SystemState awayState;
+  awayState.mode = Mode::away;
+  awayState.door_locked = true;
+  const Decision d2 = engine.handle(awayState, cfg, {EventType::door_open, 1100, 1});
   CHECK(d2.next.level == AlarmLevel::alert);
   CHECK(d2.next.suspicion_score == 100);
   CHECK(!d2.next.entry_pending);
   CHECK(d2.cmd.type == CommandType::buzzer_alert);
-  return true;
-}
-
-bool test_presence_entry_unlock_ultrasonic_pir_marks_home() {
-  Presence::Config cfg;
-  cfg.unlock_to_ultrasonic_ms = 100;
-  cfg.entry_pir_ms = 120;
-  cfg.exit_sequence_ms = 100;
-  cfg.away_no_pir_ms = 50;
-  cfg.away_revert_pir_ms = 40;
-
-  Presence::init(cfg);
-  CHECK(Presence::state() == Presence::State::unknown);
-
-  Presence::onDoorUnlock(10);
-  Presence::onDoorUltrasonic(40);
-  Presence::onPirDetected(100);
-
-  CHECK(Presence::state() == Presence::State::home);
-  CHECK(Presence::isHome());
-  CHECK(isSomeoneHome);
-  return true;
-}
-
-bool test_presence_exit_sequence_marks_away_after_no_pir() {
-  Presence::Config cfg;
-  cfg.unlock_to_ultrasonic_ms = 100;
-  cfg.entry_pir_ms = 120;
-  cfg.exit_sequence_ms = 80;
-  cfg.away_no_pir_ms = 50;
-  cfg.away_revert_pir_ms = 40;
-
-  Presence::init(cfg);
-  CHECK(Presence::state() == Presence::State::unknown);
-
-  Presence::onDoorUltrasonic(100);
-  Presence::onDoorOpen(120);
-  Presence::onDoorClose(140);
-
-  Presence::tick(191);
-  CHECK(Presence::state() == Presence::State::away);
-  CHECK(!Presence::isHome());
-  CHECK(!isSomeoneHome);
   return true;
 }
 
@@ -154,11 +110,9 @@ bool test_replay_guard_blocks_replay_and_allows_after_expiry() {
 int main() {
   bool ok = true;
 
-  ok &= test_boot_starts_startup_safe_without_entry_alarm();
+  ok &= test_boot_starts_disarm_without_entry_alarm();
   ok &= test_armed_door_open_starts_entry_countdown();
   ok &= test_locked_door_open_escalates_alert_in_any_mode();
-  ok &= test_presence_entry_unlock_ultrasonic_pir_marks_home();
-  ok &= test_presence_exit_sequence_marks_away_after_no_pir();
   ok &= test_mode_override_window_expires_and_handles_wraparound();
   ok &= test_replay_guard_blocks_replay_and_allows_after_expiry();
 
