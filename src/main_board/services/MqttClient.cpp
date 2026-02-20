@@ -24,28 +24,11 @@ static const char* wlStatusText(wl_status_t st) {
   }
 }
 
-static const char* modeText(Mode mode) {
-  switch (mode) {
-    case Mode::startup_safe: return "startup_safe";
-    case Mode::disarm: return "disarm";
-    case Mode::away:   return "away";
-    case Mode::night:  return "night";
-    default:           return "unknown";
-  }
-}
-
-static bool someoneHomeFromMode(Mode mode) {
-  // Main board no longer runs local presence automation.
-  // Publish a stable occupancy hint for the automation board.
-  return mode != Mode::away;
-}
-
 static const char* levelText(AlarmLevel lv) {
   switch (lv) {
     case AlarmLevel::off:      return "off";
     case AlarmLevel::warn:     return "warn";
     case AlarmLevel::alert:    return "alert";
-    case AlarmLevel::critical: return "critical";
     default:                   return "unknown";
   }
 }
@@ -153,11 +136,7 @@ bool MqttClient::publishEvent(const Event& e, const SystemState& st, const Comma
   payload += String(e.src);
   payload += ",\"cmd\":\"";
   payload += toString(cmd.type);
-  payload += "\",\"mode\":\"";
-  payload += modeText(st.mode);
-  payload += "\",\"isSomeoneHome\":";
-  payload += someoneHomeFromMode(st.mode) ? "true" : "false";
-  payload += ",\"level\":\"";
+  payload += "\",\"level\":\"";
   payload += levelText(st.level);
   payload += "\",\"door_locked\":";
   payload += st.door_locked ? "true" : "false";
@@ -179,11 +158,7 @@ bool MqttClient::publishStatus(const SystemState& st, const char* reason) {
 
   String payload = "{\"reason\":\"";
   payload += (reason ? reason : "unknown");
-  payload += "\",\"mode\":\"";
-  payload += modeText(st.mode);
-  payload += "\",\"isSomeoneHome\":";
-  payload += someoneHomeFromMode(st.mode) ? "true" : "false";
-  payload += ",\"level\":\"";
+  payload += "\",\"level\":\"";
   payload += levelText(st.level);
   payload += "\",\"door_locked\":";
   payload += st.door_locked ? "true" : "false";

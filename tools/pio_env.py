@@ -42,15 +42,7 @@ door_code = cfg.get("FW_DOOR_CODE", "")
 
 base_client_id = cfg.get("FW_MQTT_CLIENT_ID", "") or "embedded-security-esp32"
 main_client_id = cfg.get("FW_MQTT_CLIENT_ID_MAIN", "") or base_client_id
-auto_client_id = cfg.get("FW_MQTT_CLIENT_ID_AUTOMATION", "") or f"{base_client_id}-auto"
-if auto_client_id == main_client_id:
-    auto_client_id = f"{auto_client_id}-auto"
-
-pioenv = str(env.get("PIOENV", "")).strip()
-if pioenv in ("automation-board", "automation"):
-    mqtt_client_id = auto_client_id
-else:
-    mqtt_client_id = main_client_id
+mqtt_client_id = main_client_id
 
 env.Append(
     CPPDEFINES=[

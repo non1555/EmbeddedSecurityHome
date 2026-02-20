@@ -1,608 +1,963 @@
-﻿graph TD
-
-subgraph EXT_INPUTS[External Inputs]
-  IN_LINE[LINE User Text Or Postback]
-  IN_HTTP_CMD[Bridge HTTP Cmd Endpoint]
-  IN_MQTT_CMD[MQTT Main Cmd Topic]
-  IN_KEYPAD[Keypad Key Press]
-  IN_BTN_DOOR[Manual Door Button]
-  IN_BTN_WIN[Manual Window Button]
-  IN_REED_DOOR[Door Reed Sensor]
-  IN_REED_WIN[Window Reed Sensor]
-  IN_PIR1[PIR1]
-  IN_PIR2[PIR2]
-  IN_PIR3[PIR3 Outdoor]
-  IN_VIB[Vibration Sensor]
-  IN_US1[Ultrasonic Chokepoint 1]
-  IN_US2[Ultrasonic Chokepoint 2]
-  IN_US3[Ultrasonic Chokepoint 3]
-  IN_SERIAL[Serial Synthetic Char]
-  IN_MAIN_STATUS[MQTT Main Status Topic]
-  IN_LUX[BH1750 Lux Sample]
-  IN_TEMP[DHT Temp Hum Sample]
-
-  IN_FROM_BRIDGE_MAIN_CMD[[From BRIDGE.Publish Cmd To MQTT]]
-  IN_FROM_OUT_MAIN_STATUS[[From SYSTEM_OUTPUTS.Main Status MQTT]]
-  IN_TO_BRIDGE_WEBHOOK[[To BRIDGE.Webhook Handler]]
-  IN_TO_BRIDGE_HTTP[[To BRIDGE.HTTP Cmd Handler]]
-  IN_TO_MAIN_REMOTE[[To MAIN_BOARD.Remote Command Poll]]
-  IN_TO_MAIN_KEYPAD[[To MAIN_BOARD.Keypad Poll]]
-  IN_TO_MAIN_SENSOR[[To MAIN_BOARD.Sensor Manual Serial Poll]]
-  IN_TO_AUTO_STATUS[[To AUTO_BOARD.Main Status Rx]]
-end
-
-subgraph BRIDGE[LINE Bridge]
-  B_FROM_EXT_WEBHOOK[[From EXT_INPUTS.LINE User Text]]
-  B_FROM_EXT_HTTP[[From EXT_INPUTS.Bridge HTTP Cmd Endpoint]]
-  B_FROM_OUT_MQTT[[From SYSTEM_OUTPUTS.Main Auto MQTT Topics]]
-
-  B_WEBHOOK[Webhook Handler]
-  B_HTTP[HTTP Cmd Handler]
-  B_SIG{LINE Signature Valid}
-  B_CMD_SUP{Command Supported}
-  B_CMD_AUTH{Mutating Command Token Ready}
-  B_DEBOUNCE{Debounce Pass}
-  B_PUB[Publish Cmd to MQTT]
-  B_PUB_OK{MQTT Publish OK}
-  B_REPLY_OK[Reply Flex Home]
-  B_REPLY_ERR[Reply Reject]
-  B_HEALTH[Health Endpoint]
-  B_MQTT_RX[MQTT On Message]
-  B_RX_TOPIC{Topic Branch}
-  B_RX_STATUS[Update Status Snapshot]
-  B_RX_EVENT[Update Event Snapshot]
-  B_RX_ACK[Parse Compact Lock Detail]
-  B_RX_MET[Throttle Metrics Push]
-  B_PUSH[Push LINE Message]
-
-  B_TO_EXT_MAIN_CMD[[To EXT_INPUTS.MQTT Main Cmd Topic]]
-  B_TO_OUT_LINE[[To SYSTEM_OUTPUTS.LINE Message Out]]
-end
-
-subgraph MAIN_BOARD[Main Board Firmware]
-
-  subgraph MB_LOOP[Main Loop Tick Pipeline]
-    MB_FROM_EXT_REMOTE[[From EXT_INPUTS.MQTT Main Cmd Topic]]
-    MB_FROM_EXT_KEYPAD[[From EXT_INPUTS.Keypad Press]]
-    MB_FROM_EXT_SENSOR[[From EXT_INPUTS.Sensor Manual Serial Inputs]]
-
-    MB_TICK[SecurityOrchestrator Tick]
-    MB_ACT_UPDATE[Update Buzzer and Servo Waveform]
-    MB_SESSION_AUTO{Door Lock Transition Starts Session}
-    MB_HEALTH[Update Sensor Health]
-    MB_SESSION[Update Door Unlock Session]
-    MB_LOCKOUT_EXPIRE{Keypad Lockout Expired}
-    MB_OLED[Update OLED Status]
-    MB_MQTT_UPD[MQTT Bus Update]
-    MB_HEARTBEAT{Status Heartbeat Due}
-    MB_STATUS_PERIODIC[Publish Periodic Status]
-    MB_REMOTE_POLL{MQTT Command Available}
-    MB_KEYPAD_POLL{Keypad Event Available}
-    MB_TIMEOUT_POLL{Entry Timeout Event}
-    MB_SENSOR_POLL{Sensor Manual Serial Event Available}
+﻿%%{init: {'theme':'base','flowchart':{'htmlLabels':true,'curve':'step','nodeSpacing':36,'rankSpacing':54}} }%%
+flowchart LR
+  subgraph BOOT[Boot and Restore]
+    direction TB
+    bt_begin([Boot start])
+    bt_default_disarm[Set baseline mode disarm]
+    bt_pref_ready{Preferences storage ready?}
+    bt_mode_key{Persisted mode key exists?}
+    bt_mode_valid{Persisted mode value valid?}
+    bt_restore_mode[Restore mode from persisted value]
+    bt_reset_runtime[Reset level off score 0 entry pending false]
+    bt_fallback_disarm[Fallback disarm and emit warning]
+    bt_nonce_warn[Emit nonce persistence warning]
+    bt_boot_done([Boot baseline ready])
   end
 
-  subgraph MB_REMOTE[Remote Command Branch]
-    MB_REMOTE_PARSE[Parse Authorized Remote Command]
-    MB_REMOTE_AUTH_OK{Auth Parse OK}
-    MB_REMOTE_NONCE_OK{Nonce Replay Monotonic OK}
-    MB_REMOTE_CMD[Normalized Remote Command]
-    MB_RC_STATUS{Cmd Status}
-    MB_RC_BUZZ_WARN{Cmd Buzz Warn}
-    MB_RC_ALARM{Cmd Alarm}
-    MB_RC_SILENCE{Cmd Silence}
-    MB_RC_DISARM{Cmd Disarm}
-    MB_RC_ARM_NIGHT{Cmd Arm Night}
-    MB_RC_ARM_AWAY{Cmd Arm Away}
-    MB_RC_LOCK_DOOR{Cmd Lock Door}
-    MB_RC_LOCK_WIN{Cmd Lock Window}
-    MB_RC_LOCK_ALL{Cmd Lock All}
-    MB_RC_UNLOCK_DOOR{Cmd Unlock Door}
-    MB_RC_UNLOCK_WIN{Cmd Unlock Window}
-    MB_RC_UNLOCK_ALL{Cmd Unlock All}
-    MB_RC_UNKNOWN[Unsupported Remote Command]
+  subgraph INPUT[Input]
+    direction TB
+    in_tick[Tick 50 ms]
+    in_mqtt_raw[MQTT payload raw]
+    in_keypad_raw[Keypad scan raw]
+    in_btn_door_raw[Door button raw]
+    in_btn_window_raw[Window button raw]
+    in_reed_door_raw[Door reed raw]
+    in_reed_window_raw[Window reed raw]
+    in_pir_a_raw[PIR zone A raw]
+    in_pir_b_raw[PIR zone B raw]
+    in_pir_out_raw[PIR outdoor raw]
+    in_vib_raw[Vibration raw]
+    in_us_door_raw[Ultrasonic door raw]
+    in_us_window_raw[Ultrasonic window raw]
+    in_us_between_raw[Ultrasonic between room raw]
 
-    MB_RC_LOCK_DOOR_C{Door Closed}
-    MB_RC_LOCK_WIN_C{Window Closed}
-    MB_RC_LOCK_ALL_C1{Door Closed}
-    MB_RC_LOCK_ALL_C2{Window Closed}
-    MB_RC_UNLOCK_MODE{Mode Is Disarm}
-    MB_RC_UNLOCK_FAULT{Sensor Fault Allows Unlock}
+    in_mqtt_rx{MQTT message received?}
+    in_mqtt_json{MQTT JSON valid?}
+    in_mqtt_topic{Topic allowed?}
+    in_mqtt_kind{MQTT command kind?}
+    in_tok_mode_disarm[Input mode_disarm_req]
+    in_tok_mode_night[Input mode_night_req]
+    in_tok_mode_away[Input mode_away_req]
+    in_tok_lock_door[Input lock_door_req]
+    in_tok_unlock_door[Input unlock_door_req]
+    in_tok_lock_window[Input lock_window_req]
+    in_tok_unlock_window[Input unlock_window_req]
+    in_tok_lock_all[Input lock_all_req]
+    in_tok_unlock_all[Input unlock_all_req]
+    in_tok_query_status[Input query_status_req]
+    in_tok_unknown_cmd[Input unknown_cmd_req]
 
-    MB_ACK_OK[Publish Ack OK]
-    MB_ACK_FAIL[Publish Ack Fail]
-    MB_REMOTE_STATUS[Publish Remote Status Reason]
+    in_keypad_press{Any keypad key pressed?}
+    in_keypad_complete{Code submit complete?}
+    in_tok_keypad_code[Input keypad_code]
+
+    in_btn_door_edge{Door button rising edge?}
+    in_tok_btn_door[Input manual_door_button]
+    in_btn_window_edge{Window button rising edge?}
+    in_tok_btn_window[Input manual_window_button]
+
+    in_door_changed{Door state changed?}
+    in_door_open_now{Door now open?}
+    in_tok_door_open[Input door_open]
+    in_tok_door_close[Input door_close]
+
+    in_window_changed{Window state changed?}
+    in_window_open_now{Window now open?}
+    in_tok_window_open[Input window_open]
+    in_tok_window_close[Input window_close]
+
+    in_pir_a_changed{PIR A changed?}
+    in_pir_a_rising{PIR A rising edge?}
+    in_tok_pir_a_on[Input motion_zone_a_on]
+    in_tok_pir_a_off[Input motion_zone_a_off]
+
+    in_pir_b_changed{PIR B changed?}
+    in_pir_b_rising{PIR B rising edge?}
+    in_tok_pir_b_on[Input motion_zone_b_on]
+    in_tok_pir_b_off[Input motion_zone_b_off]
+
+    in_pir_out_changed{PIR outdoor changed?}
+    in_pir_out_rising{PIR outdoor rising edge?}
+    in_tok_pir_out_on[Input motion_outdoor_on]
+    in_tok_pir_out_off[Input motion_outdoor_off]
+
+    in_vib_changed{Vibration state changed?}
+    in_vib_high{Vibration above threshold?}
+    in_tok_vib_on[Input vibration_on]
+    in_tok_vib_off[Input vibration_off]
+
+    in_us_door_changed{US door state changed?}
+    in_us_door_near{US door near threshold?}
+    in_tok_us_door_near[Input us_door_near]
+    in_tok_us_door_far[Input us_door_far]
+
+    in_us_window_changed{US window state changed?}
+    in_us_window_near{US window near threshold?}
+    in_tok_us_window_near[Input us_window_near]
+    in_tok_us_window_far[Input us_window_far]
+
+    in_us_between_changed{US between state changed?}
+    in_us_between_near{US between near threshold?}
+    in_tok_us_between_near[Input us_between_near]
+    in_tok_us_between_far[Input us_between_far]
+
+    in_hb_tick{Tick modulo 5000 ms == 0?}
+    in_tok_hb[Input heartbeat_tick]
+
+    in_none[Input none]
+    in_token[(input_token)]
   end
 
-  subgraph MB_KEYPAD[Keypad Branch]
-    MB_KP_EVENT[Keypad Event]
-    MB_KP_SILENCE{Door Hold Warn Silence Event}
-    MB_KP_BAD{Bad Door Code Event}
-    MB_KP_UNLOCK{Unlock Door Code Event}
-    MB_KP_MODE{Keypad Mode Event}
-    MB_KP_LOCKOUT{Keypad Lockout Active}
-    MB_KP_BAD_INC[Increment Bad Attempt Counter]
-    MB_KP_BAD_LIMIT{Bad Attempt Limit Reached}
-    MB_KP_LOCKOUT_SET[Set Keypad Lockout]
-    MB_KP_UNLOCK_FAULT{Sensor Fault Blocks Unlock}
-    MB_KP_UNLOCK_DISARM[Force Disarm if Needed]
-    MB_KP_UNLOCK_ACT[Unlock Door Lock Window Start Session]
-    MB_KP_BLOCK[Block Unsupported Keypad Command]
+  subgraph EVENT[Event]
+    direction TB
+    ev_read[Read input_token]
+    ev_none{Token is none?}
+
+    ev_mode_req{Token is mode request?}
+    ev_mode_kind{Mode token?}
+    ev_evt_mode_disarm[Event mode_request_disarm]
+    ev_evt_mode_night[Event mode_request_night]
+    ev_evt_mode_away[Event mode_request_away]
+
+    ev_remote_cmd{Token is remote command?}
+    ev_cmd_kind{Remote command token?}
+    ev_evt_lock_door[Event remote_lock_door]
+    ev_evt_unlock_door[Event remote_unlock_door]
+    ev_evt_lock_window[Event remote_lock_window]
+    ev_evt_unlock_window[Event remote_unlock_window]
+    ev_evt_lock_all[Event remote_lock_all]
+    ev_evt_unlock_all[Event remote_unlock_all]
+    ev_evt_query_status[Event remote_query_status]
+    ev_evt_unknown_cmd[Event remote_unknown_cmd]
+
+    ev_keypad{Token is keypad_code?}
+    ev_keypad_len{Keypad length >= 4?}
+    ev_evt_keypad[Event keypad_command]
+
+    ev_manual_btn{Token is manual button?}
+    ev_manual_kind{Manual token kind?}
+    ev_evt_manual_door[Event manual_door_toggle]
+    ev_evt_manual_window[Event manual_window_toggle]
+
+    ev_door_evt{Token is door reed?}
+    ev_door_open_evt{Door token open?}
+    ev_door_open_gate{Door open debounce >= 80 ms?}
+    ev_door_close_gate{Door close debounce >= 80 ms?}
+    ev_evt_door_open[Event door_open]
+    ev_evt_door_close[Event door_close]
+
+    ev_window_evt{Token is window reed?}
+    ev_window_open_evt{Window token open?}
+    ev_window_open_gate{Window open debounce >= 80 ms?}
+    ev_window_close_gate{Window close debounce >= 80 ms?}
+    ev_evt_window_open[Event window_open]
+    ev_evt_window_close[Event window_close]
+
+    ev_pir_evt{Token is PIR event?}
+    ev_pir_kind{PIR token kind?}
+    ev_pir_a_on_gate{PIR A ON cooldown >= 1500 ms?}
+    ev_pir_b_on_gate{PIR B ON cooldown >= 1500 ms?}
+    ev_pir_out_on_gate{PIR OUT ON cooldown >= 1500 ms?}
+    ev_evt_pir_a_on[Event motion_zone_a_on]
+    ev_evt_pir_a_off[Event motion_zone_a_off]
+    ev_evt_pir_b_on[Event motion_zone_b_on]
+    ev_evt_pir_b_off[Event motion_zone_b_off]
+    ev_evt_pir_out_on[Event motion_outdoor_on]
+    ev_evt_pir_out_off[Event motion_outdoor_off]
+
+    ev_vib_evt{Token is vibration event?}
+    ev_vib_on_gate{Vibration ON cooldown >= 700 ms?}
+    ev_evt_vib_on[Event vibration_on]
+    ev_evt_vib_off[Event vibration_off]
+
+    ev_us_evt{Token is ultrasonic event?}
+    ev_us_kind{US token kind?}
+    ev_us_door_gate{US door NEAR sample 200 ms and cooldown >= 1500 ms?}
+    ev_us_window_gate{US window NEAR sample 200 ms and cooldown >= 1500 ms?}
+    ev_us_between_gate{US between NEAR sample 200 ms and cooldown >= 1500 ms?}
+    ev_evt_us_door_near[Event us_door_near]
+    ev_evt_us_door_far[Event us_door_far]
+    ev_evt_us_window_near[Event us_window_near]
+    ev_evt_us_window_far[Event us_window_far]
+    ev_evt_us_between_near[Event us_between_near]
+    ev_evt_us_between_far[Event us_between_far]
+
+    ev_hb_evt{Token is heartbeat_tick?}
+    ev_hb_gate{Heartbeat gate pass?}
+    ev_evt_hb[Event heartbeat]
+
+    ev_drop[No runtime event]
+    ev_complete{Event payload complete?}
+    ev_event[(runtime_event)]
   end
 
-  subgraph MB_SERIAL[Serial Policy Gate]
-    MB_SER_EVENT[Serial Synthetic Event]
-    MB_SER_MODE{Serial Mode Allowed}
-    MB_SER_MAN{Serial Manual Allowed}
-    MB_SER_SEN{Serial Sensor Allowed}
-    MB_SER_BLOCK[Publish Serial Blocked Status]
+  subgraph MODEPOLICY[Mode and Policy]
+    direction TB
+    md_read[Read runtime_event]
+
+    md_is_mode_evt{Event class mode_request?}
+    md_mode_auth{Mode requester authorized?}
+    md_mode_target{Requested mode?}
+    md_apply_disarm[Apply disarm and reset score entry correlation]
+    md_apply_night[Apply night and reset score entry correlation]
+    md_apply_away[Apply away and reset score entry correlation]
+    md_mode_changed{Mode changed vs previous?}
+    md_persist_mode[Persist new mode to storage]
+
+    md_is_remote_evt{Event class remote_command?}
+    md_token_ok{Remote token valid?}
+    md_nonce_ok{Nonce fresh and monotonic?}
+    md_mutating{Command mutating state?}
+    md_nonce_store_ok{Nonce storage ready or non-strict mode?}
+    md_remote_cmd_kind{Remote command kind?}
+    md_unlock_mode_gate{Unlock allowed only in disarm?}
+    md_unlock_fault_gate{Sensor fault fail-closed active?}
+    md_lock_target{Lock target?}
+    md_lock_door_open{Door currently open?}
+    md_lock_window_open{Window currently open?}
+    md_lock_all_open{Door or window currently open?}
+    md_apply_remote[Accept remote command]
+
+    md_is_keypad_evt{Event class keypad_command?}
+    md_keypad_lockout{Keypad lockout active?}
+    md_keypad_valid{Keypad code valid?}
+    md_bad_attempt[Increase bad-attempt counter]
+    md_lockout_limit{Bad attempts >= limit?}
+    md_start_lockout[Start keypad lockout timer]
+    md_keypad_action{Keypad action mapping?}
+    md_keypad_unlock_door[Convert to unlock_door command]
+    md_keypad_mode_disarm[Convert to mode_disarm request]
+    md_keypad_mode_night[Convert to mode_night request]
+    md_keypad_mode_away[Convert to mode_away request]
+
+    md_is_manual_evt{Event class manual_button?}
+    md_manual_kind{Manual button kind?}
+    md_manual_mode_gate{Manual unlock allowed only in disarm?}
+    md_manual_fault_gate{Manual blocked by fail-closed fault?}
+    md_apply_manual[Accept manual toggle]
+
+    md_is_sensor_evt{Event class sensor_event?}
+    md_sensor_armed{Mode is night or away?}
+    md_door_open_armed{Event is door_open while armed?}
+    md_entry_guard{No indoor motion in last 30000 ms?}
+    md_set_entry_pending[Set entry_pending and start timer]
+    md_accept_sensor[Accept sensor event]
+
+    md_is_system_evt{Event class system_event?}
+    md_accept_system[Accept heartbeat or system event]
+
+    md_accept[Policy accepted]
+    md_reject[Policy rejected with reason]
+    md_final[(policy_checked_event)]
   end
 
-  subgraph MB_MANUAL[Manual Actuator Branch]
-    MB_MAN_EVENT[Manual Event]
-    MB_MAN_DOOR_TOG{Manual Door Toggle}
-    MB_MAN_WIN_TOG{Manual Window Toggle}
-    MB_MAN_LOCK_REQ{Manual Lock Request}
-    MB_MAN_UNLOCK_REQ{Manual Unlock Request}
+  subgraph MODECMD[Mode to Risk Bridge]
+    direction TB
+    mc_read[Read policy_checked_event]
+    mc_policy_ok{Policy accepted?}
+    mc_mode{Active mode?}
 
-    MB_MAN_UNLOCK_MODE{Mode Is Disarm}
-    MB_MAN_UNLOCK_FAULT{Sensor Fault Allows Unlock}
-    MB_MAN_DOOR_CLOSED{Door Closed For Lock}
-    MB_MAN_WIN_CLOSED{Window Closed For Lock}
+    mc_disarm_evt{Disarm event group?}
+    mc_disarm_control[Command set control actuator and ack]
+    mc_disarm_observe[Command set observe only no alarm]
 
-    MB_MAN_ACT[Apply Manual Servo Changes]
-    MB_MAN_NOTIFY[Manual Notify and Status Event]
+    mc_night_evt{Night event group?}
+    mc_night_entry[Command set start entry delay workflow]
+    mc_night_monitor[Command set monitor and score]
+    mc_night_harden[Command set lock harden and alert prep]
+
+    mc_away_evt{Away event group?}
+    mc_away_monitor[Command set monitor and score]
+    mc_away_harden[Command set harden lock and prealarm]
+    mc_away_immediate[Command set immediate alarm workflow]
+
+    mc_reject[Command set reject and publish reason]
+    mc_cmd_frame[(mode_command_event)]
   end
 
-  subgraph MB_RULE[Rule Engine Decision]
-    MB_RULE_IN[Event To Rule Engine]
-    MB_RULE_DECAY[Apply Suspicion Decay]
+  subgraph SCORE[Risk Score]
+    direction TB
+    sc_read[Read mode_command_event]
+    sc_event_accepted{Policy accepted?}
+    sc_cmd_profile{Command profile from mode?}
+    sc_profile_harden_bonus[Profile hardened plus 6 baseline]
+    sc_decay[Cycle decay -8]
+    sc_evt_kind{Event kind?}
 
-    MB_RULE_DISARM{Event Disarm}
-    MB_RULE_ARM_NIGHT{Event Arm Night}
-    MB_RULE_ARM_AWAY{Event Arm Away}
-    MB_RULE_DOOR_OPEN{Armed Door Open}
-    MB_RULE_ENTRY_TO{Armed Entry Timeout}
-    MB_RULE_WIN_OPEN{Armed Window Open}
-    MB_RULE_MOTION{Armed Motion Or Chokepoint}
-    MB_RULE_VIB{Armed Vibration}
-    MB_RULE_TAMP{Armed Door Tamper}
+    sc_w_mode[Mode change reset score to 0]
+    sc_w_command[Command accepted delta 0]
+    sc_w_door_open[door_open armed plus 15]
+    sc_w_door_close[door_close minus 5]
+    sc_w_window_open[window_open armed plus 40]
+    sc_w_window_close[window_close minus 4]
+    sc_w_pir_a_on[motion_zone_a_on plus 18]
+    sc_w_pir_b_on[motion_zone_b_on plus 14]
+    sc_w_pir_out_on[motion_outdoor_on plus 10]
+    sc_w_pir_off[motion_off events minus 2]
+    sc_w_vib_on[vibration_on plus 22]
+    sc_w_vib_off[vibration_off minus 2]
+    sc_w_us_door_near[us_door_near plus 16]
+    sc_w_us_window_near[us_window_near plus 16]
+    sc_w_us_between_near[us_between_near plus 12]
+    sc_w_us_far[us_far events minus 2]
+    sc_w_tamper[tamper plus 65]
+    sc_w_hb[heartbeat minus 8]
+    sc_w_reject[Rejected event delta 0]
+    sc_w_timeout[entry_timeout force score 100]
 
-    MB_RULE_SCORE[Update Suspicion Score Correlation]
-    MB_RULE_LEVEL[Derive Alarm Level]
-    MB_RULE_CMD[Derive Command Type]
-    MB_RULE_STATE[Write Next System State]
+    sc_corr_1{door_open and motion_zone_a_on within 20000 ms?}
+    sc_corr_add_1[Add correlation plus 12]
+    sc_corr_2{window_open and vibration_on within 20000 ms?}
+    sc_corr_add_2[Add correlation plus 18]
+    sc_corr_3{motion_outdoor_on and us_door_near within 20000 ms?}
+    sc_corr_add_3[Add correlation plus 10]
+    sc_corr_4{Three distinct sensor families within 20000 ms?}
+    sc_corr_add_4[Add correlation plus 15]
+
+    sc_clamp[Clamp score to range 0 to 100]
+    sc_lv80{Score >= 80?}
+    sc_lv45{Score >= 45?}
+    sc_lv15{Score >= 15?}
+    sc_level_highrisk_alert[High-risk band score >= 80 and level stays alert]
+    sc_level_alert[Level alert]
+    sc_level_warn[Level warn]
+    sc_level_off[Level off]
+    sc_snapshot[(risk_snapshot)]
   end
 
-  subgraph MB_OUTPUT[Main Output Layer]
-    MB_CMD_DISPATCH[Command Dispatcher]
-    MB_MODE_POLICY[Mode Based Lock Policy]
-    MB_CMD_POLICY[Command Type Action]
-    MB_OUT_BUZZ[Buzzer Warn Alert Stop]
-    MB_OUT_SERVO[Servo Lock Unlock Motion]
-    MB_OUT_NOTIFY[Notify Service]
-    MB_OUT_LOG[Logger]
-    MB_PUB_EVENT[Publish Event Topic]
-    MB_PUB_STATUS[Publish Status Topic]
-    MB_PUB_ACK[Publish Ack Topic]
-    MB_PUB_MET[Publish Metrics Topic]
+  subgraph STATE[State and Level]
+    direction TB
+    st_read[Read risk_snapshot]
+    st_mode_disarm{Current mode is disarm?}
+    st_force_off[Force level off and score 0]
 
-    MB_TO_OUT_STATUS[[To SYSTEM_OUTPUTS.Main Status MQTT]]
-    MB_TO_OUT_EVENT[[To SYSTEM_OUTPUTS.Main Event MQTT]]
-    MB_TO_OUT_ACK[[To SYSTEM_OUTPUTS.Main Ack MQTT]]
-    MB_TO_OUT_MET[[To SYSTEM_OUTPUTS.Main Metrics MQTT]]
-    MB_TO_OUT_DOOR[[To SYSTEM_OUTPUTS.Door Lock Physical]]
-    MB_TO_OUT_WIN[[To SYSTEM_OUTPUTS.Window Lock Physical]]
-    MB_TO_OUT_BUZZ[[To SYSTEM_OUTPUTS.Buzzer Audible]]
+    st_entry_pending{entry_pending active?}
+    st_entry_timeout{Entry timer expired?}
+    st_emit_timeout[Emit entry_timeout event next tick]
+
+    st_unlock_session{Door unlock session active?}
+    st_unlock_expired{Unlock timeout reached?}
+    st_auto_relock[Schedule auto relock door]
+    st_door_hold_open{Door open beyond hold threshold?}
+    st_hold_warn[Enable hold-open warning]
+
+    st_sensor_fault{Sensor fault active?}
+    st_set_fail_closed[Set fail-closed policy]
+
+    st_score_highrisk{Score in high-risk band >= 80?}
+    st_lv_alert{Level alert?}
+    st_lv_warn{Level warn?}
+    st_state_alert_high[State alert_high_monitor]
+    st_state_alert[State alert_monitor]
+    st_state_warn[State warn_monitor]
+    st_state_normal[State normal_monitor]
+    st_frame[(state_frame)]
   end
 
-end
+  subgraph OUTPUT[Output]
+    direction TB
+    out_read[Read state_frame]
 
-subgraph AUTO_BOARD[Automation Board Firmware]
+    out_door_change{Door actuator target changed?}
+    out_door_target_lock{Door target lock?}
+    out_drive_door_lock[Drive door servo to LOCK]
+    out_drive_door_unlock[Drive door servo to UNLOCK]
 
-  subgraph AB_NET[Task Net]
-    AB_NET_LOOP[Task Net Loop]
-    AB_WIFI[Connect Wifi]
-    AB_MQTT[Connect MQTT]
-    AB_MQTT_OK{MQTT Connected}
-    AB_MQTT_LOOP[MQTT Loop Callback]
-    AB_STATUS_PERIOD{Periodic Status Publish}
+    out_window_change{Window actuator target changed?}
+    out_window_target_lock{Window target lock?}
+    out_drive_window_lock[Drive window servo to LOCK]
+    out_drive_window_unlock[Drive window servo to UNLOCK]
+
+    out_level_off{Level off?}
+    out_buzz_off[Buzzer off]
+    out_level_warn{Level warn?}
+    out_buzz_warn[Buzzer slow beep]
+    out_level_alert{Level alert?}
+    out_buzz_alert[Buzzer fast beep]
+    out_highrisk_alert{High-risk alert band?}
+    out_buzz_alert_sustain[Buzzer sustained alert]
+
+    out_line_needed{Need LINE alert or reply?}
+    out_line_kind{LINE message kind?}
+    out_line_ack[Send LINE command acknowledgement]
+    out_line_warn[Send LINE warning notification]
+    out_line_alert[Send LINE alert notification]
+    out_line_intruder_alert[Send LINE intruder_alert notification]
+    out_line_fault[Send LINE fault notification]
+
+    out_mqtt_event[Publish MQTT esh/main/event]
+    out_mqtt_status[Publish MQTT esh/main/status]
+    out_mqtt_ack[Publish MQTT esh/main/ack]
+    out_mqtt_metrics[Publish MQTT esh/main/metrics]
+    out_end([End tick])
   end
 
-  subgraph AB_MQTT_RX[MQTT Message Branch]
-    AB_FROM_EXT_STATUS[[From EXT_INPUTS.MQTT Main Status Topic]]
-
-    AB_RX_TOPIC{Topic Branch}
-    AB_RX_MAIN[Main Status Context Parse]
-    AB_RX_MAIN_OK{Mode Or Presence Field Valid}
-    AB_CTX_WRITE[Write Main Context Timestamps]
-    AB_CMD_PARSE[Parse Authorized Auto Command]
-    AB_CMD_AUTH_OK{Auto Command Auth OK}
-    AB_CMD_TOPIC[Normalized Auto Command]
-
-    AB_CMD_LIGHT_AUTO{Cmd Light Auto}
-    AB_CMD_LIGHT_ON{Cmd Light On}
-    AB_CMD_LIGHT_OFF{Cmd Light Off}
-    AB_CMD_FAN_AUTO{Cmd Fan Auto}
-    AB_CMD_FAN_ON{Cmd Fan On}
-    AB_CMD_FAN_OFF{Cmd Fan Off}
-    AB_CMD_STATUS{Cmd Status}
-    AB_CMD_UNKNOWN[Unsupported Auto Command]
-
-    AB_CMD_STATE_BUSY{State Mutex Acquired}
-    AB_CMD_WRITE[Write Light Fan Auto States]
-    AB_CMD_APPLY[Apply Outputs]
-    AB_CMD_ACK[Publish Auto Ack]
-    AB_CMD_STAT[Publish Auto Status]
+  subgraph CASEPATH[Walkthrough Examples Read One Case Left to Right]
+    direction TB
+    ex_cases[Case A away door_open -> immediate_alarm -> score100 -> high-risk alert band -> sustained alert buzzer LINE intruder_alert MQTT event<br/>Case B night window_open -> hardened_monitor -> plus40 and correlation -> alert path -> buzzer LINE<br/>Case C disarm remote unlock_door with valid auth -> control_only -> score0 off -> unlock ack<br/>Case D keypad wrong -> bad attempts -> lockout -> reject profile -> reject ack status<br/>Case E heartbeat every 5000ms -> heartbeat event -> minus8 decay -> lower level -> status metrics<br/>Case F boot -> baseline disarm -> restore persisted away if valid else fallback disarm -> state reset -> boot status]
   end
 
-  subgraph AB_CTRL[Task Control]
-    AB_CTRL_LOOP[Task Control Loop]
-    AB_PRES_TICK[Presence Tick]
+  bt_begin --> bt_default_disarm
+  bt_default_disarm --> bt_pref_ready
+  bt_pref_ready -->|yes| bt_mode_key
+  bt_pref_ready -->|no| bt_nonce_warn
+  bt_mode_key -->|yes| bt_mode_valid
+  bt_mode_key -->|no| bt_boot_done
+  bt_mode_valid -->|yes| bt_restore_mode
+  bt_mode_valid -->|no| bt_fallback_disarm
+  bt_restore_mode --> bt_reset_runtime
+  bt_reset_runtime --> bt_boot_done
+  bt_fallback_disarm --> bt_boot_done
+  bt_nonce_warn --> bt_boot_done
+  bt_boot_done --> in_tick
 
-    AB_LUX_DUE{Lux Sample Due And Ready}
-    AB_LUX_READ[Read Lux Sensor]
-    AB_LUX_STATE[Read Current Light Auto State]
-    AB_GATE_MODE[Allow By Main Mode]
-    AB_GATE_HOME[Allow By Main Presence]
-    AB_LIGHT_NEXT[Compute Next Light Hysteresis]
-    AB_LIGHT_CHG{Light State Changed}
-    AB_LIGHT_SET[Write Light State]
-    AB_LIGHT_APPLY[Apply Output Light]
+  in_mqtt_raw --> in_mqtt_rx
+  in_mqtt_rx -->|yes| in_mqtt_json
+  in_mqtt_rx -->|no| in_none
+  in_mqtt_json -->|yes| in_mqtt_topic
+  in_mqtt_json -->|no| in_none
+  in_mqtt_topic -->|yes| in_mqtt_kind
+  in_mqtt_topic -->|no| in_none
+  in_mqtt_kind -->|mode_disarm| in_tok_mode_disarm
+  in_mqtt_kind -->|mode_night| in_tok_mode_night
+  in_mqtt_kind -->|mode_away| in_tok_mode_away
+  in_mqtt_kind -->|lock_door| in_tok_lock_door
+  in_mqtt_kind -->|unlock_door| in_tok_unlock_door
+  in_mqtt_kind -->|lock_window| in_tok_lock_window
+  in_mqtt_kind -->|unlock_window| in_tok_unlock_window
+  in_mqtt_kind -->|lock_all| in_tok_lock_all
+  in_mqtt_kind -->|unlock_all| in_tok_unlock_all
+  in_mqtt_kind -->|query_status| in_tok_query_status
+  in_mqtt_kind -->|other| in_tok_unknown_cmd
 
-    AB_TEMP_DUE{Temp Sample Due And Available}
-    AB_TEMP_READ[Read Temp Hum Sensor]
-    AB_FAN_STATE[Read Current Fan Auto State]
-    AB_FAN_NEXT[Compute Next Fan Hysteresis]
-    AB_FAN_CHG{Fan State Changed}
-    AB_FAN_SET[Write Fan State]
-    AB_FAN_APPLY[Apply Output Fan]
+  in_keypad_raw --> in_keypad_press
+  in_keypad_press -->|yes| in_keypad_complete
+  in_keypad_press -->|no| in_none
+  in_keypad_complete -->|yes| in_tok_keypad_code
+  in_keypad_complete -->|no| in_none
 
-    AB_LOG[Log Light Climate Network]
-  end
+  in_btn_door_raw --> in_btn_door_edge
+  in_btn_door_edge -->|yes| in_tok_btn_door
+  in_btn_door_edge -->|no| in_none
+  in_btn_window_raw --> in_btn_window_edge
+  in_btn_window_edge -->|yes| in_tok_btn_window
+  in_btn_window_edge -->|no| in_none
 
-  subgraph AB_OUTPUT[Automation Output]
-    AB_OUT_LED[LED Output]
-    AB_OUT_FAN[L293D Fan Output]
-    AB_OUT_STATUS[Auto Status Topic]
-    AB_OUT_ACK[Auto Ack Topic]
+  in_reed_door_raw --> in_door_changed
+  in_door_changed -->|yes| in_door_open_now
+  in_door_changed -->|no| in_none
+  in_door_open_now -->|yes| in_tok_door_open
+  in_door_open_now -->|no| in_tok_door_close
 
-    AB_TO_OUT_STATUS[[To SYSTEM_OUTPUTS.Auto Status MQTT]]
-    AB_TO_OUT_ACK[[To SYSTEM_OUTPUTS.Auto Ack MQTT]]
-    AB_TO_OUT_LIGHT[[To SYSTEM_OUTPUTS.Light Physical State]]
-    AB_TO_OUT_FAN[[To SYSTEM_OUTPUTS.Fan Physical State]]
-  end
+  in_reed_window_raw --> in_window_changed
+  in_window_changed -->|yes| in_window_open_now
+  in_window_changed -->|no| in_none
+  in_window_open_now -->|yes| in_tok_window_open
+  in_window_open_now -->|no| in_tok_window_close
 
-end
+  in_pir_a_raw --> in_pir_a_changed
+  in_pir_a_changed -->|yes| in_pir_a_rising
+  in_pir_a_changed -->|no| in_none
+  in_pir_a_rising -->|yes| in_tok_pir_a_on
+  in_pir_a_rising -->|no| in_tok_pir_a_off
 
-subgraph SYSTEM_OUTPUTS[Observable Outputs]
-  OUT_FROM_BRIDGE_LINE[[From BRIDGE.LINE Replies and Push]]
-  OUT_FROM_MAIN_STATUS[[From MAIN_BOARD.Main Status Topic]]
-  OUT_FROM_MAIN_EVENT[[From MAIN_BOARD.Main Event Topic]]
-  OUT_FROM_MAIN_ACK[[From MAIN_BOARD.Main Ack Topic]]
-  OUT_FROM_MAIN_MET[[From MAIN_BOARD.Main Metrics Topic]]
-  OUT_FROM_MAIN_DOOR[[From MAIN_BOARD.Door Lock Output]]
-  OUT_FROM_MAIN_WIN[[From MAIN_BOARD.Window Lock Output]]
-  OUT_FROM_MAIN_BUZZ[[From MAIN_BOARD.Buzzer Output]]
-  OUT_FROM_AUTO_STATUS[[From AUTO_BOARD.Auto Status Topic]]
-  OUT_FROM_AUTO_ACK[[From AUTO_BOARD.Auto Ack Topic]]
-  OUT_FROM_AUTO_LIGHT[[From AUTO_BOARD.Light Output]]
-  OUT_FROM_AUTO_FAN[[From AUTO_BOARD.Fan Output]]
+  in_pir_b_raw --> in_pir_b_changed
+  in_pir_b_changed -->|yes| in_pir_b_rising
+  in_pir_b_changed -->|no| in_none
+  in_pir_b_rising -->|yes| in_tok_pir_b_on
+  in_pir_b_rising -->|no| in_tok_pir_b_off
 
-  OUT_LINE[LINE Message Out]
-  OUT_MAIN_STATUS[Main Status MQTT]
-  OUT_MAIN_EVENT[Main Event MQTT]
-  OUT_MAIN_ACK[Main Ack MQTT]
-  OUT_MAIN_MET[Main Metrics MQTT]
-  OUT_AUTO_STATUS[Auto Status MQTT]
-  OUT_AUTO_ACK[Auto Ack MQTT]
-  OUT_DOOR_LOCK[Door Lock Physical State]
-  OUT_WIN_LOCK[Window Lock Physical State]
-  OUT_BUZZ[Buzzer Audible State]
-  OUT_LIGHT[Light Physical State]
-  OUT_FAN[Fan Physical State]
+  in_pir_out_raw --> in_pir_out_changed
+  in_pir_out_changed -->|yes| in_pir_out_rising
+  in_pir_out_changed -->|no| in_none
+  in_pir_out_rising -->|yes| in_tok_pir_out_on
+  in_pir_out_rising -->|no| in_tok_pir_out_off
 
-  OUT_TO_EXT_MAIN_STATUS[[To EXT_INPUTS.MQTT Main Status Topic]]
-  OUT_TO_BRIDGE_MQTT[[To BRIDGE.MQTT On Message]]
-end
+  in_vib_raw --> in_vib_changed
+  in_vib_changed -->|yes| in_vib_high
+  in_vib_changed -->|no| in_none
+  in_vib_high -->|yes| in_tok_vib_on
+  in_vib_high -->|no| in_tok_vib_off
 
-IN_LINE --> IN_TO_BRIDGE_WEBHOOK
-IN_HTTP_CMD --> IN_TO_BRIDGE_HTTP
-IN_FROM_BRIDGE_MAIN_CMD --> IN_MQTT_CMD
-IN_FROM_OUT_MAIN_STATUS --> IN_MAIN_STATUS
+  in_us_door_raw --> in_us_door_changed
+  in_us_door_changed -->|yes| in_us_door_near
+  in_us_door_changed -->|no| in_none
+  in_us_door_near -->|yes| in_tok_us_door_near
+  in_us_door_near -->|no| in_tok_us_door_far
 
-IN_MQTT_CMD --> IN_TO_MAIN_REMOTE
-IN_KEYPAD --> IN_TO_MAIN_KEYPAD
-IN_BTN_DOOR --> IN_TO_MAIN_SENSOR
-IN_BTN_WIN --> IN_TO_MAIN_SENSOR
-IN_REED_DOOR --> IN_TO_MAIN_SENSOR
-IN_REED_WIN --> IN_TO_MAIN_SENSOR
-IN_PIR1 --> IN_TO_MAIN_SENSOR
-IN_PIR2 --> IN_TO_MAIN_SENSOR
-IN_PIR3 --> IN_TO_MAIN_SENSOR
-IN_VIB --> IN_TO_MAIN_SENSOR
-IN_US1 --> IN_TO_MAIN_SENSOR
-IN_US2 --> IN_TO_MAIN_SENSOR
-IN_US3 --> IN_TO_MAIN_SENSOR
-IN_SERIAL --> IN_TO_MAIN_SENSOR
-IN_MAIN_STATUS --> IN_TO_AUTO_STATUS
+  in_us_window_raw --> in_us_window_changed
+  in_us_window_changed -->|yes| in_us_window_near
+  in_us_window_changed -->|no| in_none
+  in_us_window_near -->|yes| in_tok_us_window_near
+  in_us_window_near -->|no| in_tok_us_window_far
 
-B_FROM_EXT_WEBHOOK --> B_WEBHOOK
-B_FROM_EXT_HTTP --> B_HTTP
+  in_us_between_raw --> in_us_between_changed
+  in_us_between_changed -->|yes| in_us_between_near
+  in_us_between_changed -->|no| in_none
+  in_us_between_near -->|yes| in_tok_us_between_near
+  in_us_between_near -->|no| in_tok_us_between_far
 
-B_WEBHOOK --> B_SIG
-B_SIG -->|ok| B_CMD_SUP
-B_SIG -->|fail| B_REPLY_ERR
-B_HTTP --> B_CMD_SUP
-B_CMD_SUP -->|yes| B_CMD_AUTH
-B_CMD_SUP -->|no| B_REPLY_ERR
-B_CMD_AUTH -->|ok| B_DEBOUNCE
-B_CMD_AUTH -->|fail| B_REPLY_ERR
-B_DEBOUNCE -->|ok| B_PUB
-B_DEBOUNCE -->|fail| B_REPLY_ERR
-B_PUB --> B_PUB_OK
-B_PUB_OK -->|ok| B_REPLY_OK
-B_PUB_OK -->|fail| B_REPLY_ERR
-B_REPLY_OK --> B_TO_OUT_LINE
-B_REPLY_ERR --> B_TO_OUT_LINE
-B_PUB --> B_TO_EXT_MAIN_CMD
+  in_tick --> in_hb_tick
+  in_hb_tick -->|yes| in_tok_hb
+  in_hb_tick -->|no| in_none
 
-MB_FROM_EXT_REMOTE --> MB_REMOTE_POLL
-MB_FROM_EXT_KEYPAD --> MB_KEYPAD_POLL
-MB_FROM_EXT_SENSOR --> MB_SENSOR_POLL
+  in_tok_mode_disarm --> in_token
+  in_tok_mode_night --> in_token
+  in_tok_mode_away --> in_token
+  in_tok_lock_door --> in_token
+  in_tok_unlock_door --> in_token
+  in_tok_lock_window --> in_token
+  in_tok_unlock_window --> in_token
+  in_tok_lock_all --> in_token
+  in_tok_unlock_all --> in_token
+  in_tok_query_status --> in_token
+  in_tok_unknown_cmd --> in_token
+  in_tok_keypad_code --> in_token
+  in_tok_btn_door --> in_token
+  in_tok_btn_window --> in_token
+  in_tok_door_open --> in_token
+  in_tok_door_close --> in_token
+  in_tok_window_open --> in_token
+  in_tok_window_close --> in_token
+  in_tok_pir_a_on --> in_token
+  in_tok_pir_a_off --> in_token
+  in_tok_pir_b_on --> in_token
+  in_tok_pir_b_off --> in_token
+  in_tok_pir_out_on --> in_token
+  in_tok_pir_out_off --> in_token
+  in_tok_vib_on --> in_token
+  in_tok_vib_off --> in_token
+  in_tok_us_door_near --> in_token
+  in_tok_us_door_far --> in_token
+  in_tok_us_window_near --> in_token
+  in_tok_us_window_far --> in_token
+  in_tok_us_between_near --> in_token
+  in_tok_us_between_far --> in_token
+  in_tok_hb --> in_token
+  in_none --> in_token
 
-MB_TICK --> MB_ACT_UPDATE
-MB_ACT_UPDATE --> MB_SESSION_AUTO
-MB_SESSION_AUTO --> MB_HEALTH
-MB_HEALTH --> MB_SESSION
-MB_SESSION --> MB_LOCKOUT_EXPIRE
-MB_LOCKOUT_EXPIRE --> MB_OLED
-MB_OLED --> MB_MQTT_UPD
-MB_MQTT_UPD --> MB_HEARTBEAT
-MB_HEARTBEAT -->|due| MB_STATUS_PERIODIC
-MB_STATUS_PERIODIC --> MB_PUB_STATUS
-MB_HEARTBEAT --> MB_REMOTE_POLL
-MB_REMOTE_POLL -->|yes| MB_REMOTE_PARSE
-MB_REMOTE_POLL -->|no| MB_KEYPAD_POLL
+  in_token --> ev_read
+  ev_read --> ev_none
+  ev_none -->|yes| ev_drop
+  ev_none -->|no| ev_mode_req
 
-MB_REMOTE_PARSE --> MB_REMOTE_AUTH_OK
-MB_REMOTE_AUTH_OK -->|fail| MB_ACK_FAIL
-MB_REMOTE_AUTH_OK -->|ok| MB_REMOTE_NONCE_OK
-MB_REMOTE_NONCE_OK -->|fail| MB_ACK_FAIL
-MB_REMOTE_NONCE_OK -->|ok| MB_REMOTE_CMD
+  ev_mode_req -->|yes| ev_mode_kind
+  ev_mode_req -->|no| ev_remote_cmd
+  ev_mode_kind -->|mode_disarm_req| ev_evt_mode_disarm
+  ev_mode_kind -->|mode_night_req| ev_evt_mode_night
+  ev_mode_kind -->|mode_away_req| ev_evt_mode_away
+  ev_mode_kind -->|other| ev_drop
 
-MB_REMOTE_CMD --> MB_RC_STATUS
-MB_REMOTE_CMD --> MB_RC_BUZZ_WARN
-MB_REMOTE_CMD --> MB_RC_ALARM
-MB_REMOTE_CMD --> MB_RC_SILENCE
-MB_REMOTE_CMD --> MB_RC_DISARM
-MB_REMOTE_CMD --> MB_RC_ARM_NIGHT
-MB_REMOTE_CMD --> MB_RC_ARM_AWAY
-MB_REMOTE_CMD --> MB_RC_LOCK_DOOR
-MB_REMOTE_CMD --> MB_RC_LOCK_WIN
-MB_REMOTE_CMD --> MB_RC_LOCK_ALL
-MB_REMOTE_CMD --> MB_RC_UNLOCK_DOOR
-MB_REMOTE_CMD --> MB_RC_UNLOCK_WIN
-MB_REMOTE_CMD --> MB_RC_UNLOCK_ALL
-MB_REMOTE_CMD --> MB_RC_UNKNOWN
+  ev_remote_cmd -->|yes| ev_cmd_kind
+  ev_remote_cmd -->|no| ev_keypad
+  ev_cmd_kind -->|lock_door_req| ev_evt_lock_door
+  ev_cmd_kind -->|unlock_door_req| ev_evt_unlock_door
+  ev_cmd_kind -->|lock_window_req| ev_evt_lock_window
+  ev_cmd_kind -->|unlock_window_req| ev_evt_unlock_window
+  ev_cmd_kind -->|lock_all_req| ev_evt_lock_all
+  ev_cmd_kind -->|unlock_all_req| ev_evt_unlock_all
+  ev_cmd_kind -->|query_status_req| ev_evt_query_status
+  ev_cmd_kind -->|unknown_cmd_req| ev_evt_unknown_cmd
 
-MB_RC_LOCK_DOOR --> MB_RC_LOCK_DOOR_C
-MB_RC_LOCK_WIN --> MB_RC_LOCK_WIN_C
-MB_RC_LOCK_ALL --> MB_RC_LOCK_ALL_C1
-MB_RC_LOCK_ALL_C1 --> MB_RC_LOCK_ALL_C2
-MB_RC_UNLOCK_DOOR --> MB_RC_UNLOCK_MODE
-MB_RC_UNLOCK_WIN --> MB_RC_UNLOCK_MODE
-MB_RC_UNLOCK_ALL --> MB_RC_UNLOCK_MODE
-MB_RC_UNLOCK_MODE --> MB_RC_UNLOCK_FAULT
+  ev_keypad -->|yes| ev_keypad_len
+  ev_keypad -->|no| ev_manual_btn
+  ev_keypad_len -->|yes| ev_evt_keypad
+  ev_keypad_len -->|no| ev_drop
 
-MB_RC_STATUS --> MB_ACK_OK
-MB_RC_BUZZ_WARN --> MB_ACK_OK
-MB_RC_ALARM --> MB_ACK_OK
-MB_RC_SILENCE --> MB_ACK_OK
-MB_RC_DISARM --> MB_RULE_IN
-MB_RC_ARM_NIGHT --> MB_RULE_IN
-MB_RC_ARM_AWAY --> MB_RULE_IN
-MB_RC_LOCK_DOOR_C --> MB_ACK_OK
-MB_RC_LOCK_WIN_C --> MB_ACK_OK
-MB_RC_LOCK_ALL_C2 --> MB_ACK_OK
-MB_RC_UNLOCK_FAULT --> MB_ACK_OK
-MB_RC_UNKNOWN --> MB_ACK_FAIL
+  ev_manual_btn -->|yes| ev_manual_kind
+  ev_manual_btn -->|no| ev_door_evt
+  ev_manual_kind -->|manual_door_button| ev_evt_manual_door
+  ev_manual_kind -->|manual_window_button| ev_evt_manual_window
 
-MB_ACK_OK --> MB_REMOTE_STATUS
-MB_ACK_FAIL --> MB_REMOTE_STATUS
-MB_REMOTE_STATUS --> MB_PUB_ACK
-MB_REMOTE_STATUS --> MB_PUB_STATUS
+  ev_door_evt -->|yes| ev_door_open_evt
+  ev_door_evt -->|no| ev_window_evt
+  ev_door_open_evt -->|yes| ev_door_open_gate
+  ev_door_open_evt -->|no| ev_door_close_gate
+  ev_door_open_gate -->|yes| ev_evt_door_open
+  ev_door_open_gate -->|no| ev_drop
+  ev_door_close_gate -->|yes| ev_evt_door_close
+  ev_door_close_gate -->|no| ev_drop
 
-MB_KEYPAD_POLL -->|yes| MB_KP_EVENT
-MB_KEYPAD_POLL -->|no| MB_TIMEOUT_POLL
-MB_KP_EVENT --> MB_KP_SILENCE
-MB_KP_EVENT --> MB_KP_BAD
-MB_KP_EVENT --> MB_KP_UNLOCK
-MB_KP_EVENT --> MB_KP_MODE
-MB_KP_EVENT --> MB_KP_BLOCK
+  ev_window_evt -->|yes| ev_window_open_evt
+  ev_window_evt -->|no| ev_pir_evt
+  ev_window_open_evt -->|yes| ev_window_open_gate
+  ev_window_open_evt -->|no| ev_window_close_gate
+  ev_window_open_gate -->|yes| ev_evt_window_open
+  ev_window_open_gate -->|no| ev_drop
+  ev_window_close_gate -->|yes| ev_evt_window_close
+  ev_window_close_gate -->|no| ev_drop
 
-MB_KP_BAD --> MB_KP_LOCKOUT
-MB_KP_LOCKOUT --> MB_KP_BAD_INC
-MB_KP_BAD_INC --> MB_KP_BAD_LIMIT
-MB_KP_BAD_LIMIT --> MB_KP_LOCKOUT_SET
-MB_KP_UNLOCK --> MB_KP_LOCKOUT
-MB_KP_UNLOCK --> MB_KP_UNLOCK_FAULT
-MB_KP_UNLOCK_FAULT --> MB_KP_UNLOCK_DISARM
-MB_KP_UNLOCK_DISARM --> MB_KP_UNLOCK_ACT
-MB_KP_MODE --> MB_RULE_IN
+  ev_pir_evt -->|yes| ev_pir_kind
+  ev_pir_evt -->|no| ev_vib_evt
+  ev_pir_kind -->|motion_zone_a_on| ev_pir_a_on_gate
+  ev_pir_kind -->|motion_zone_a_off| ev_evt_pir_a_off
+  ev_pir_kind -->|motion_zone_b_on| ev_pir_b_on_gate
+  ev_pir_kind -->|motion_zone_b_off| ev_evt_pir_b_off
+  ev_pir_kind -->|motion_outdoor_on| ev_pir_out_on_gate
+  ev_pir_kind -->|motion_outdoor_off| ev_evt_pir_out_off
+  ev_pir_a_on_gate -->|yes| ev_evt_pir_a_on
+  ev_pir_a_on_gate -->|no| ev_drop
+  ev_pir_b_on_gate -->|yes| ev_evt_pir_b_on
+  ev_pir_b_on_gate -->|no| ev_drop
+  ev_pir_out_on_gate -->|yes| ev_evt_pir_out_on
+  ev_pir_out_on_gate -->|no| ev_drop
 
-MB_TIMEOUT_POLL -->|yes| MB_RULE_IN
-MB_TIMEOUT_POLL -->|no| MB_SENSOR_POLL
+  ev_vib_evt -->|yes| ev_vib_on_gate
+  ev_vib_evt -->|no| ev_us_evt
+  ev_vib_on_gate -->|yes| ev_evt_vib_on
+  ev_vib_on_gate -->|no| ev_evt_vib_off
 
-MB_SENSOR_POLL -->|yes| MB_SER_EVENT
-MB_SENSOR_POLL -->|no| MB_MAN_EVENT
-MB_SER_EVENT --> MB_SER_MODE
-MB_SER_EVENT --> MB_SER_MAN
-MB_SER_EVENT --> MB_SER_SEN
-MB_SER_MODE --> MB_SER_BLOCK
-MB_SER_MAN --> MB_SER_BLOCK
-MB_SER_SEN --> MB_SER_BLOCK
+  ev_us_evt -->|yes| ev_us_kind
+  ev_us_evt -->|no| ev_hb_evt
+  ev_us_kind -->|us_door_near| ev_us_door_gate
+  ev_us_kind -->|us_door_far| ev_evt_us_door_far
+  ev_us_kind -->|us_window_near| ev_us_window_gate
+  ev_us_kind -->|us_window_far| ev_evt_us_window_far
+  ev_us_kind -->|us_between_near| ev_us_between_gate
+  ev_us_kind -->|us_between_far| ev_evt_us_between_far
+  ev_us_door_gate -->|yes| ev_evt_us_door_near
+  ev_us_door_gate -->|no| ev_drop
+  ev_us_window_gate -->|yes| ev_evt_us_window_near
+  ev_us_window_gate -->|no| ev_drop
+  ev_us_between_gate -->|yes| ev_evt_us_between_near
+  ev_us_between_gate -->|no| ev_drop
 
-MB_MAN_EVENT --> MB_MAN_DOOR_TOG
-MB_MAN_EVENT --> MB_MAN_WIN_TOG
-MB_MAN_EVENT --> MB_MAN_LOCK_REQ
-MB_MAN_EVENT --> MB_MAN_UNLOCK_REQ
-MB_MAN_DOOR_TOG --> MB_MAN_UNLOCK_MODE
-MB_MAN_DOOR_TOG --> MB_MAN_DOOR_CLOSED
-MB_MAN_WIN_TOG --> MB_MAN_UNLOCK_MODE
-MB_MAN_WIN_TOG --> MB_MAN_WIN_CLOSED
-MB_MAN_LOCK_REQ --> MB_MAN_DOOR_CLOSED
-MB_MAN_LOCK_REQ --> MB_MAN_WIN_CLOSED
-MB_MAN_UNLOCK_REQ --> MB_MAN_UNLOCK_MODE
-MB_MAN_UNLOCK_MODE --> MB_MAN_UNLOCK_FAULT
-MB_MAN_UNLOCK_FAULT --> MB_MAN_ACT
-MB_MAN_DOOR_CLOSED --> MB_MAN_ACT
-MB_MAN_WIN_CLOSED --> MB_MAN_ACT
-MB_MAN_ACT --> MB_MAN_NOTIFY
-MB_MAN_NOTIFY --> MB_PUB_EVENT
-MB_MAN_NOTIFY --> MB_PUB_STATUS
+  ev_hb_evt -->|yes| ev_hb_gate
+  ev_hb_evt -->|no| ev_drop
+  ev_hb_gate -->|yes| ev_evt_hb
+  ev_hb_gate -->|no| ev_drop
 
-MB_RULE_IN --> MB_RULE_DECAY
-MB_RULE_DECAY --> MB_RULE_DISARM
-MB_RULE_DECAY --> MB_RULE_ARM_NIGHT
-MB_RULE_DECAY --> MB_RULE_ARM_AWAY
-MB_RULE_DECAY --> MB_RULE_DOOR_OPEN
-MB_RULE_DECAY --> MB_RULE_ENTRY_TO
-MB_RULE_DECAY --> MB_RULE_WIN_OPEN
-MB_RULE_DECAY --> MB_RULE_MOTION
-MB_RULE_DECAY --> MB_RULE_VIB
-MB_RULE_DECAY --> MB_RULE_TAMP
-MB_RULE_DOOR_OPEN --> MB_RULE_SCORE
-MB_RULE_ENTRY_TO --> MB_RULE_SCORE
-MB_RULE_WIN_OPEN --> MB_RULE_SCORE
-MB_RULE_MOTION --> MB_RULE_SCORE
-MB_RULE_VIB --> MB_RULE_SCORE
-MB_RULE_TAMP --> MB_RULE_SCORE
-MB_RULE_SCORE --> MB_RULE_LEVEL
-MB_RULE_LEVEL --> MB_RULE_CMD
-MB_RULE_CMD --> MB_RULE_STATE
-MB_RULE_STATE --> MB_CMD_DISPATCH
+  ev_evt_mode_disarm --> ev_complete
+  ev_evt_mode_night --> ev_complete
+  ev_evt_mode_away --> ev_complete
+  ev_evt_lock_door --> ev_complete
+  ev_evt_unlock_door --> ev_complete
+  ev_evt_lock_window --> ev_complete
+  ev_evt_unlock_window --> ev_complete
+  ev_evt_lock_all --> ev_complete
+  ev_evt_unlock_all --> ev_complete
+  ev_evt_query_status --> ev_complete
+  ev_evt_unknown_cmd --> ev_complete
+  ev_evt_keypad --> ev_complete
+  ev_evt_manual_door --> ev_complete
+  ev_evt_manual_window --> ev_complete
+  ev_evt_door_open --> ev_complete
+  ev_evt_door_close --> ev_complete
+  ev_evt_window_open --> ev_complete
+  ev_evt_window_close --> ev_complete
+  ev_evt_pir_a_on --> ev_complete
+  ev_evt_pir_a_off --> ev_complete
+  ev_evt_pir_b_on --> ev_complete
+  ev_evt_pir_b_off --> ev_complete
+  ev_evt_pir_out_on --> ev_complete
+  ev_evt_pir_out_off --> ev_complete
+  ev_evt_vib_on --> ev_complete
+  ev_evt_vib_off --> ev_complete
+  ev_evt_us_door_near --> ev_complete
+  ev_evt_us_door_far --> ev_complete
+  ev_evt_us_window_near --> ev_complete
+  ev_evt_us_window_far --> ev_complete
+  ev_evt_us_between_near --> ev_complete
+  ev_evt_us_between_far --> ev_complete
+  ev_evt_hb --> ev_complete
 
-MB_CMD_DISPATCH --> MB_MODE_POLICY
-MB_CMD_DISPATCH --> MB_CMD_POLICY
-MB_MODE_POLICY --> MB_OUT_SERVO
-MB_MODE_POLICY --> MB_OUT_BUZZ
-MB_CMD_POLICY --> MB_OUT_SERVO
-MB_CMD_POLICY --> MB_OUT_BUZZ
-MB_CMD_POLICY --> MB_OUT_NOTIFY
-MB_CMD_POLICY --> MB_OUT_LOG
-MB_OUT_SERVO --> MB_PUB_EVENT
-MB_OUT_BUZZ --> MB_PUB_EVENT
-MB_OUT_NOTIFY --> MB_PUB_EVENT
-MB_PUB_EVENT --> MB_TO_OUT_EVENT
-MB_PUB_STATUS --> MB_TO_OUT_STATUS
-MB_PUB_ACK --> MB_TO_OUT_ACK
-MB_PUB_MET --> MB_TO_OUT_MET
-MB_OUT_SERVO --> MB_TO_OUT_DOOR
-MB_OUT_SERVO --> MB_TO_OUT_WIN
-MB_OUT_BUZZ --> MB_TO_OUT_BUZZ
+  ev_complete -->|yes| ev_event
+  ev_complete -->|no| ev_drop
+  ev_drop --> ev_event
 
-AB_FROM_EXT_STATUS --> AB_RX_TOPIC
-AB_RX_TOPIC --> AB_RX_MAIN
-AB_RX_MAIN --> AB_RX_MAIN_OK
-AB_RX_MAIN_OK -->|yes| AB_CTX_WRITE
-AB_RX_TOPIC --> AB_CMD_PARSE
-AB_CMD_PARSE --> AB_CMD_AUTH_OK
-AB_CMD_AUTH_OK -->|ok| AB_CMD_TOPIC
-AB_CMD_AUTH_OK -->|fail| AB_CMD_ACK
-AB_CMD_AUTH_OK -->|fail| AB_CMD_STAT
+  ev_event --> md_read
+  md_read --> md_is_mode_evt
 
-AB_CMD_TOPIC --> AB_CMD_LIGHT_AUTO
-AB_CMD_TOPIC --> AB_CMD_LIGHT_ON
-AB_CMD_TOPIC --> AB_CMD_LIGHT_OFF
-AB_CMD_TOPIC --> AB_CMD_FAN_AUTO
-AB_CMD_TOPIC --> AB_CMD_FAN_ON
-AB_CMD_TOPIC --> AB_CMD_FAN_OFF
-AB_CMD_TOPIC --> AB_CMD_STATUS
-AB_CMD_TOPIC --> AB_CMD_UNKNOWN
+  md_is_mode_evt -->|yes| md_mode_auth
+  md_is_mode_evt -->|no| md_is_remote_evt
+  md_mode_auth -->|yes| md_mode_target
+  md_mode_auth -->|no| md_reject
+  md_mode_target -->|disarm| md_apply_disarm
+  md_mode_target -->|night| md_apply_night
+  md_mode_target -->|away| md_apply_away
+  md_mode_target -->|other| md_reject
+  md_apply_disarm --> md_mode_changed
+  md_apply_night --> md_mode_changed
+  md_apply_away --> md_mode_changed
+  md_mode_changed -->|yes| md_persist_mode
+  md_mode_changed -->|no| md_accept
+  md_persist_mode --> md_accept
 
-AB_CMD_LIGHT_AUTO --> AB_CMD_STATE_BUSY
-AB_CMD_LIGHT_ON --> AB_CMD_STATE_BUSY
-AB_CMD_LIGHT_OFF --> AB_CMD_STATE_BUSY
-AB_CMD_FAN_AUTO --> AB_CMD_STATE_BUSY
-AB_CMD_FAN_ON --> AB_CMD_STATE_BUSY
-AB_CMD_FAN_OFF --> AB_CMD_STATE_BUSY
-AB_CMD_STATUS --> AB_CMD_ACK
-AB_CMD_STATUS --> AB_CMD_STAT
-AB_CMD_UNKNOWN --> AB_CMD_ACK
-AB_CMD_UNKNOWN --> AB_CMD_STAT
-AB_CMD_STATE_BUSY --> AB_CMD_WRITE
-AB_CMD_WRITE --> AB_CMD_APPLY
-AB_CMD_APPLY --> AB_CMD_ACK
-AB_CMD_APPLY --> AB_CMD_STAT
+  md_is_remote_evt -->|yes| md_token_ok
+  md_is_remote_evt -->|no| md_is_keypad_evt
+  md_token_ok -->|yes| md_nonce_ok
+  md_token_ok -->|no| md_reject
+  md_nonce_ok -->|yes| md_mutating
+  md_nonce_ok -->|no| md_reject
+  md_mutating -->|yes| md_nonce_store_ok
+  md_mutating -->|no| md_remote_cmd_kind
+  md_nonce_store_ok -->|yes| md_remote_cmd_kind
+  md_nonce_store_ok -->|no| md_reject
 
-AB_NET_LOOP --> AB_WIFI
-AB_WIFI --> AB_MQTT
-AB_MQTT --> AB_MQTT_OK
-AB_MQTT_OK -->|yes| AB_MQTT_LOOP
-AB_MQTT_LOOP --> AB_RX_TOPIC
-AB_NET_LOOP --> AB_STATUS_PERIOD
-AB_STATUS_PERIOD --> AB_OUT_STATUS
+  md_remote_cmd_kind -->|unlock_door or unlock_window or unlock_all| md_unlock_mode_gate
+  md_remote_cmd_kind -->|lock_door or lock_window or lock_all| md_lock_target
+  md_remote_cmd_kind -->|query_status| md_apply_remote
+  md_remote_cmd_kind -->|other| md_reject
 
-AB_CTRL_LOOP --> AB_PRES_TICK
-AB_CTRL_LOOP --> AB_LUX_DUE
-AB_LUX_DUE -->|yes| AB_LUX_READ
-AB_LUX_READ --> AB_LUX_STATE
-AB_LUX_STATE --> AB_GATE_MODE
-AB_GATE_MODE --> AB_GATE_HOME
-AB_GATE_HOME --> AB_LIGHT_NEXT
-AB_LIGHT_NEXT --> AB_LIGHT_CHG
-AB_LIGHT_CHG -->|yes| AB_LIGHT_SET
-AB_LIGHT_SET --> AB_LIGHT_APPLY
+  md_unlock_mode_gate -->|yes| md_unlock_fault_gate
+  md_unlock_mode_gate -->|no| md_reject
+  md_unlock_fault_gate -->|yes| md_reject
+  md_unlock_fault_gate -->|no| md_apply_remote
 
-AB_CTRL_LOOP --> AB_TEMP_DUE
-AB_TEMP_DUE -->|yes| AB_TEMP_READ
-AB_TEMP_READ --> AB_FAN_STATE
-AB_FAN_STATE --> AB_FAN_NEXT
-AB_FAN_NEXT --> AB_FAN_CHG
-AB_FAN_CHG -->|yes| AB_FAN_SET
-AB_FAN_SET --> AB_FAN_APPLY
-AB_CTRL_LOOP --> AB_LOG
+  md_lock_target -->|door| md_lock_door_open
+  md_lock_target -->|window| md_lock_window_open
+  md_lock_target -->|all| md_lock_all_open
+  md_lock_door_open -->|yes| md_reject
+  md_lock_door_open -->|no| md_apply_remote
+  md_lock_window_open -->|yes| md_reject
+  md_lock_window_open -->|no| md_apply_remote
+  md_lock_all_open -->|yes| md_reject
+  md_lock_all_open -->|no| md_apply_remote
+  md_apply_remote --> md_accept
 
-AB_LIGHT_APPLY --> AB_OUT_LED
-AB_FAN_APPLY --> AB_OUT_FAN
-AB_CMD_ACK --> AB_OUT_ACK
-AB_CMD_STAT --> AB_OUT_STATUS
-AB_OUT_STATUS --> AB_TO_OUT_STATUS
-AB_OUT_ACK --> AB_TO_OUT_ACK
-AB_OUT_LED --> AB_TO_OUT_LIGHT
-AB_OUT_FAN --> AB_TO_OUT_FAN
+  md_is_keypad_evt -->|yes| md_keypad_lockout
+  md_is_keypad_evt -->|no| md_is_manual_evt
+  md_keypad_lockout -->|yes| md_reject
+  md_keypad_lockout -->|no| md_keypad_valid
+  md_keypad_valid -->|yes| md_keypad_action
+  md_keypad_valid -->|no| md_bad_attempt
+  md_bad_attempt --> md_lockout_limit
+  md_lockout_limit -->|yes| md_start_lockout
+  md_lockout_limit -->|no| md_reject
+  md_start_lockout --> md_reject
 
-OUT_FROM_BRIDGE_LINE --> OUT_LINE
-OUT_FROM_MAIN_STATUS --> OUT_MAIN_STATUS
-OUT_FROM_MAIN_EVENT --> OUT_MAIN_EVENT
-OUT_FROM_MAIN_ACK --> OUT_MAIN_ACK
-OUT_FROM_MAIN_MET --> OUT_MAIN_MET
-OUT_FROM_MAIN_DOOR --> OUT_DOOR_LOCK
-OUT_FROM_MAIN_WIN --> OUT_WIN_LOCK
-OUT_FROM_MAIN_BUZZ --> OUT_BUZZ
-OUT_FROM_AUTO_STATUS --> OUT_AUTO_STATUS
-OUT_FROM_AUTO_ACK --> OUT_AUTO_ACK
-OUT_FROM_AUTO_LIGHT --> OUT_LIGHT
-OUT_FROM_AUTO_FAN --> OUT_FAN
+  md_keypad_action -->|unlock_door| md_keypad_unlock_door
+  md_keypad_action -->|mode_disarm| md_keypad_mode_disarm
+  md_keypad_action -->|mode_night| md_keypad_mode_night
+  md_keypad_action -->|mode_away| md_keypad_mode_away
+  md_keypad_action -->|other| md_reject
+  md_keypad_unlock_door --> md_accept
+  md_keypad_mode_disarm --> md_accept
+  md_keypad_mode_night --> md_accept
+  md_keypad_mode_away --> md_accept
 
-OUT_MAIN_STATUS --> OUT_TO_EXT_MAIN_STATUS
-OUT_MAIN_STATUS --> OUT_TO_BRIDGE_MQTT
-OUT_MAIN_EVENT --> OUT_TO_BRIDGE_MQTT
-OUT_MAIN_ACK --> OUT_TO_BRIDGE_MQTT
-OUT_MAIN_MET --> OUT_TO_BRIDGE_MQTT
-OUT_AUTO_STATUS --> OUT_TO_BRIDGE_MQTT
-OUT_AUTO_ACK --> OUT_TO_BRIDGE_MQTT
+  md_is_manual_evt -->|yes| md_manual_kind
+  md_is_manual_evt -->|no| md_is_sensor_evt
+  md_manual_kind -->|manual_door_toggle| md_manual_mode_gate
+  md_manual_kind -->|manual_window_toggle| md_manual_mode_gate
+  md_manual_mode_gate -->|yes| md_manual_fault_gate
+  md_manual_mode_gate -->|no| md_reject
+  md_manual_fault_gate -->|yes| md_reject
+  md_manual_fault_gate -->|no| md_apply_manual
+  md_apply_manual --> md_accept
 
-B_FROM_OUT_MQTT --> B_MQTT_RX
+  md_is_sensor_evt -->|yes| md_sensor_armed
+  md_is_sensor_evt -->|no| md_is_system_evt
+  md_sensor_armed -->|yes| md_door_open_armed
+  md_sensor_armed -->|no| md_accept_sensor
+  md_door_open_armed -->|yes| md_entry_guard
+  md_door_open_armed -->|no| md_accept_sensor
+  md_entry_guard -->|yes| md_set_entry_pending
+  md_entry_guard -->|no| md_accept_sensor
+  md_set_entry_pending --> md_accept_sensor
+  md_accept_sensor --> md_accept
 
-B_MQTT_RX --> B_RX_TOPIC
-B_RX_TOPIC --> B_RX_STATUS
-B_RX_TOPIC --> B_RX_EVENT
-B_RX_TOPIC --> B_RX_ACK
-B_RX_TOPIC --> B_RX_MET
-B_RX_STATUS --> B_PUSH
-B_RX_EVENT --> B_PUSH
-B_RX_ACK --> B_PUSH
-B_RX_MET --> B_PUSH
-B_PUSH --> B_TO_OUT_LINE
+  md_is_system_evt -->|yes| md_accept_system
+  md_is_system_evt -->|no| md_reject
+  md_accept_system --> md_accept
+
+  md_accept --> md_final
+  md_reject --> md_final
+
+  md_final --> mc_read
+  mc_read --> mc_policy_ok
+  mc_policy_ok -->|no| mc_reject
+  mc_policy_ok -->|yes| mc_mode
+
+  mc_mode -->|disarm| mc_disarm_evt
+  mc_mode -->|night| mc_night_evt
+  mc_mode -->|away| mc_away_evt
+
+  mc_disarm_evt -->|remote_command or keypad_command or manual_button or mode_request| mc_disarm_control
+  mc_disarm_evt -->|sensor_event or system_event| mc_disarm_observe
+  mc_disarm_control -->|profile control_only| mc_cmd_frame
+  mc_disarm_observe -->|profile observe_only| mc_cmd_frame
+
+  mc_night_evt -->|door_open| mc_night_entry
+  mc_night_evt -->|window_open or tamper or vibration_on| mc_night_harden
+  mc_night_evt -->|motion or ultrasonic or close or heartbeat| mc_night_monitor
+  mc_night_evt -->|remote_command or keypad_command or manual_button or mode_request| mc_night_monitor
+  mc_night_entry -->|profile monitor| mc_cmd_frame
+  mc_night_monitor -->|profile monitor| mc_cmd_frame
+  mc_night_harden -->|profile hardened_monitor| mc_cmd_frame
+
+  mc_away_evt -->|door_open or window_open or tamper| mc_away_immediate
+  mc_away_evt -->|motion or ultrasonic or vibration_on| mc_away_harden
+  mc_away_evt -->|close or heartbeat or mode_request or remote_command or keypad_command or manual_button| mc_away_monitor
+  mc_away_monitor -->|profile monitor| mc_cmd_frame
+  mc_away_harden -->|profile hardened_monitor| mc_cmd_frame
+  mc_away_immediate -->|profile immediate_alarm| mc_cmd_frame
+
+  mc_reject -->|profile reject| mc_cmd_frame
+
+  mc_cmd_frame --> sc_read
+  sc_read --> sc_event_accepted
+  sc_event_accepted -->|yes| sc_cmd_profile
+  sc_event_accepted -->|no| sc_w_reject
+
+  sc_cmd_profile -->|control_only| sc_w_command
+  sc_cmd_profile -->|observe_only| sc_w_command
+  sc_cmd_profile -->|monitor| sc_evt_kind
+  sc_cmd_profile -->|hardened_monitor| sc_profile_harden_bonus
+  sc_cmd_profile -->|immediate_alarm| sc_w_timeout
+  sc_cmd_profile -->|reject| sc_w_reject
+  sc_profile_harden_bonus --> sc_evt_kind
+
+  sc_evt_kind -->|mode_request_disarm or mode_request_night or mode_request_away| sc_w_mode
+  sc_evt_kind -->|remote_lock or remote_unlock or manual_toggle or keypad_action| sc_w_command
+  sc_evt_kind -->|door_open| sc_w_door_open
+  sc_evt_kind -->|door_close| sc_w_door_close
+  sc_evt_kind -->|window_open| sc_w_window_open
+  sc_evt_kind -->|window_close| sc_w_window_close
+  sc_evt_kind -->|motion_zone_a_on| sc_w_pir_a_on
+  sc_evt_kind -->|motion_zone_b_on| sc_w_pir_b_on
+  sc_evt_kind -->|motion_outdoor_on| sc_w_pir_out_on
+  sc_evt_kind -->|motion_zone_a_off or motion_zone_b_off or motion_outdoor_off| sc_w_pir_off
+  sc_evt_kind -->|vibration_on| sc_w_vib_on
+  sc_evt_kind -->|vibration_off| sc_w_vib_off
+  sc_evt_kind -->|us_door_near| sc_w_us_door_near
+  sc_evt_kind -->|us_window_near| sc_w_us_window_near
+  sc_evt_kind -->|us_between_near| sc_w_us_between_near
+  sc_evt_kind -->|us_door_far or us_window_far or us_between_far| sc_w_us_far
+  sc_evt_kind -->|tamper| sc_w_tamper
+  sc_evt_kind -->|heartbeat| sc_w_hb
+  sc_evt_kind -->|entry_timeout| sc_w_timeout
+  sc_evt_kind -->|other| sc_w_reject
+
+  sc_w_mode --> sc_corr_1
+  sc_w_command --> sc_corr_1
+  sc_w_door_open --> sc_corr_1
+  sc_w_door_close --> sc_corr_1
+  sc_w_window_open --> sc_corr_1
+  sc_w_window_close --> sc_corr_1
+  sc_w_pir_a_on --> sc_corr_1
+  sc_w_pir_b_on --> sc_corr_1
+  sc_w_pir_out_on --> sc_corr_1
+  sc_w_pir_off --> sc_corr_1
+  sc_w_vib_on --> sc_corr_1
+  sc_w_vib_off --> sc_corr_1
+  sc_w_us_door_near --> sc_corr_1
+  sc_w_us_window_near --> sc_corr_1
+  sc_w_us_between_near --> sc_corr_1
+  sc_w_us_far --> sc_corr_1
+  sc_w_tamper --> sc_corr_1
+  sc_w_hb --> sc_corr_1
+  sc_w_reject --> sc_decay
+  sc_decay --> sc_corr_1
+  sc_w_timeout --> sc_clamp
+
+  sc_corr_1 -->|yes| sc_corr_add_1
+  sc_corr_1 -->|no| sc_corr_2
+  sc_corr_add_1 --> sc_corr_2
+  sc_corr_2 -->|yes| sc_corr_add_2
+  sc_corr_2 -->|no| sc_corr_3
+  sc_corr_add_2 --> sc_corr_3
+  sc_corr_3 -->|yes| sc_corr_add_3
+  sc_corr_3 -->|no| sc_corr_4
+  sc_corr_add_3 --> sc_corr_4
+  sc_corr_4 -->|yes| sc_corr_add_4
+  sc_corr_4 -->|no| sc_clamp
+  sc_corr_add_4 --> sc_clamp
+
+  sc_clamp --> sc_lv80
+  sc_lv80 -->|yes| sc_level_highrisk_alert
+  sc_lv80 -->|no| sc_lv45
+  sc_lv45 -->|yes| sc_level_alert
+  sc_lv45 -->|no| sc_lv15
+  sc_lv15 -->|yes| sc_level_warn
+  sc_lv15 -->|no| sc_level_off
+  sc_level_highrisk_alert --> sc_snapshot
+  sc_level_alert --> sc_snapshot
+  sc_level_warn --> sc_snapshot
+  sc_level_off --> sc_snapshot
+
+  sc_snapshot --> st_read
+  st_read --> st_mode_disarm
+  st_mode_disarm -->|yes| st_force_off
+  st_mode_disarm -->|no| st_entry_pending
+  st_force_off --> st_state_normal
+
+  st_entry_pending -->|yes| st_entry_timeout
+  st_entry_pending -->|no| st_unlock_session
+  st_entry_timeout -->|yes| st_emit_timeout
+  st_entry_timeout -->|no| st_unlock_session
+  st_emit_timeout --> st_unlock_session
+
+  st_unlock_session -->|yes| st_unlock_expired
+  st_unlock_session -->|no| st_door_hold_open
+  st_unlock_expired -->|yes| st_auto_relock
+  st_unlock_expired -->|no| st_door_hold_open
+  st_auto_relock --> st_door_hold_open
+  st_door_hold_open -->|yes| st_hold_warn
+  st_door_hold_open -->|no| st_sensor_fault
+  st_hold_warn --> st_sensor_fault
+
+  st_sensor_fault -->|yes| st_set_fail_closed
+  st_sensor_fault -->|no| st_score_highrisk
+  st_set_fail_closed --> st_score_highrisk
+  st_score_highrisk -->|yes| st_state_alert_high
+  st_score_highrisk -->|no| st_lv_alert
+  st_lv_alert -->|yes| st_state_alert
+  st_lv_alert -->|no| st_lv_warn
+  st_lv_warn -->|yes| st_state_warn
+  st_lv_warn -->|no| st_state_normal
+
+  st_state_alert_high --> st_frame
+  st_state_alert --> st_frame
+  st_state_warn --> st_frame
+  st_state_normal --> st_frame
+
+  st_frame --> out_read
+  out_read --> out_door_change
+  out_door_change -->|yes| out_door_target_lock
+  out_door_change -->|no| out_window_change
+  out_door_target_lock -->|yes| out_drive_door_lock
+  out_door_target_lock -->|no| out_drive_door_unlock
+  out_drive_door_lock --> out_window_change
+  out_drive_door_unlock --> out_window_change
+
+  out_window_change -->|yes| out_window_target_lock
+  out_window_change -->|no| out_level_off
+  out_window_target_lock -->|yes| out_drive_window_lock
+  out_window_target_lock -->|no| out_drive_window_unlock
+  out_drive_window_lock --> out_level_off
+  out_drive_window_unlock --> out_level_off
+
+  out_level_off -->|yes| out_buzz_off
+  out_level_off -->|no| out_level_warn
+  out_level_warn -->|yes| out_buzz_warn
+  out_level_warn -->|no| out_level_alert
+  out_level_alert -->|yes| out_buzz_alert
+  out_level_alert -->|no| out_highrisk_alert
+  out_highrisk_alert -->|yes| out_buzz_alert_sustain
+  out_highrisk_alert -->|no| out_line_needed
+
+  out_buzz_off --> out_line_needed
+  out_buzz_warn --> out_line_needed
+  out_buzz_alert --> out_line_needed
+  out_buzz_alert_sustain --> out_line_needed
+
+  out_line_needed -->|yes| out_line_kind
+  out_line_needed -->|no| out_mqtt_event
+  out_line_kind -->|command_ack| out_line_ack
+  out_line_kind -->|warn| out_line_warn
+  out_line_kind -->|alert| out_line_alert
+  out_line_kind -->|intruder_alert| out_line_intruder_alert
+  out_line_kind -->|fault| out_line_fault
+
+  out_line_ack --> out_mqtt_event
+  out_line_warn --> out_mqtt_event
+  out_line_alert --> out_mqtt_event
+  out_line_intruder_alert --> out_mqtt_event
+  out_line_fault --> out_mqtt_event
+
+  out_mqtt_event --> out_mqtt_status
+  out_mqtt_status --> out_mqtt_ack
+  out_mqtt_ack --> out_mqtt_metrics
+  out_mqtt_metrics --> out_end
+

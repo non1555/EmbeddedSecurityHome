@@ -1,0 +1,58 @@
+%%{init: {
+  'theme':'base',
+  'themeVariables': { 'fontSize': '20px' },
+  'flowchart': {
+    'htmlLabels': true,
+    'curve': 'linear',
+    'nodeSpacing': 56,
+    'rankSpacing': 72
+  }
+} }%%
+flowchart TB
+
+  s([Start or Next Tick])
+  b[Boot and Restore<br/>baseline disarm and valid mode restore]
+  p[Collect input<br/>MQTT command keypad sensor serial-test]
+  v{Payload valid<br/>and authorized?}
+  rej[Reject and publish<br/>ack or status reason]
+
+  t{Input class?}
+  mode[Apply mode reset<br/>disarm night away]
+  ctrl[Apply command safety gates<br/>lock unlock fault checks]
+
+  fdoor{door_open while<br/>door_locked=true?}
+  forced[Force immediate alert<br/>score 100 buzzer_alert]
+
+  armed{Armed path<br/>night or away?}
+  entry{door_open armed and<br/>unlocked gate passed?}
+  pend[Set entry pending<br/>entry delay and buzzer_warn]
+  timeout{Entry timeout reached?}
+  esc[Escalate to alert<br/>score 100 buzzer_alert]
+
+  score[Score update and correlation<br/>window motion vibration tamper]
+  level[Map level<br/>off warn alert]
+
+  out[Apply outputs and telemetry<br/>buzzer lock state MQTT LINE]
+  e([End tick])
+
+  s --> b --> p --> v
+  v -->|no| rej --> out
+  v -->|yes| t
+
+  t -->|mode| mode --> out
+  t -->|control| ctrl --> out
+  t -->|sensor| fdoor
+
+  fdoor -->|yes| forced --> out
+  fdoor -->|no| armed
+
+  armed -->|no| level --> out
+  armed -->|yes| entry
+
+  entry -->|yes| pend --> timeout
+  timeout -->|yes| esc --> out
+  timeout -->|no| out
+
+  entry -->|no| score --> level --> out
+
+  out --> e

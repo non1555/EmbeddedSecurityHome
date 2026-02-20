@@ -16,3 +16,5 @@ tools/line_bridge/.bridge.pid
 tools/line_bridge/.ngrok.pid
 tools/line_bridge/richmenu.png
 platformio.local.ini
+tmp_*.mmd
+tmp_*.svg

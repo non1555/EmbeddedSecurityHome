@@ -1,6 +1,4 @@
-# Block Diagram (EmbeddedSecurityHome)
-
-เอกสารนี้เป็น Block Diagram สำหรับใช้ในรายงาน/พรีเซนต์ โดยเน้นโครงระบบและความสัมพันธ์ของแต่ละบอร์ด
+# Block Diagram (Single-Board)
 
 ## 1) System-Level Block Diagram
 
@@ -8,89 +6,63 @@
 flowchart LR
   U[User]
   LINE[LINE OA]
-  BR[LINE Bridge<br/>FastAPI + MQTT Client]
-  MQ[MQTT Broker]
-  MAIN[Main Board ESP32<br/>Security Logic]
-  AUTO[Automation Board ESP32<br/>Light/Fan Logic]
+  BRIDGE[LINE Bridge\nFastAPI plus MQTT client]
+  MQTT[MQTT Broker]
+  MAIN[ESP32 Main Board\nSecurity Controller]
 
-  SSEC[Sensors: Reed, PIR, Vibration,<br/>Ultrasonic, Keypad, Buttons]
-  ASEC[Actuators: Door/Window Servo,<br/>Buzzer, OLED]
-  SAUTO[Sensors: BH1750, DHT]
-  AAUTO[Actuators: Light LED, Fan(L293D)]
+  SENSORS[Door and Window Reed\nPIR Zone A Door and Window Room, Zone B, Outdoor\nVibration\nUltrasonic Door Zone, Window Zone, Between Room Zone\nKeypad and Buttons]
+  ACT[Door Servo\nWindow Servo\nBuzzer\nOLED]
 
-  U --> LINE
-  LINE --> BR
-  BR <--> MQ
-  MQ <--> MAIN
-  MQ <--> AUTO
-
-  SSEC --> MAIN --> ASEC
-  SAUTO --> AUTO --> AAUTO
+  U -->|chat commands| LINE
+  LINE -->|messages and alerts| U
+  LINE -->|webhook events| BRIDGE
+  BRIDGE -->|push and reply messages| LINE
+  BRIDGE -->|publish cmd| MQTT
+  MQTT -->|deliver telemetry| BRIDGE
+  MAIN -->|publish status/event/ack/metrics| MQTT
+  MQTT -->|deliver cmd| MAIN
+  SENSORS -->|sensor inputs| MAIN
+  MAIN -->|actuator outputs| ACT
 ```
 
-## 2) Main Board Internal Block Diagram
+## 2) Main-Board Internal Block Diagram
 
 ```mermaid
 flowchart LR
-  IN1[Sensors + Keypad + Manual Buttons + Serial]
+  IN[Sensor and Keypad Inputs]
   EC[EventCollector]
-  TS[TimeoutScheduler]
   ORCH[SecurityOrchestrator]
   RE[RuleEngine]
-  DD[CommandDispatcher]
   DUS[DoorUnlockSession]
-  AC1[Servo/Buzzer/OLED]
-  MB[MqttBus/MqttClient]
-  NT[Notify Service]
+  TS[TimeoutScheduler]
+  CD[CommandDispatcher]
+  OUT[Actuators]
+  BUS[MqttBus and MqttClient]
 
-  IN1 --> EC --> ORCH
+  IN --> EC --> ORCH
   TS --> ORCH
-  ORCH --> RE --> DD --> AC1
-  ORCH --> DUS --> AC1
-  ORCH <--> MB
-  ORCH --> NT
-  NT --> MB
+  ORCH <--> RE
+  ORCH <--> DUS
+  RE --> CD --> OUT
+  ORCH <--> BUS
 ```
 
-## 3) Automation Board Internal Block Diagram
+## 3) External Interface Block
 
 ```mermaid
 flowchart LR
-  IN2[BH1750 Lux + DHT Temp/Humidity]
-  CTX[Main Context via MQTT<br/>mode + someone_home]
-  AR[AutomationRuntime]
-  PR[Presence State]
-  AP[AutomationPipeline<br/>light_system + temp_system]
-  OA[OutputActuator]
-  OUT[Light LED + Fan(L293D)]
-  AMQ[Auto MQTT Status/Ack]
+  USER[User]
+  LINE[LINE OA]
+  MQTT[MQTT Broker]
+  MAIN[Main Board]
+  BRIDGE[LINE Bridge]
 
-  IN2 --> AR
-  CTX --> AR
-  AR --> PR
-  AR --> AP --> OA --> OUT
-  AR --> AMQ
-```
-
-## 4) Communication Block (Topics)
-
-```mermaid
-flowchart TB
-  C1[LINE Bridge] -->|publish| T1[esh/main/cmd]
-  T2[esh/main/event] -->|subscribe| C1
-  T3[esh/main/status] -->|subscribe| C1
-  T4[esh/main/ack] -->|subscribe| C1
-  T5[esh/auto/status] -->|subscribe| C1
-  T6[esh/auto/ack] -->|subscribe| C1
-
-  M1[Main Board] -->|publish| T2
-  M1 -->|publish| T3
-  M1 -->|publish| T4
-  M1 -->|subscribe| T1
-
-  A1[Automation Board] -->|publish| T5
-  A1 -->|publish| T6
-  A1 -->|subscribe| T3
-  A1 -->|subscribe| T7[esh/auto/cmd]
-  C1 -->|publish| T7
+  USER -->|chat command| LINE
+  LINE -->|webhook command| BRIDGE
+  BRIDGE -->|publish esh/main/cmd| MQTT
+  MQTT -->|deliver cmd topic| MAIN
+  MAIN -->|publish event/status/ack/metrics| MQTT
+  MQTT -->|deliver telemetry topics| BRIDGE
+  BRIDGE -->|push and reply| LINE
+  LINE -->|notification| USER
 ```

@@ -1,0 +1,17 @@
+﻿%%{init: {'theme':'base','flowchart':{'htmlLabels':true,'curve':'basis','nodeSpacing':45,'rankSpacing':70}} }%%
+flowchart LR
+  USER[User]
+  LINE[LINE OA]
+  MQTT[MQTT Broker]
+  MAIN[Main Board]
+  BRIDGE[LINE Bridge]
+
+  USER -->|chat command| LINE
+  LINE -->|webhook command| BRIDGE
+  BRIDGE -->|publish esh/main/cmd| MQTT
+  MQTT -->|deliver cmd topic| MAIN
+  MAIN -->|publish event/status/ack/metrics| MQTT
+  MQTT -->|deliver telemetry topics| BRIDGE
+  BRIDGE -->|push and reply| LINE
+  LINE -->|notification| USER
+

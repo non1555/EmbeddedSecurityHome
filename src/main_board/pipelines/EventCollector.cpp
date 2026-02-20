@@ -42,6 +42,8 @@ void EventCollector::begin() {
   keypadIn_.begin();
   hasPendingSerialEvent_ = false;
   pendingSerialEvent_ = {};
+  serialLineLen_ = 0;
+  serialLineLastByteMs_ = 0;
   if (isValidDoorCode(DOOR_CODE)) {
     keypadIn_.setDoorCode(DOOR_CODE);
   } else {
@@ -123,34 +125,162 @@ void EventCollector::updateOledStatus(uint32_t nowMs,
   oled_.update(nowMs);
 }
 
+void EventCollector::printSerialHelp() const {
+  Serial.println("[SERIAL-TEST] Send one code then newline");
+  Serial.println("[SERIAL-TEST] Modes");
+  Serial.println("  100 disarm");
+  Serial.println("  101 arm_night");
+  Serial.println("  102 arm_away");
+  Serial.println("[SERIAL-TEST] Command and control");
+  Serial.println("  200 manual_door_toggle");
+  Serial.println("  201 manual_window_toggle");
+  Serial.println("  202 manual_lock_request");
+  Serial.println("  203 manual_unlock_request");
+  Serial.println("  204 door_hold_warn_silence");
+  Serial.println("  205 keypad_help_request");
+  Serial.println("  206 door_code_unlock");
+  Serial.println("  207 door_code_bad");
+  Serial.println("  208 entry_timeout");
+  Serial.println("  900 serial_test_enable (allow serial mode/manual/sensor)");
+  Serial.println("  901 serial_test_disable (restore serial policy defaults)");
+  Serial.println("[SERIAL-TEST] Sensor inputs");
+  Serial.println("  300 door_open");
+  Serial.println("  301 window_open");
+  Serial.println("  302 door_tamper");
+  Serial.println("  303 vib_spike");
+  Serial.println("  310 motion_pir1(zone_a)");
+  Serial.println("  311 motion_pir2(zone_b)");
+  Serial.println("  312 motion_pir3(outdoor)");
+  Serial.println("  320 chokepoint_us1(door)");
+  Serial.println("  321 chokepoint_us2(window)");
+  Serial.println("  322 chokepoint_us3(between_room)");
+  Serial.println("[SERIAL-TEST] Legacy single-key still supported. Send '?' for this help.");
+}
+
 bool EventCollector::parseSerialEvent(char c, uint32_t nowMs, Event& out) const {
-  static constexpr uint8_t kSerialSyntheticSrc = 250;
-  if (c == '0') { out = {EventType::disarm, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '1') { out = {EventType::arm_night, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '6') { out = {EventType::arm_away, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '8') { out = {EventType::door_open, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '2') { out = {EventType::window_open, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '7') { out = {EventType::door_tamper, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '3') { out = {EventType::vib_spike, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '4') { out = {EventType::motion, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == '5') { out = {EventType::chokepoint, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'S' || c == 's') { out = {EventType::door_hold_warn_silence, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'H' || c == 'h') { out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'D' || c == 'd') { out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'W' || c == 'w') { out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'L' || c == 'l') { out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrc}; return true; }
-  if (c == 'U' || c == 'u') { out = {EventType::manual_unlock_request, nowMs, kSerialSyntheticSrc}; return true; }
+  if (c == '0') { out = {EventType::disarm, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '1') { out = {EventType::arm_night, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '6') { out = {EventType::arm_away, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '8') { out = {EventType::door_open, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '2') { out = {EventType::window_open, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '7') { out = {EventType::door_tamper, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '3') { out = {EventType::vib_spike, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '4') { out = {EventType::motion, nowMs, kSerialSyntheticSrcPir1}; return true; }
+  if (c == '5') { out = {EventType::chokepoint, nowMs, kSerialSyntheticSrcUs1}; return true; }
+  if (c == 'S' || c == 's') { out = {EventType::door_hold_warn_silence, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == 'H' || c == 'h') { out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == 'D' || c == 'd') { out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == 'W' || c == 'w') { out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == 'L' || c == 'l') { out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == 'U' || c == 'u') { out = {EventType::manual_unlock_request, nowMs, kSerialSyntheticSrcGeneric}; return true; }
+  if (c == '?') {
+    Serial.println("[SERIAL-TEST] help requested");
+    printSerialHelp();
+    return false;
+  }
   return false;
 }
 
-bool EventCollector::readSerialEvent(uint32_t nowMs, Event& out) const {
-  if (!Serial.available()) return false;
-  const char c = (char)Serial.read();
-  while (Serial.available()) {
-    const char t = (char)Serial.read();
-    if (t == '\n') break;
+bool EventCollector::parseSerialCode(uint16_t code, uint32_t nowMs, Event& out) const {
+  switch (code) {
+    case 100: out = {EventType::disarm, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 101: out = {EventType::arm_night, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 102: out = {EventType::arm_away, nowMs, kSerialSyntheticSrcGeneric}; return true;
+
+    case 200: out = {EventType::manual_door_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 201: out = {EventType::manual_window_toggle, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 202: out = {EventType::manual_lock_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 203: out = {EventType::manual_unlock_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 204: out = {EventType::door_hold_warn_silence, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 205: out = {EventType::keypad_help_request, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 206: out = {EventType::door_code_unlock, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 207: out = {EventType::door_code_bad, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 208: out = {EventType::entry_timeout, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 900: out = {EventType::serial_test_enable, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 901: out = {EventType::serial_test_disable, nowMs, kSerialSyntheticSrcGeneric}; return true;
+
+    case 300: out = {EventType::door_open, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 301: out = {EventType::window_open, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 302: out = {EventType::door_tamper, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 303: out = {EventType::vib_spike, nowMs, kSerialSyntheticSrcGeneric}; return true;
+    case 310: out = {EventType::motion, nowMs, kSerialSyntheticSrcPir1}; return true;
+    case 311: out = {EventType::motion, nowMs, kSerialSyntheticSrcPir2}; return true;
+    case 312: out = {EventType::motion, nowMs, kSerialSyntheticSrcPir3}; return true;
+    case 320: out = {EventType::chokepoint, nowMs, kSerialSyntheticSrcUs1}; return true;
+    case 321: out = {EventType::chokepoint, nowMs, kSerialSyntheticSrcUs2}; return true;
+    case 322: out = {EventType::chokepoint, nowMs, kSerialSyntheticSrcUs3}; return true;
+    default: return false;
   }
-  return parseSerialEvent(c, nowMs, out);
+}
+
+bool EventCollector::parseSerialEvent(const String& token, uint32_t nowMs, Event& out) const {
+  String t = token;
+  t.trim();
+  if (t.length() == 0) return false;
+
+  if (t == "?" || t.equalsIgnoreCase("help")) {
+    printSerialHelp();
+    return false;
+  }
+
+  if (t.length() == 1) {
+    return parseSerialEvent(t[0], nowMs, out);
+  }
+
+  for (size_t i = 0; i < t.length(); ++i) {
+    if (t[i] < '0' || t[i] > '9') {
+      Serial.print("[SERIAL-TEST] unknown token: ");
+      Serial.println(t);
+      Serial.println("[SERIAL-TEST] use '?' for help");
+      return false;
+    }
+  }
+
+  const uint16_t code = (uint16_t)t.toInt();
+  if (parseSerialCode(code, nowMs, out)) {
+    Serial.print("[SERIAL-TEST] accepted code ");
+    Serial.println(code);
+    return true;
+  }
+
+  Serial.print("[SERIAL-TEST] unknown code ");
+  Serial.println(code);
+  Serial.println("[SERIAL-TEST] use '?' for help");
+  return false;
+}
+
+bool EventCollector::readSerialEvent(uint32_t nowMs, Event& out) {
+  while (Serial.available()) {
+    const char c = (char)Serial.read();
+    if (c == '\r') continue;
+
+    serialLineLastByteMs_ = nowMs;
+
+    if (c == '\n') {
+      if (serialLineLen_ == 0) continue;
+      serialLineBuf_[serialLineLen_] = '\0';
+      const String token(serialLineBuf_);
+      serialLineLen_ = 0;
+      return parseSerialEvent(token, nowMs, out);
+    }
+
+    if (serialLineLen_ >= (sizeof(serialLineBuf_) - 1)) {
+      serialLineLen_ = 0;
+      Serial.println("[SERIAL-TEST] line too long");
+      return false;
+    }
+    serialLineBuf_[serialLineLen_++] = c;
+  }
+
+  // Support "No line ending" in serial monitor by auto-committing after idle.
+  if (serialLineLen_ > 0 && (nowMs - serialLineLastByteMs_) >= 40) {
+    serialLineBuf_[serialLineLen_] = '\0';
+    const String token(serialLineBuf_);
+    serialLineLen_ = 0;
+    return parseSerialEvent(token, nowMs, out);
+  }
+
+  return false;
 }
 
 bool EventCollector::pollSensorOrSerial(uint32_t nowMs, Event& out) {

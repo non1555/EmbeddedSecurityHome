@@ -6,7 +6,6 @@ static inline bool within(uint32_t nowMs, uint32_t refMs, uint32_t windowMs) {
 }
 
 static AlarmLevel levelFromScore(uint8_t score) {
-  if (score >= 80) return AlarmLevel::critical;
   if (score >= 45) return AlarmLevel::alert;
   if (score >= 15) return AlarmLevel::warn;
   return AlarmLevel::off;
@@ -34,6 +33,13 @@ static void applyDecay(SystemState& st, const Config& cfg, uint32_t nowMs) {
 static void addScore(SystemState& st, uint8_t points) {
   const uint16_t s = (uint16_t)st.suspicion_score + points;
   st.suspicion_score = (s > 100) ? 100 : (uint8_t)s;
+}
+
+static uint8_t normalizeMotionSource(uint8_t src) {
+  if (src == kSerialSyntheticSrcPir1) return 1;
+  if (src == kSerialSyntheticSrcPir2) return 2;
+  if (src == kSerialSyntheticSrcPir3) return 3;
+  return src;
 }
 } // namespace
 
@@ -86,6 +92,17 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     return d;
   }
 
+  // Forced door-open while still locked is always treated as an immediate alert.
+  if (e.type == EventType::door_open && s.door_locked) {
+    d.next.entry_pending = false;
+    d.next.entry_deadline_ms = 0;
+    d.next.last_door_event_ms = e.ts_ms;
+    d.next.suspicion_score = 100;
+    d.next.level = AlarmLevel::alert;
+    d.cmd.type = CommandType::buzzer_alert;
+    return d;
+  }
+
   if ((s.mode == Mode::night || s.mode == Mode::away) && e.type == EventType::door_open) {
     // Don't keep extending entry delay / stacking score if the door stays open or chatters.
     if (s.entry_pending) return d;
@@ -106,13 +123,8 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     d.next.entry_pending = false;
     d.next.entry_deadline_ms = 0;
     d.next.suspicion_score = 100;
-    d.next.level = AlarmLevel::critical;
-    if (e.ts_ms - s.last_notify_ms >= cfg.notify_cooldown_ms) {
-      d.next.last_notify_ms = e.ts_ms;
-      d.cmd.type = CommandType::notify;
-    } else {
-      d.cmd.type = CommandType::buzzer_alert;
-    }
+    d.next.level = AlarmLevel::alert;
+    d.cmd.type = CommandType::buzzer_alert;
     return d;
   }
 
@@ -128,9 +140,10 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
 
   if ((s.mode == Mode::night || s.mode == Mode::away) &&
       (e.type == EventType::motion || e.type == EventType::chokepoint)) {
+    const uint8_t motionSrc = normalizeMotionSource(e.src);
     const bool isIndoorActivity =
       (e.type == EventType::chokepoint) ||
-      (e.type == EventType::motion && e.src != cfg.outdoor_pir_src);
+      (e.type == EventType::motion && motionSrc != cfg.outdoor_pir_src);
     if (isIndoorActivity) {
       d.next.last_indoor_activity_ms = e.ts_ms;
       addScore(d.next, 18);
@@ -152,17 +165,9 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     if (within(e.ts_ms, s.last_outdoor_motion_ms, cfg.correlation_window_ms)) addScore(d.next, 12);
     if (within(e.ts_ms, s.last_window_event_ms, cfg.correlation_window_ms)) addScore(d.next, 10);
     d.next.level = levelFromScore(d.next.suspicion_score);
-
-    if (d.next.level == AlarmLevel::critical) {
+    if (d.next.suspicion_score >= 80) {
       d.next.entry_pending = false;
       d.next.entry_deadline_ms = 0;
-      if (e.ts_ms - s.last_notify_ms >= cfg.notify_cooldown_ms) {
-        d.next.last_notify_ms = e.ts_ms;
-        d.cmd.type = CommandType::notify;
-      } else {
-        d.cmd.type = CommandType::buzzer_alert;
-      }
-      return d;
     }
     d.cmd.type = (d.next.level >= AlarmLevel::alert) ? CommandType::buzzer_alert : CommandType::buzzer_warn;
     return d;
@@ -172,12 +177,11 @@ Decision RuleEngine::handle(const SystemState& s, const Config& cfg, const Event
     addScore(d.next, 65);
     if (within(e.ts_ms, s.last_outdoor_motion_ms, cfg.correlation_window_ms)) addScore(d.next, 15);
     d.next.level = levelFromScore(d.next.suspicion_score);
-    if (d.next.level == AlarmLevel::critical && e.ts_ms - s.last_notify_ms >= cfg.notify_cooldown_ms) {
-      d.next.last_notify_ms = e.ts_ms;
-      d.cmd.type = CommandType::notify;
-    } else {
-      d.cmd.type = CommandType::buzzer_alert;
+    if (d.next.suspicion_score >= 80) {
+      d.next.entry_pending = false;
+      d.next.entry_deadline_ms = 0;
     }
+    d.cmd.type = CommandType::buzzer_alert;
     return d;
   }
 

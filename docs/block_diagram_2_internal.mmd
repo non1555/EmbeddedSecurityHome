@@ -1,0 +1,19 @@
+﻿%%{init: {'theme':'base','flowchart':{'htmlLabels':true,'curve':'basis','nodeSpacing':45,'rankSpacing':70}} }%%
+flowchart LR
+  IN[Sensor and Keypad Inputs]
+  EC[EventCollector]
+  ORCH[SecurityOrchestrator]
+  RE[RuleEngine]
+  DUS[DoorUnlockSession]
+  TS[TimeoutScheduler]
+  CD[CommandDispatcher]
+  OUT[Actuators]
+  BUS[MqttBus and MqttClient]
+
+  IN --> EC --> ORCH
+  TS --> ORCH
+  ORCH <--> RE
+  ORCH <--> DUS
+  RE --> CD --> OUT
+  ORCH <--> BUS
+

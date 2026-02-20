@@ -5,7 +5,6 @@ enum class CommandType {
   none,
   buzzer_warn,
   buzzer_alert,
-  notify,
   servo_lock
 };
 
@@ -14,7 +13,6 @@ static const char* toString(CommandType t) {
     case CommandType::none:         return "none";
     case CommandType::buzzer_warn:  return "buzzer_warn";
     case CommandType::buzzer_alert: return "buzzer_alert";
-    case CommandType::notify:       return "notify";
     case CommandType::servo_lock:   return "servo_lock";
     default:                        return "unknown";
   }

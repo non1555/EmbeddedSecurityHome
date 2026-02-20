@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 enum class Mode { startup_safe, disarm, away, night };
-enum class AlarmLevel { off, warn, alert, critical };
+enum class AlarmLevel { off, warn, alert };
 
 static inline const char* toString(Mode m) {
   switch (m) {
@@ -19,13 +19,12 @@ static inline const char* toString(AlarmLevel lv) {
     case AlarmLevel::off:      return "off";
     case AlarmLevel::warn:     return "warn";
     case AlarmLevel::alert:    return "alert";
-    case AlarmLevel::critical: return "critical";
     default:                  return "unknown";
   }
 }
 
 struct SystemState {
-  Mode mode = Mode::startup_safe;
+  Mode mode = Mode::disarm;
   AlarmLevel level = AlarmLevel::off;
 
   uint32_t last_notify_ms = 0;

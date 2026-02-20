@@ -19,7 +19,9 @@ enum class EventType {
   manual_window_toggle,
   manual_lock_request,
   manual_unlock_request,
-  entry_timeout
+  entry_timeout,
+  serial_test_enable,
+  serial_test_disable
 };
 
 static const char* toString(EventType t) {
@@ -42,6 +44,8 @@ static const char* toString(EventType t) {
     case EventType::manual_lock_request: return "manual_lock_request";
     case EventType::manual_unlock_request: return "manual_unlock_request";
     case EventType::entry_timeout:return "entry_timeout";
+    case EventType::serial_test_enable: return "serial_test_enable";
+    case EventType::serial_test_disable: return "serial_test_disable";
     default:                     return "unknown";
   }
 }
@@ -55,3 +59,17 @@ struct Event {
   constexpr Event(EventType t, uint32_t ts, uint8_t s = 0)
   : type(t), ts_ms(ts), src(s) {}
 };
+
+// Serial synthetic source range for debug/test injection.
+constexpr uint8_t kSerialSyntheticSrcBase = 200;
+constexpr uint8_t kSerialSyntheticSrcGeneric = 200;
+constexpr uint8_t kSerialSyntheticSrcPir1 = 201;
+constexpr uint8_t kSerialSyntheticSrcPir2 = 202;
+constexpr uint8_t kSerialSyntheticSrcPir3 = 203;
+constexpr uint8_t kSerialSyntheticSrcUs1 = 211;
+constexpr uint8_t kSerialSyntheticSrcUs2 = 212;
+constexpr uint8_t kSerialSyntheticSrcUs3 = 213;
+
+static inline bool isSerialSyntheticSource(uint8_t src) {
+  return src >= kSerialSyntheticSrcBase;
+}

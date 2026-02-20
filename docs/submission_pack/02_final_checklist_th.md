@@ -1,42 +1,11 @@
-# Final Submission Checklist (TH)
+# Final Checklist (Single-Board)
 
-ใช้เช็ครอบสุดท้ายก่อนส่งอาจารย์
-
-## A) เนื้อหาเอกสารหลัก
-
-- [ ] อัปเดตวันที่ใน `docs/project_description_requirements_details_testcases_th.md`
-- [ ] อัปเดตวันที่ใน `docs/architectural_design_actual_update_draft_th.md`
-- [ ] อัปเดตวันที่ใน `docs/gantt_chart_th.md`
-- [ ] ยืนยันว่าหัวข้อใน `docs/project_presentation_abstract.md` ครบ:
-- [ ] ลักษณะชิ้นงาน
-- [ ] การใช้งาน
-- [ ] แผนการทำงาน
-- [ ] hardware design
-- [ ] circuit
-- [ ] flowchart
-- [ ] code
-- [ ] test result
-
-## B) Flowchart และภาพประกอบ
-
-- [ ] เปิด `docs/flowcharts.md` แล้ว Mermaid render ได้ทุกบล็อก
-- [ ] เปิด `docs/full_system_flow_detailed.svg` แล้วอ่านได้ครบ
-- [ ] เปิด `docs/block_diagram.md` แล้ว Mermaid render ได้ครบทุกแผนภาพ
-- [ ] มีไฟล์ภาพที่พร้อมแนบรายงาน: block diagram, circuit, flowchart
-
-## C) หลักฐานทดสอบ
-
-- [ ] รัน `python -m platformio run -e main-board`
-- [ ] รัน `python -m platformio run -e automation-board`
-- [ ] รัน `python -m unittest test.bridge.test_bridge -v`
-- [ ] รัน `python -m py_compile tools/line_bridge/bridge.py`
-- [ ] กรอกผลลง `docs/submission_pack/03_test_evidence_template_th.md`
-
-## D) แพ็กส่งงาน
-
-- [ ] export เอกสารนำเสนอเป็น PDF
-- [ ] export เอกสาร description เป็น PDF
-- [ ] export เอกสาร architecture เป็น PDF
-- [ ] export gantt chart เป็นภาพ/PDF
-- [ ] ตรวจชื่อไฟล์ส่งให้อ่านง่ายและสื่อความหมาย
-- [ ] ตรวจลิงก์ภายใน README/docs ว่าไม่เสีย
+- [ ] ยืนยันขอบเขตส่งงานเป็นบอร์ดเดียว (`main-board`)
+- [ ] ยืนยันเอกสาร active อยู่ใน `docs/` และเอกสารเก่าอยู่ใน `docs/legacy_2026-02-19/`
+- [ ] ตรวจว่า Business Rules ล่าสุดอยู่ใน `docs/business_rules.md`
+- [ ] ตรวจว่า Requirement/Testcase mapping ล่าสุดอยู่ใน `docs/project_description_requirements_details_testcases_th.md`
+- [ ] ตรวจว่า flow ล่าสุดอยู่ใน `docs/full_system_flow_detailed.mmd`
+- [ ] รัน build สำเร็จ: `python -m platformio run -e main-board`
+- [ ] ตรวจว่า launcher/tool ไม่มีปุ่มหรือ env สำหรับบอร์ดที่สอง
+- [ ] บันทึกผลทดสอบใน `docs/submission_pack/03_test_evidence_template_th.md`
+- [ ] ตรวจ git diff รอบสุดท้ายให้เหลือเฉพาะสิ่งที่ต้องส่ง

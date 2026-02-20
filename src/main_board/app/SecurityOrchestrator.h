@@ -47,12 +47,15 @@ private:
   bool processManualActuatorEvent(const Event& e);
   bool processDoorHoldWarnSilenceEvent(const Event& e);
   bool processKeypadHelpRequestEvent(const Event& e);
+  bool processSerialControlEvent(const Event& e);
   bool processModeEvent(const Event& e, const char* origin);
   bool acceptRemoteNonce(const String& nonce, uint32_t nowMs, bool persistMonotonicFloor);
   void updateSensorHealth(uint32_t nowMs);
   void startDoorUnlockSession(uint32_t nowMs);
   void clearDoorUnlockSession(bool stopBuzzer);
   void updateDoorUnlockSession(uint32_t nowMs);
+  void restorePersistedMode();
+  void persistModeIfChanged(Mode prevMode);
   void syncLiveSnapshot();
   void publishStateStatus(const char* reason);
   void publishStateEvent(const Event& e, const Command& cmd);
@@ -74,4 +77,7 @@ private:
   Preferences noncePref_;
   bool noncePrefReady_ = false;
   uint32_t lastRemoteNonce_ = 0;
+  bool defaultAllowSerialModeCommands_ = false;
+  bool defaultAllowSerialManualCommands_ = false;
+  bool defaultAllowSerialSensorCommands_ = false;
 };

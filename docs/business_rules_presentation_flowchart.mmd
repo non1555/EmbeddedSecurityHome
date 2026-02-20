@@ -1,0 +1,46 @@
+﻿%%{init: {
+  'theme':'base',
+  'themeVariables': {
+    'fontSize': '22px'
+  },
+  'flowchart': {
+    'htmlLabels': true,
+    'curve': 'linear',
+    'nodeSpacing': 64,
+    'rankSpacing': 84
+  }
+} }%%
+flowchart LR
+
+  s([Start])
+
+  subgraph A[Rule Block A Boot and Input Validation]
+    a[Boot baseline mode is disarm<br/>Restore persisted mode only if value is valid<br/>Normalize input and drop invalid payload]
+  end
+
+  subgraph B[Rule Block B Command and Safety]
+    b[Authenticate command<br/>Apply unlock and lock safety gates<br/>Apply keypad lockout and serial hardening]
+    bq{Policy accepted?}
+  end
+
+  subgraph C[Rule Block C Mode and Entry]
+    c[Apply mode transition reset<br/>Persist mode only when mode changes<br/>Handle armed door-open entry delay and timeout escalation]
+  end
+
+  subgraph D[Rule Block D Risk Score]
+    d[Update weighted risk by event type<br/>Add correlation bonus by time window<br/>Apply decay and clamp 0 to 100]
+  end
+
+  subgraph E[Rule Block E Level and Session]
+    e[Map score to level off warn alert<br/>Handle unlock session timers and relock<br/>Handle hold-open warning and silence]
+  end
+
+  subgraph F[Rule Block F Output and Telemetry]
+    f[Apply door window buzzer outputs<br/>Send LINE reply and notifications<br/>Publish MQTT event status ack metrics]
+  end
+
+  e0([End])
+
+  s --> a --> b --> bq
+  bq -->|yes| c --> d --> e --> f --> e0
+  bq -->|no| f

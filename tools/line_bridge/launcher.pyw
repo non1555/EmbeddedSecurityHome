@@ -27,9 +27,8 @@ NGROK_BUNDLE_DIR = PROJECT_ROOT / "tools" / "ngrok"
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 DEFAULT_FW_ENV = "esp32doit-devkit-v1"
-PREFERRED_FW_ENVS = ("main-board", "automation-board")
+PREFERRED_FW_ENVS = ("main-board",)
 MAIN_BOARD_ENV = "main-board"
-AUTOMATION_BOARD_ENV = "automation-board"
 PIO_VENV_DIR = PROJECT_ROOT / ".venv_pio"
 MOSQUITTO_LAN_CONF_PATH = Path("/etc/mosquitto/conf.d/securityhome-lan.conf")
 MOSQUITTO_LAN_CONF_TEXT = (
@@ -99,7 +98,7 @@ def normalize_fw_env_name(name: str) -> str:
     raw = (name or "").strip()
     aliases = {
         "prod": "main-board",
-        "automation": "automation-board",
+        "automation": "main-board",
     }
     return aliases.get(raw, raw)
 
@@ -377,11 +376,7 @@ class LauncherApp:
         self.fw_mqtt_username = StringVar(value=self.env.get("FW_MQTT_USERNAME", ""))
         self.fw_mqtt_password = StringVar(value=self.env.get("FW_MQTT_PASSWORD", ""))
         default_main_cid = (self.env.get("FW_MQTT_CLIENT_ID", "embedded-security-esp32") or "embedded-security-esp32").strip()
-        default_auto_cid = (self.env.get("FW_MQTT_CLIENT_ID_AUTOMATION", "") or f"{default_main_cid}-auto").strip()
-        if not default_auto_cid or default_auto_cid == default_main_cid:
-            default_auto_cid = f"{default_main_cid}-auto"
         self.fw_mqtt_client_id_main = StringVar(value=default_main_cid)
-        self.fw_mqtt_client_id_auto = StringVar(value=default_auto_cid)
         self.fw_cmd_token = StringVar(value=self.env.get("FW_CMD_TOKEN", ""))
         self.fw_upload_port = StringVar(value=self.env.get("FW_UPLOAD_PORT", ""))
         all_envs, self.fw_env_details = parse_platformio_envs(PLATFORMIO_INI_PATH)
@@ -658,9 +653,6 @@ class LauncherApp:
         ttk.Label(firmware_tab, text="MQTT Client ID (Main)").grid(row=fr, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(firmware_tab, textvariable=self.fw_mqtt_client_id_main, width=36).grid(row=fr, column=1, sticky="ew", pady=(6, 0))
         fr += 1
-        ttk.Label(firmware_tab, text="MQTT Client ID (Automation)").grid(row=fr, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(firmware_tab, textvariable=self.fw_mqtt_client_id_auto, width=36).grid(row=fr, column=1, sticky="ew", pady=(6, 0))
-        fr += 1
         ttk.Label(firmware_tab, text="FW CMD Token").grid(row=fr, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(firmware_tab, textvariable=self.fw_cmd_token, width=36, show="*").grid(row=fr, column=1, sticky="ew", pady=(6, 0))
         fr += 1
@@ -686,16 +678,12 @@ class LauncherApp:
         fw_btns.columnconfigure(1, weight=1)
         fw_btns.columnconfigure(2, weight=1)
         fw_btns.columnconfigure(3, weight=1)
-        fw_btns.columnconfigure(4, weight=1)
 
         ttk.Button(fw_btns, text="Save to .env", command=self.save_firmware_env).grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(fw_btns, text="Build", command=self.build_firmware, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(0, 6))
         ttk.Button(fw_btns, text="Upload", command=self.upload_firmware, style="Primary.TButton").grid(row=0, column=2, sticky="ew", padx=(0, 6))
         ttk.Button(fw_btns, text="Deploy Main Board", command=self.deploy_main_board, style="Accent.TButton").grid(
             row=0, column=3, sticky="ew", padx=(0, 6)
-        )
-        ttk.Button(fw_btns, text="Deploy Automation", command=self.deploy_automation_board, style="Primary.TButton").grid(
-            row=0, column=4, sticky="ew"
         )
 
         self.refresh_fw_envs()
@@ -1932,7 +1920,6 @@ class LauncherApp:
     def _describe_env(self, env_name: str) -> str:
         custom = {
             "main-board": "production firmware (main board)",
-            "automation-board": "automation firmware (automation board)",
         }
         if env_name in custom:
             return f"{env_name}: {custom[env_name]}"
@@ -2007,11 +1994,8 @@ class LauncherApp:
         lines = upsert_env_kv(lines, "FW_MQTT_USERNAME", self.fw_mqtt_username.get().strip())
         lines = upsert_env_kv(lines, "FW_MQTT_PASSWORD", self.fw_mqtt_password.get().strip())
         main_cid = self.fw_mqtt_client_id_main.get().strip() or "embedded-security-esp32"
-        auto_cid = self.fw_mqtt_client_id_auto.get().strip() or f"{main_cid}-auto"
-        if auto_cid == main_cid:
-            auto_cid = f"{auto_cid}-auto"
         lines = upsert_env_kv(lines, "FW_MQTT_CLIENT_ID", main_cid)
-        lines = upsert_env_kv(lines, "FW_MQTT_CLIENT_ID_AUTOMATION", auto_cid)
+        lines = [ln for ln in lines if not ln.startswith("FW_MQTT_CLIENT_ID_AUTOMATION=")]
         lines = upsert_env_kv(lines, "FW_CMD_TOKEN", self.fw_cmd_token.get().strip())
         selected_build_env = normalize_fw_env_name((self.fw_build_env.get() or "").strip())
         if selected_build_env not in self.fw_env_options:
@@ -2089,9 +2073,6 @@ class LauncherApp:
 
     def deploy_main_board(self) -> None:
         self._deploy_env(MAIN_BOARD_ENV)
-
-    def deploy_automation_board(self) -> None:
-        self._deploy_env(AUTOMATION_BOARD_ENV)
 
     def upload_firmware(self) -> None:
         # Refresh port list right before upload to avoid stale COM selections.

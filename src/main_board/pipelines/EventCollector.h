@@ -32,6 +32,7 @@ public:
   void begin();
   bool pollKeypad(uint32_t nowMs, Event& out);
   bool pollSensorOrSerial(uint32_t nowMs, Event& out);
+  void printSerialHelp() const;
   bool isDoorOpen() const;
   bool isWindowOpen() const;
   void readHealth(uint32_t nowMs,
@@ -79,7 +80,9 @@ private:
                         Event& out);
   bool pollManualButtons(uint32_t nowMs, Event& out);
   bool parseSerialEvent(char c, uint32_t nowMs, Event& out) const;
-  bool readSerialEvent(uint32_t nowMs, Event& out) const;
+  bool parseSerialEvent(const String& token, uint32_t nowMs, Event& out) const;
+  bool parseSerialCode(uint16_t code, uint32_t nowMs, Event& out) const;
+  bool readSerialEvent(uint32_t nowMs, Event& out);
 
   bool doorToggleLastRawPressed_ = false;
   bool doorToggleStablePressed_ = false;
@@ -91,4 +94,7 @@ private:
 
   bool hasPendingSerialEvent_ = false;
   Event pendingSerialEvent_{};
+  char serialLineBuf_[48] = {0};
+  uint8_t serialLineLen_ = 0;
+  uint32_t serialLineLastByteMs_ = 0;
 };

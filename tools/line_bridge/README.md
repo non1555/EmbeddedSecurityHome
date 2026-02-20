@@ -108,10 +108,10 @@ UI Launcher (no terminal):
 - Control is handled in LINE chat (Rich Menu + Flex UI).
 - Firmware UI: use the `Firmware` tab to set ESP Wi-Fi/MQTT values, then click `Build`/`Upload`.
 - Firmware UI supports separate `Build Env` and `Upload Env` (board/profile), with env details shown under each selector.
-  - Recommended: `main-board` for main firmware, `automation-board` for automation firmware.
+  - Current project setup: use `main-board` only.
 - Firmware UI also exposes:
   - `FW_CMD_TOKEN` for secure `token|nonce|cmd` command payload
-  - separate MQTT client IDs for main-board and automation-board (prevents broker client-id collision)
+  - `FW_MQTT_CLIENT_ID` for firmware MQTT client ID
 - Launcher saves your values in `tools/line_bridge/.env`.
   - `platformio.ini` reads `.env` via `tools/pio_env.py` (PlatformIO pre-build script).
   - `platformio.ini` is not edited by launcher.

@@ -1,152 +1,58 @@
-# คำอธิบายโครงการ (ข้อกำหนด รายละเอียด และกรณีทดสอบ)
+# ข้อกำหนด, Business Rules และ Test Cases (Single-Board)
 
-สถานะ: ร่างใช้งานจริง (อ้างอิงโค้ดปัจจุบัน)
-อัปเดตล่าสุด: 2026-02-19
+## 1. ขอบเขต
 
-## 1) ภาพรวมโครงการ
+เอกสารฉบับนี้รองรับเฟิร์มแวร์เป้าหมายเดียว:
 
-`EmbeddedSecurityHome` คือระบบความปลอดภัยบ้านแบบ Embedded + IoT แบ่งเป็น 3 ส่วนหลัก:
-- `Main Board` (ESP32): ตรรกะความปลอดภัยหลัก ตรวจจับการบุกรุก ควบคุมล็อก/สัญญาณเตือน
-- `Automation Board` (ESP32): ควบคุมไฟ/พัดลมอัตโนมัติ โดยอิง context จาก Main Board
-- `LINE Bridge` (Python): เชื่อม MQTT กับ LINE สำหรับสั่งงานและรับแจ้งเตือน
+- `main-board` เท่านั้น
 
-เป้าหมายหลัก:
-- ตรวจจับความเสี่ยงเมื่อระบบอยู่โหมด armed
-- แจ้งเตือนผู้ใช้ผ่าน LINE แบบอ่านแล้วเข้าใจทันที
-- คำสั่งสำคัญต้องมี token + nonce (กัน replay)
-- แยกหน้าที่ security กับ automation ชัดเจน
+เอกสารเดิมแบบหลายบอร์ดถูกเก็บไว้ที่ `docs/legacy_2026-02-19/`
 
-## 2) ข้อกำหนด (Requirements)
+## 2. Functional Requirements
 
-### 2.1 Functional Requirements
+| Req ID | ข้อกำหนด | Mapping ไป Business Rules |
+|---|---|---|
+| FR-01 | ระบบต้องรองรับโหมด `night`, `away`, `disarm` | BR-01, BR-02, BR-03 |
+| FR-02 | ระบบต้องประเมินความเสี่ยงจากเหตุการณ์ด้วยคะแนนที่กำหนดแน่นอน | BR-06, BR-07, BR-08, BR-09, BR-10, BR-11 |
+| FR-03 | ระบบต้องจัดการ entry delay และ timeout escalation เมื่ออยู่ในโหมด armed | BR-04, BR-05 |
+| FR-04 | ระบบต้องบังคับเงื่อนไข lock/unlock ตามสถานะประตู/หน้าต่างจริง | BR-12, BR-13, BR-21, BR-22 |
+| FR-05 | คำสั่ง remote ต้องถูกป้องกันด้วย token/nonce | BR-17, BR-18, BR-19 |
+| FR-06 | เมื่อพบ sensor fault ระบบต้อง fail-closed สำหรับการ unlock | BR-20 |
+| FR-07 | ต้องมี keypad lockout ตามจำนวนครั้งที่ใส่รหัสผิด | BR-23 |
+| FR-08 | ต้องส่ง telemetry MQTT (event/status/ack/metrics) เพื่อการติดตามระบบ | BR-25, BR-26, BR-27 |
+| FR-09 | ระบบต้องคง continuity ของโหมดข้าม reboot โดย restore จาก persisted mode ที่ valid และ fallback แบบปลอดภัย | BR-29, BR-30 |
 
-| ID | ข้อกำหนด |
-|---|---|
-| FR-01 | ระบบต้องรองรับโหมด `startup_safe`, `disarm`, `away`, `night` |
-| FR-02 | ระบบต้องรับ event จาก reed, PIR, vibration, ultrasonic, keypad, manual buttons |
-| FR-03 | ระบบต้องประเมินความเสี่ยงด้วย rule-based scoring และให้ระดับ `off/warn/alert/critical` |
-| FR-04 | ระบบต้อง publish MQTT: `event`, `status`, `ack`, `metrics` |
-| FR-05 | คำสั่ง remote แบบแก้สถานะต้องใช้ token + nonce (anti-replay) |
-| FR-06 | การ lock/unlock ต้องผ่าน policy (mode, sensor-fault fail-closed, contact state) |
-| FR-07 | ต้องมี door unlock session: timeout, warning, auto-relock |
-| FR-08 | Automation board ต้องคุมไฟ/พัดลมแบบ hysteresis + gate จาก main context |
-| FR-09 | LINE bridge ต้องส่งต่อ event/status/ack ไป LINE ได้ |
-| FR-10 | เมื่อเสี่ยงบุกรุกระดับสูง ต้องมีแจ้งเตือน LINE แบบชัดเจน |
-| FR-11 | Keypad ต้องมีปุ่มขอความช่วยเหลือ และระบบต้องแจ้งเตือนออกไป |
-| FR-12 | ระบบต้องทำงานได้ต่อเนื่องในเส้นทาง manual/auto ภายใต้ runtime ปกติ |
+## 3. Non-Functional Requirements
 
-### 2.2 Non-Functional Requirements
+| Req ID | ข้อกำหนด | Mapping ไป Business Rules |
+|---|---|---|
+| NFR-01 | พฤติกรรมต้อง deterministic เมื่อ input และ config เหมือนเดิม | BR-10, BR-11 |
+| NFR-02 | ต้อง default เป็น deny/fail-closed เมื่อข้อมูล auth/storage ไม่พร้อม | BR-17, BR-18, BR-19, BR-20 |
+| NFR-03 | baseline ส่งงานต้อง build ที่บอร์ดเดียว | BR-28 |
+| NFR-04 | ต้องมี observability ทั้งแบบ periodic และ event-driven | BR-25, BR-26, BR-27 |
+| NFR-05 | Boot behavior ต้อง deterministic หลังไฟดับ/รีบูต และห้าม auto-arm เมื่อ persisted mode invalid | BR-29, BR-30 |
 
-| ID | ข้อกำหนด |
-|---|---|
-| NFR-01 | เส้นทาง security-critical ต้อง fail closed เมื่อ auth ไม่พร้อม |
-| NFR-02 | การแจ้งเตือนซ้ำต้องมี cooldown ลด spam |
-| NFR-03 | โครงสร้างต้อง modular แยกตามบทบาท board |
-| NFR-04 | เฟิร์มแวร์ต้อง build ได้ทั้ง `main-board` และ `automation-board` |
-| NFR-05 | bridge ต้องรองรับ unit test โดยไม่ต้องพึ่ง MQTT/LINE จริง |
+## 4. Acceptance Test Matrix
 
-## 3) รายละเอียดการทำงานปัจจุบัน (As-Built)
-
-### 3.1 Main Board
-- รับ event จาก sensor/keypad/serial/remote
-- ประมวลผลด้วย `SecurityOrchestrator` + `RuleEngine`
-- สั่งงาน actuator (servo/buzzer) และ publish MQTT
-
-ไฟล์หลัก:
-- `src/main_board/app/SecurityOrchestrator.cpp`
-- `src/main_board/app/RuleEngine.cpp`
-- `src/main_board/services/CommandDispatcher.cpp`
-
-### 3.2 Automation Board
-- Light auto: lux hysteresis + gate จาก main mode/presence
-- Fan auto: temp hysteresis + gate แบบเดียวกับ light
-- Publish auto status/ack และรับคำสั่ง auto cmd
-
-ไฟล์หลัก:
-- `src/auto_board/app/AutomationRuntime.cpp`
-- `src/auto_board/automation/light_system.cpp`
-- `src/auto_board/automation/temp_system.cpp`
-
-### 3.3 LINE Bridge
-- รับคำสั่งจาก LINE webhook/HTTP และส่งเข้าหัวข้อ MQTT command
-- แปลง MQTT event/status/ack เป็นข้อความแจ้งเตือนใน LINE
-- กรอง spam บางกรณี (เช่น ack ของ status)
-
-ไฟล์หลัก:
-- `tools/line_bridge/bridge.py`
-
-### 3.4 อัปเดตล่าสุด
-
-1. Intruder alert บน LINE แบบเฉพาะ
-- ส่งข้อความ `[ALERT] possible intruder detected`
-- trigger จาก level `alert/critical` + event/reason กลุ่มบุกรุก
-- ตั้ง cooldown ผ่าน `INTRUDER_NOTIFY_COOLDOWN_S` (default 20 วินาที)
-
-2. ปุ่มช่วยเหลือบน keypad
-- ปุ่ม `B` -> event `keypad_help_request`
-- Main publish event/status ด้วย reason `keypad_help_request`
-- Bridge ส่งข้อความ `[HELP] keypad assistance requested`
-
-## 4) แนวทางทดสอบ
-
-ระดับทดสอบ:
-- Unit test (bridge)
-- Build/compile validation (firmware)
-- Integration test (MQTT path)
-- Hardware/manual test (sensor/actuator ของจริง)
-
-## 5) กรณีทดสอบ (Test Cases)
-
-### 5.1 Security และ Command
-
-| TC ID | Requirement | เงื่อนไขก่อนทดสอบ | ขั้นตอน | ผลที่คาดหวัง |
+| TC ID | สถานการณ์ | ขั้นตอนทดสอบ | ผลที่คาดหวัง | Rules |
 |---|---|---|---|---|
-| TC-CMD-001 | FR-05 | token พร้อม | ส่ง mutating cmd + nonce ถูกต้อง | รับคำสั่งและ ack ok |
-| TC-CMD-002 | FR-05 | token พร้อม | ส่ง nonce เดิมซ้ำ | reject (replay) |
-| TC-CMD-003 | FR-06 | mode != disarm | ส่ง `unlock door` | reject (`disarm required`) |
-| TC-CMD-004 | FR-06 | door open | ส่ง `lock door` | reject (`door open`) |
-| TC-RULE-001 | FR-03 | mode armed | trigger `door_open` | เกิด entry pending + warn |
-| TC-RULE-002 | FR-03, FR-10 | mode armed | trigger `entry_timeout` | critical + notify/alert |
+| TC-01 | Disarm reset | arm ระบบ, ทำให้ score สูง, ส่ง `disarm` | mode เป็น disarm, score=0, ยกเลิก entry pending | BR-01 |
+| TC-02 | Entry timeout alert | โหมด armed + door open แล้วรอ timeout | level เป็น alert และ score ถูกบังคับเป็น 100 พร้อม buzzer alert | BR-04, BR-05 |
+| TC-03 | Correlation scoring | outdoor motion แล้ว window open ในช่วง correlation | คะแนนเพิ่มพร้อม bonus และ level อัปเดต | BR-06, BR-11 |
+| TC-04 | Vibration high-risk path | trigger เหตุการณ์ให้คะแนนถึงช่วงเสี่ยงสูง (>=80) ทาง vib path | ยกเลิก entry pending และคงระดับผู้ใช้เป็น alert | BR-08, BR-11 |
+| TC-05 | Unlock timeout relock | unlock ประตูในโหมด disarm แล้วไม่เปิดประตู | ประตู auto-lock เมื่อครบเวลา | BR-12, BR-14 |
+| TC-06 | Open-close relock | unlock แล้วเปิดและปิดประตู | ประตู auto-lock หลังจาก close delay | BR-13 |
+| TC-07 | Hold warning silence | เปิดประตูค้างจนเกิด hold warning แล้วกด silence | buzzer หยุดและ session ยังอยู่ใน state ที่ถูกต้อง | BR-15, BR-16 |
+| TC-08 | Remote unauthorized reject | ส่งคำสั่งแก้สถานะโดยไม่มี token/nonce ที่ถูกต้อง | ACK reject และ status ระบุเหตุผล reject | BR-17, BR-18 |
+| TC-09 | Nonce persistence fail-closed | บังคับโหมด strict แล้วไม่สามารถ persist nonce | คำสั่งถูกปฏิเสธด้วยเหตุผล storage ไม่พร้อม | BR-19 |
+| TC-10 | Sensor fault unlock reject | ทำให้เกิด sensor fault แล้วสั่ง unlock | ระบบปฏิเสธการ unlock และ publish เหตุผล | BR-20 |
+| TC-11 | Lock precondition reject | สั่ง lock ตอนประตู/หน้าต่างยังเปิด | คำสั่งถูกปฏิเสธ ไม่ lock actuator | BR-21 |
+| TC-12 | Keypad lockout | ใส่รหัสผิดจนครบ limit แล้วใส่รหัสถูกระหว่าง lockout | ระบบยังไม่ปลดล็อกจนกว่า lockout หมดเวลา | BR-23 |
+| TC-13 | Serial hardening | ส่ง serial synthetic cmd ภายใต้ config ค่าเริ่มต้น | คำสั่งถูก block และ publish สถานะ block | BR-24 |
+| TC-14 | Telemetry contract | ตรวจ payload event/status ระหว่าง runtime | payload เป็น single-board contract ไม่มี dependency auto-board | BR-26, BR-27, BR-28 |
+| TC-15 | Mode restore after reboot | ตั้งโหมดเป็น `away`, reboot board, แล้วดู status แรกหลัง boot | โหมดต้อง restore เป็น `away`; score/entry state ถูก reset ตาม baseline | BR-29, BR-30 |
+| TC-16 | Invalid persisted mode fallback | ทำ persisted mode ให้เป็นค่าที่ไม่ valid แล้ว reboot | ระบบ fallback เป็น `disarm` และมี warning telemetry/message; ไม่ auto-arm | BR-29, BR-30 |
 
-### 5.2 Keypad และ Help Request
+## 5. Build Verification
 
-| TC ID | Requirement | เงื่อนไขก่อนทดสอบ | ขั้นตอน | ผลที่คาดหวัง |
-|---|---|---|---|---|
-| TC-KP-001 | FR-11 | keypad ต่อใช้งาน | กด `B` | เกิด event `keypad_help_request` |
-| TC-KP-002 | FR-11 | bridge + line target พร้อม | กด `B` | LINE ได้ `[HELP] keypad assistance requested` |
-| TC-KP-003 | FR-07 | มี hold warning | กด `A` | warning ถูก silence |
-
-### 5.3 LINE Alert
-
-| TC ID | Requirement | เงื่อนไขก่อนทดสอบ | ขั้นตอน | ผลที่คาดหวัง |
-|---|---|---|---|---|
-| TC-LINE-001 | FR-09 | bridge พร้อม | ส่ง status/event ปกติ | LINE ได้ข้อความรูปแบบปกติ |
-| TC-LINE-002 | FR-10 | bridge พร้อม | ส่ง event ระดับ alert | LINE ได้ `[ALERT] ...` |
-| TC-LINE-003 | NFR-02 | cooldown ทำงาน | ส่ง alert ถี่ๆ | ข้อความถูก throttle |
-
-### 5.4 Automation
-
-| TC ID | Requirement | เงื่อนไขก่อนทดสอบ | ขั้นตอน | ผลที่คาดหวัง |
-|---|---|---|---|---|
-| TC-AUTO-001 | FR-08 | light auto on + context valid | ปรับ lux ข้าม threshold | ไฟเปลี่ยนตาม hysteresis |
-| TC-AUTO-002 | FR-08 | fan auto on + context valid | ปรับ temp ข้าม threshold | พัดลมเปลี่ยนตาม hysteresis |
-| TC-AUTO-003 | FR-08 | main gate blocked | เปิด auto ค้างไว้ | output ถูก force off |
-
-## 6) ผลทดสอบที่รันแล้วใน workspace นี้
-
-ผ่านแล้ว:
 - `python -m platformio run -e main-board`
-- `python -m platformio run -e automation-board`
-- `python -m unittest test.bridge.test_bridge -v` (ผ่าน 12/12)
-- `python -m py_compile tools/line_bridge/bridge.py`
-
-ยังไม่ครอบคลุมในรอบนี้:
-- hardware-in-loop ครบทุกเซ็นเซอร์จริง
-- soak test ระยะยาวภายใต้ network ขาด/กลับ
-
-## 7) งานค้างที่ควรทำต่อ
-
-- เพิ่ม unit test สำหรับ branch ใหม่ของ bridge (intruder/help formatter)
-- สรุป policy สุดท้ายของ trigger + cooldown สำหรับหน้างานจริง
-- ทำ test matrix hardware/manual แบบเป็นระบบมากขึ้น
-

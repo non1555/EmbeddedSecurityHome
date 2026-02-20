@@ -1,0 +1,43 @@
+﻿%%{init: {'theme':'base','flowchart':{'htmlLabels':true,'curve':'basis','nodeSpacing':45,'rankSpacing':70}} }%%
+flowchart LR
+  ESP[ESP32 DevKit V1]
+
+  BUZ[Buzzer]
+  SERVO_D[Door Servo]
+  SERVO_W[Window Servo]
+
+  REED_D[Door Reed]
+  REED_W[Window Reed]
+  PIR1[PIR Zone A Door and Window Room]
+  PIR2[PIR Zone B Interior Room]
+  PIR3[PIR Outdoor Zone]
+  VIB[Vibration Sensor]
+  US1[Ultrasonic Door Zone]
+  US2[Ultrasonic Window Zone]
+  US3[Ultrasonic Between Room Zone]
+  BTN_D[Manual Door Button]
+  BTN_W[Manual Window Button]
+  KP[PCF8574 Keypad 4x4]
+  OLED[SSD1306 OLED]
+
+  ESP -->|GPIO25| BUZ
+  ESP -->|GPIO26 PWM| SERVO_D
+  ESP -->|GPIO27 PWM| SERVO_W
+
+  ESP -->|GPIO32 input| REED_D
+  ESP -->|GPIO19 input| REED_W
+  ESP -->|GPIO35 input| PIR1
+  ESP -->|GPIO36 input| PIR2
+  ESP -->|GPIO39 input| PIR3
+  ESP -->|GPIO34 input| VIB
+
+  ESP -->|TRIG 13 ECHO 14| US1
+  ESP -->|TRIG 16 ECHO 17| US2
+  ESP -->|TRIG 4 ECHO 5| US3
+
+  ESP -->|GPIO33 input pull-up| BTN_D
+  ESP -->|GPIO18 input pull-up| BTN_W
+
+  ESP <-->|I2C SDA21 SCL22| KP
+  ESP <-->|I2C SDA21 SCL22| OLED
+

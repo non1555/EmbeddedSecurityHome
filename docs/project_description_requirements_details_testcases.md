@@ -1,177 +1,58 @@
-# Project Description (Requirements, Details, Test Cases)
+# Requirements, Business Rules, and Acceptance Tests (Single-Board)
 
-Status: working draft (as-built aligned, still evolving)
-Last updated: 2026-02-19
+## 1. Scope
 
-## 1) Project Overview
+This release is constrained to one firmware target:
 
-`EmbeddedSecurityHome` is an embedded home-security + automation system with:
-- `Main Board` (ESP32): security orchestration, intrusion detection, lock and alarm control
-- `Automation Board` (ESP32): light/fan automation using sensor data plus main-board context
-- `LINE Bridge` (Python): LINE webhook + MQTT bridge for command and notifications
+- `main-board` only
 
-Primary goals:
-- detect suspicious activity in armed mode
-- notify user through LINE with actionable information
-- enforce fail-closed behavior for mutating remote commands
-- keep local automation separated from security-critical logic
+Legacy multi-board content is archived in `docs/legacy_2026-02-19/`.
 
-## 2) Requirements
+## 2. Functional Requirements
 
-### 2.1 Functional Requirements
+| Req ID | Requirement | Mapped Business Rules |
+|---|---|---|
+| FR-01 | System shall support arming modes `night` and `away`, and `disarm`. | BR-01, BR-02, BR-03 |
+| FR-02 | System shall evaluate intrusion events via deterministic suspicion scoring. | BR-06, BR-07, BR-08, BR-09, BR-10, BR-11 |
+| FR-03 | System shall manage entry delay and timeout escalation when armed. | BR-04, BR-05 |
+| FR-04 | System shall enforce safe lock/unlock behavior based on door/window physical state. | BR-12, BR-13, BR-21, BR-22 |
+| FR-05 | System shall secure remote commands with token/nonce replay protection. | BR-17, BR-18, BR-19 |
+| FR-06 | System shall apply fail-closed policy on sensor fault for unlock operations. | BR-20 |
+| FR-07 | System shall apply keypad lockout after configured bad-attempt threshold. | BR-23 |
+| FR-08 | System shall publish MQTT event/status/ack/metrics telemetry for operations and monitoring. | BR-25, BR-26, BR-27 |
+| FR-09 | System shall keep mode continuity across reboot with validated persisted restore and safe fallback. | BR-29, BR-30 |
 
-| ID | Requirement |
-|---|---|
-| FR-01 | System shall support security modes: `startup_safe`, `disarm`, `away`, `night`. |
-| FR-02 | System shall detect events from reed, PIR, vibration, ultrasonic chokepoint, keypad, and manual buttons. |
-| FR-03 | System shall evaluate intrusion risk using rule-based scoring and produce `off/warn/alert/critical`. |
-| FR-04 | System shall publish MQTT topics for `event`, `status`, `ack`, and `metrics`. |
-| FR-05 | Remote mutating commands shall require token + nonce (anti-replay) unless explicitly configured otherwise. |
-| FR-06 | Lock/unlock actions shall obey policy checks (mode, sensor-fault fail-closed, open-contact constraints). |
-| FR-07 | Door unlock session shall support timeout, warning, and auto-relock logic. |
-| FR-08 | Automation board shall run light/fan auto control with hysteresis and main-context gating. |
-| FR-09 | LINE bridge shall relay MQTT status/event/ack to LINE target. |
-| FR-10 | When suspicious activity reaches high severity, bridge shall send explicit intruder alert to LINE. |
-| FR-11 | Keypad shall provide a help-request trigger and system shall notify via MQTT/LINE. |
-| FR-12 | System shall keep manual and automation control paths operational under normal MQTT and device runtime. |
+## 3. Non-Functional Requirements
 
-### 2.2 Non-Functional Requirements
+| Req ID | Requirement | Mapped Business Rules |
+|---|---|---|
+| NFR-01 | Behavior shall be deterministic under same event sequence and config. | BR-10, BR-11 |
+| NFR-02 | Security posture shall default to deny under auth/storage uncertainty. | BR-17, BR-18, BR-19, BR-20 |
+| NFR-03 | Build target shall be single-board for submission baseline. | BR-28 |
+| NFR-04 | Runtime shall provide periodic and event-driven observability via MQTT. | BR-25, BR-26, BR-27 |
+| NFR-05 | Boot behavior shall be deterministic after power cycle and shall not arm on invalid persisted mode data. | BR-29, BR-30 |
 
-| ID | Requirement |
-|---|---|
-| NFR-01 | Security-critical paths should fail closed when command auth prerequisites are missing. |
-| NFR-02 | Repeated notifications should be throttled/cooldown-limited to reduce spam. |
-| NFR-03 | Core logic should be modularized by board responsibility (security vs automation vs bridge). |
-| NFR-04 | Firmware shall build for both `main-board` and `automation-board` using PlatformIO. |
-| NFR-05 | Bridge code should be testable by local unit tests without requiring live MQTT/LINE. |
+## 4. Acceptance Test Matrix
 
-## 3) Current Functional Details (As-Built)
+| TC ID | Scenario | Steps | Expected Result | Rules |
+|---|---|---|---|---|
+| TC-01 | Disarm reset | Arm system, generate score, send `disarm` | Mode becomes disarm, score resets to 0, entry pending cleared | BR-01 |
+| TC-02 | Entry timeout alert | In armed mode, trigger door open then wait entry timeout | Alarm becomes alert with score forced to 100; alert buzzer is emitted | BR-04, BR-05 |
+| TC-03 | Window correlation scoring | In armed mode, trigger outdoor motion then window open within correlation window | Score increments include correlation bonus; level updated accordingly | BR-06, BR-11 |
+| TC-04 | Vibration high-risk path | In armed mode, trigger events to push score >= 80 via vibration path | Entry pending is cleared while user-facing level remains alert | BR-08, BR-11 |
+| TC-05 | Unlock timeout relock | Unlock door (disarm), do not open door | Door auto-locks at timeout and warning behavior follows policy | BR-12, BR-14 |
+| TC-06 | Open-close relock | Unlock door, open then close door | Door auto-locks after close delay | BR-13 |
+| TC-07 | Hold warning silence | Keep door open past hold threshold, then trigger silence event | Buzzer warning stops and session remains controlled | BR-15, BR-16 |
+| TC-08 | Remote unauthorized reject | Send mutating remote cmd without valid token/nonce | ACK reject and status reject reason | BR-17, BR-18 |
+| TC-09 | Nonce persistence fail-closed | Disable nonce persistence with strict mode, send mutating cmd | Command rejected due to nonce storage unavailability | BR-19 |
+| TC-10 | Sensor fault unlock reject | Activate sensor-fault condition then issue unlock cmd | Unlock rejected and reason published | BR-20 |
+| TC-11 | Lock precondition reject | Attempt lock door/window while sensor indicates open | Command rejected, actuator not locked | BR-21 |
+| TC-12 | Keypad lockout | Enter bad code until limit then try valid code during lockout | Unlock denied until lockout expiry | BR-23 |
+| TC-13 | Serial hardening | Inject serial mode/manual/sensor commands under default config | Commands blocked and block status published | BR-24 |
+| TC-14 | Telemetry contract | Observe event/status payload in runtime | Payload contains single-board fields and no auto-board context dependency | BR-26, BR-27, BR-28 |
+| TC-15 | Mode restore after reboot | Set mode to `away`, reboot board, observe first status after boot | Mode restored to `away`; score/entry state reset to baseline; boot status published | BR-29, BR-30 |
+| TC-16 | Invalid persisted mode fallback | Corrupt persisted mode value (outside valid set), reboot board | System falls back to `disarm`; warning telemetry/message emitted; no auto-arm | BR-29, BR-30 |
 
-### 3.1 Main Board Security Logic
+## 5. Build Verification
 
-- Event pipeline:
-  - `remote cmd -> keypad -> timeout -> sensor/manual/serial`
-- Rule engine:
-  - event scoring and correlation
-  - state transitions and command derivation (`none`, `buzzer_warn`, `buzzer_alert`, `notify`, `servo_lock`)
-- Outputs:
-  - servo lock/unlock
-  - buzzer warn/alert/stop
-  - MQTT `event/status/ack/metrics`
-
-Key files:
-- `src/main_board/app/SecurityOrchestrator.cpp`
-- `src/main_board/app/RuleEngine.cpp`
-- `src/main_board/services/CommandDispatcher.cpp`
-
-### 3.2 Automation Board Logic
-
-- Light auto:
-  - lux hysteresis (`LUX_ON/LUX_OFF`)
-  - gated by main-mode and main-presence context
-- Fan auto:
-  - temp hysteresis (`FAN_ON_C/FAN_OFF_C`)
-  - same gating policy as light
-- MQTT:
-  - parses `main status` context and auto commands
-  - publishes auto status and auto ack
-
-Key files:
-- `src/auto_board/app/AutomationRuntime.cpp`
-- `src/auto_board/automation/light_system.cpp`
-- `src/auto_board/automation/temp_system.cpp`
-
-### 3.3 LINE Bridge Logic
-
-- Command ingress:
-  - LINE webhook or HTTP `/cmd`
-  - supports lock/unlock/status command set
-  - secure payload format: `token|nonce|cmd` when token configured
-- MQTT egress to LINE:
-  - pushes event/status/ack/metrics summaries
-  - suppresses `ack(status)` spam
-
-Key file:
-- `tools/line_bridge/bridge.py`
-
-### 3.4 Latest Behavior Update
-
-1. Intruder-specific LINE alert
-- Bridge now emits an explicit message:
-  - `[ALERT] possible intruder detected`
-- Trigger condition:
-  - level in `{alert, critical}`
-  - event/reason in intrusion trigger set
-- Cooldown:
-  - `INTRUDER_NOTIFY_COOLDOWN_S` (default 20s)
-
-2. Keypad help request
-- Keypad key `B` generates `keypad_help_request`
-- Main board publishes event/status with reason `keypad_help_request`
-- Bridge emits:
-  - `[HELP] keypad assistance requested`
-
-## 4) Test Strategy
-
-Test levels:
-- Unit test (bridge logic)
-- Build/compile validation (both firmware environments)
-- Functional integration checks (MQTT event/status pathways)
-- Manual hardware scenario tests (field verification on sensors/actuators)
-
-## 5) Test Cases
-
-### 5.1 Security and Command Path
-
-| TC ID | Requirement | Precondition | Steps | Expected Result | Method |
-|---|---|---|---|---|---|
-| TC-CMD-001 | FR-05 | token configured | send valid mutating command with valid nonce | command accepted, ack ok | integration |
-| TC-CMD-002 | FR-05 | token configured | replay same nonce | command rejected, auth/replay fail | integration |
-| TC-CMD-003 | FR-06 | mode != disarm | send `unlock door` | unlock rejected (`disarm required`) | integration |
-| TC-CMD-004 | FR-06 | door open | send `lock door` | lock rejected (`door open`) | integration |
-| TC-RULE-001 | FR-03 | mode armed | generate `door_open` | entry pending + warn path | unit/integration |
-| TC-RULE-002 | FR-03, FR-10 | mode armed + timeout | trigger `entry_timeout` | critical level + notify/alert path | unit/integration |
-
-### 5.2 Keypad and Help Request
-
-| TC ID | Requirement | Precondition | Steps | Expected Result | Method |
-|---|---|---|---|---|---|
-| TC-KP-001 | FR-11 | keypad connected | press `B` | event `keypad_help_request` is produced | hardware/manual |
-| TC-KP-002 | FR-11 | bridge connected | press `B` then observe LINE | receives `[HELP] keypad assistance requested` | integration/manual |
-| TC-KP-003 | FR-07 | active door hold warning | press `A` | hold warning silenced | hardware/manual |
-
-### 5.3 LINE Alerting
-
-| TC ID | Requirement | Precondition | Steps | Expected Result | Method |
-|---|---|---|---|---|---|
-| TC-LINE-001 | FR-09 | bridge + line target ready | publish normal status/event | LINE receives formatted status/event text | integration |
-| TC-LINE-002 | FR-10 | bridge connected | publish intrusion event with level=alert | LINE receives `[ALERT] possible intruder detected` | integration |
-| TC-LINE-003 | NFR-02 | cooldown active | publish repeated intrusion events rapidly | alert messages are throttled by cooldown | integration |
-
-### 5.4 Automation
-
-| TC ID | Requirement | Precondition | Steps | Expected Result | Method |
-|---|---|---|---|---|---|
-| TC-AUTO-001 | FR-08 | light auto on + valid context | vary lux across thresholds | light toggles by hysteresis | hardware/manual |
-| TC-AUTO-002 | FR-08 | fan auto on + valid context | vary temp across thresholds | fan toggles by hysteresis | hardware/manual |
-| TC-AUTO-003 | FR-08 | main gate blocked | keep fan/light auto on | outputs forced off by gate policy | integration/manual |
-
-## 6) Executed Results (Current Workspace)
-
-Executed successfully:
 - `python -m platformio run -e main-board`
-- `python -m platformio run -e automation-board`
-- `python -m unittest test.bridge.test_bridge -v` (12 tests, all pass)
-- `python -m py_compile tools/line_bridge/bridge.py`
-
-Not fully covered in this workspace session:
-- full hardware-in-loop validation for all physical sensors and actuators
-- long-duration stability soak test with real network loss/recovery cycles
-
-## 7) Open Items
-
-- tune intrusion-alert trigger list and cooldown for real deployment noise profile
-- define dedicated keypad UX text/icon for help request on OLED
-- add automated tests for new bridge intruder/help formatting paths
-- extend native tests for keypad help event branch in orchestrator
-

@@ -22,6 +22,7 @@ struct Config {
   bool allow_serial_mode_commands = false;
   bool allow_serial_manual_commands = false;
   bool allow_serial_sensor_commands = (ALLOW_SERIAL_SENSOR_COMMANDS_DEFAULT != 0);
+  bool serial_notify_enabled = false;
   bool sensor_health_enabled = true;
   uint32_t sensor_health_check_period_ms = 2000;
   uint32_t pir_stuck_active_ms = 180000;

@@ -72,7 +72,7 @@ LOCK_COMMANDS = {
 READ_ONLY_COMMANDS = {"status"}
 SUPPORTED_COMMANDS = LOCK_COMMANDS | READ_ONLY_COMMANDS
 
-INTRUDER_LEVELS = {"alert", "critical"}
+INTRUDER_LEVELS = {"alert"}
 INTRUDER_EVENT_TRIGGERS = {
     "door_open",
     "window_open",
@@ -81,6 +81,43 @@ INTRUDER_EVENT_TRIGGERS = {
     "motion",
     "chokepoint",
     "entry_timeout",
+}
+
+MODE_LABELS = {
+    "startup_safe": "Startup Safe",
+    "disarm": "Disarmed",
+    "night": "Night Guard",
+    "away": "Away Guard",
+}
+
+LEVEL_LABELS = {
+    "off": "Normal",
+    "warn": "Warning",
+    "alert": "Alert",
+}
+
+EVENT_LABELS = {
+    "door_open": "Door opened",
+    "window_open": "Window opened",
+    "door_tamper": "Door tamper detected",
+    "vib_spike": "Vibration spike detected",
+    "motion": "Motion detected",
+    "chokepoint": "Chokepoint movement detected",
+    "entry_timeout": "Entry delay timeout",
+    "keypad_help_request": "Help requested from keypad",
+    "arm_night": "Switched to night guard",
+    "arm_away": "Switched to away guard",
+    "disarm": "System disarmed",
+}
+
+COMMAND_LABELS = {
+    "lock door": "Lock door",
+    "unlock door": "Unlock door",
+    "lock window": "Lock window",
+    "unlock window": "Unlock window",
+    "lock all": "Lock all",
+    "unlock all": "Unlock all",
+    "status": "Status check",
 }
 
 
@@ -109,34 +146,76 @@ def parse_json_payload(payload: str) -> Dict[str, Any]:
 def format_mqtt_to_text(topic: str, payload: str) -> str:
     obj = parse_json_payload(payload)
     if topic == MQTT_TOPIC_EVENT:
+        event = _norm_text(obj.get("event", ""))
+        cmd = _norm_text(obj.get("cmd", ""))
         return (
-            "[EVENT]\n"
-            f"event={obj.get('event', '-')}\n"
-            f"src={obj.get('src', '-')}\n"
-            f"cmd={obj.get('cmd', '-')}\n"
-            f"mode={obj.get('mode', '-')}\n"
-            f"level={obj.get('level', '-')}"
+            "System Event\n"
+            f"- Event: {_label_event(event)}\n"
+            f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
+            f"- Risk: {_label_level(obj.get('level', ''))}\n"
+            f"- Action: {_label_command(cmd)}"
         )
     if topic == MQTT_TOPIC_STATUS:
         return (
-            "[STATUS]\n"
-            f"reason={obj.get('reason', '-')}\n"
-            f"mode={obj.get('mode', '-')}\n"
-            f"level={obj.get('level', '-')}\n"
-            f"uptime_ms={obj.get('uptime_ms', '-')}"
+            "System Status\n"
+            f"- Reason: {_label_event(obj.get('reason', ''))}\n"
+            f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
+            f"- Risk: {_label_level(obj.get('level', ''))}\n"
+            f"- Uptime: {_format_uptime_ms(obj.get('uptime_ms', '-'))}"
         )
     if topic == MQTT_TOPIC_ACK:
+        cmd = _norm_text(obj.get("cmd", ""))
+        ok = _json_bool(obj, "ok")
+        result = "Success" if ok is True else ("Failed" if ok is False else "-")
         return (
-            "[ACK]\n"
-            f"cmd={obj.get('cmd', '-')}\n"
-            f"ok={obj.get('ok', '-')}\n"
-            f"detail={obj.get('detail', '-')}"
+            "Command Result\n"
+            f"- Command: {_label_command(cmd)}\n"
+            f"- Result: {result}\n"
+            f"- Detail: {obj.get('detail', '-')}"
         )
-    return f"[MQTT]\ntopic={topic}\npayload={payload}"
+    return (
+        "Bridge Message\n"
+        f"- Topic: {topic}\n"
+        f"- Payload: {payload}"
+    )
 
 
 def _norm_text(v: Any) -> str:
     return str(v or "").strip().lower()
+
+
+def _label_mode(v: Any) -> str:
+    key = _norm_text(v)
+    return MODE_LABELS.get(key, key or "-")
+
+
+def _label_level(v: Any) -> str:
+    key = _norm_text(v)
+    return LEVEL_LABELS.get(key, key or "-")
+
+
+def _label_event(v: Any) -> str:
+    key = _norm_text(v)
+    return EVENT_LABELS.get(key, key or "-")
+
+
+def _label_command(v: Any) -> str:
+    key = _norm_text(v)
+    return COMMAND_LABELS.get(key, key or "-")
+
+
+def _format_uptime_ms(v: Any) -> str:
+    try:
+        ms = int(v)
+        if ms < 0:
+            return "-"
+        sec = ms // 1000
+        h = sec // 3600
+        m = (sec % 3600) // 60
+        s = sec % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    except Exception:
+        return "-"
 
 
 def _is_intruder_signal(topic: str, obj: Dict[str, Any]) -> bool:
@@ -159,21 +238,21 @@ def _is_keypad_help_signal(topic: str, obj: Dict[str, Any]) -> bool:
 
 def _format_keypad_help_alert(obj: Dict[str, Any]) -> str:
     return (
-        "[HELP]\n"
-        "keypad assistance requested\n"
-        f"mode={_norm_text(obj.get('mode', '')) or '-'}\n"
-        f"level={_norm_text(obj.get('level', '')) or '-'}"
+        "Help Request\n"
+        "A keypad help request was triggered.\n"
+        f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
+        f"- Risk: {_label_level(obj.get('level', ''))}"
     )
 
 
 def _format_intruder_alert(topic: str, obj: Dict[str, Any]) -> str:
     trigger = _norm_text(obj.get("event", "")) if topic == MQTT_TOPIC_EVENT else _norm_text(obj.get("reason", ""))
     return (
-        "[ALERT]\n"
-        "possible intruder detected\n"
-        f"trigger={trigger or '-'}\n"
-        f"mode={_norm_text(obj.get('mode', '')) or '-'}\n"
-        f"level={_norm_text(obj.get('level', '')) or '-'}"
+        "Security Alert\n"
+        "Possible intrusion detected.\n"
+        f"- Trigger: {_label_event(trigger)}\n"
+        f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
+        f"- Risk: {_label_level(obj.get('level', ''))}"
     )
 
 
@@ -255,12 +334,12 @@ def _fmt_bool(b: Optional[bool], t: str, f: str, u: str = "?") -> str:
 
 
 def _device_summary_line() -> str:
-    mode = (state.dev_mode or state.last_status_mode or "unknown").strip() or "unknown"
+    mode = _label_mode(state.dev_mode or state.last_status_mode or "unknown")
     dl = _fmt_bool(state.dev_door_locked, "LOCK", "UNLOCK")
     wl = _fmt_bool(state.dev_window_locked, "LOCK", "UNLOCK")
     do = _fmt_bool(state.dev_door_open, "OPEN", "CLOSE")
     wo = _fmt_bool(state.dev_window_open, "OPEN", "CLOSE")
-    return f"mode={mode} | door={dl}/{do} | window={wl}/{wo}"
+    return f"Mode: {mode} | Door: {dl}/{do} | Window: {wl}/{wo}"
 
 
 def _action(label: str, data: str) -> Dict[str, Any]:
@@ -280,7 +359,7 @@ def flex_home() -> Dict[str, Any]:
                 "layout": "vertical",
                 "spacing": "md",
                 "contents": [
-                    {"type": "text", "text": "EmbeddedSecurity", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": "EmbeddedSecurity Home", "weight": "bold", "size": "lg"},
                     {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "separator"},
                     {
@@ -291,17 +370,17 @@ def flex_home() -> Dict[str, Any]:
                             {
                                 "type": "button",
                                 "style": "secondary",
-                                "action": {"type": "postback", "label": "Notify", "data": "ui=mode"},
+                                "action": {"type": "postback", "label": "Notifications", "data": "ui=mode"},
                             },
                             {
                                 "type": "button",
                                 "style": "primary",
-                                "action": {"type": "postback", "label": "Lock", "data": "ui=lock"},
+                                "action": {"type": "postback", "label": "Door & Window", "data": "ui=lock"},
                             },
                             {
                                 "type": "button",
                                 "style": "link",
-                                "action": {"type": "postback", "label": "Status", "data": "cmd=status"},
+                                "action": {"type": "postback", "label": "Check Status", "data": "cmd=status"},
                             },
                         ],
                     },
@@ -315,7 +394,7 @@ def flex_mode() -> Dict[str, Any]:
     # Kept for backward compatibility with old rich menu mapping (ui=mode).
     return {
         "type": "flex",
-        "altText": "Notify view",
+        "altText": "Notification view",
         "contents": {
             "type": "bubble",
             "size": "kilo",
@@ -324,11 +403,11 @@ def flex_mode() -> Dict[str, Any]:
                 "layout": "vertical",
                 "spacing": "md",
                 "contents": [
-                    {"type": "text", "text": "Notify", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": "Notifications", "weight": "bold", "size": "lg"},
                     {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "separator"},
-                    {"type": "text", "text": "LINE bridge mode: monitor notify/event/status/ack", "size": "sm", "wrap": True},
-                    {"type": "text", "text": "Allowed commands: lock/unlock/status", "size": "sm", "wrap": True, "color": "#666666"},
+                    {"type": "text", "text": "This chat will show alerts, status updates, and command results.", "size": "sm", "wrap": True},
+                    {"type": "text", "text": "Supported commands: lock/unlock/status", "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
                 ],
             },
@@ -360,7 +439,7 @@ def flex_lock() -> Dict[str, Any]:
 
     return {
         "type": "flex",
-        "altText": "Lock menu",
+        "altText": "Door and window controls",
         "contents": {
             "type": "bubble",
             "size": "kilo",
@@ -369,7 +448,7 @@ def flex_lock() -> Dict[str, Any]:
                 "layout": "vertical",
                 "spacing": "md",
                 "contents": [
-                    {"type": "text", "text": "Locks", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": "Door and Window", "weight": "bold", "size": "lg"},
                     {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
                     {"type": "separator"},
                     {"type": "button", "style": "primary", "action": {"type": "postback", "label": door_label, "data": door_cmd}},
@@ -606,12 +685,12 @@ def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any,
             (MQTT_TOPIC_METRICS, 0),
         ]
     )
-    push_line_text("[BRIDGE] connected to MQTT")
+    push_line_text("Bridge connected to MQTT. LINE notifications are active.")
 
 
 def on_disconnect(client: mqtt.Client, userdata: Any, disconnect_flags: Any, reason_code: Any, properties: Any) -> None:
     state.mqtt_connected = False
-    push_line_text(f"[BRIDGE] disconnected from MQTT rc={reason_code}")
+    push_line_text(f"Bridge disconnected from MQTT (rc={reason_code}). Trying to reconnect.")
 
 
 def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
@@ -667,15 +746,9 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
       state.last_metrics_push_at = now
       obj = parse_json_payload(payload)
       push_line_text(
-          "[METRICS]\n"
-          f"us_drops={obj.get('us_drops', '-')}\n"
-          f"pub_drops={obj.get('pub_drops', '-')}\n"
-          f"cmd_drops={obj.get('cmd_drops', '-')}\n"
-          f"store_drops={obj.get('store_drops', '-')}\n"
-          f"q_us={obj.get('q_us', '-')}\n"
-          f"q_pub={obj.get('q_pub', '-')}\n"
-          f"q_cmd={obj.get('q_cmd', '-')}\n"
-          f"q_store={obj.get('q_store', '-')}"
+          "System Health\n"
+          f"- Queue us/pub/cmd/store: {obj.get('q_us', '-')}/{obj.get('q_pub', '-')}/{obj.get('q_cmd', '-')}/{obj.get('q_store', '-')}\n"
+          f"- Drops us/pub/cmd/store: {obj.get('us_drops', '-')}/{obj.get('pub_drops', '-')}/{obj.get('cmd_drops', '-')}/{obj.get('store_drops', '-')}"
       )
       return
     if topic == MQTT_TOPIC_EVENT or topic == MQTT_TOPIC_STATUS:
@@ -830,16 +903,16 @@ async def line_webhook(
                 reply_line_messages(reply_token, [flex_home()])
                 continue
             if not is_supported_cmd(cmd):
-                reply_line_text(reply_token, "unsupported cmd (lock/unlock/status), send 'menu'")
+                reply_line_text(reply_token, "Command not supported. Send 'menu' to use quick actions.")
                 continue
             if not command_auth_ready() and not is_read_only_cmd(cmd):
-                reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
+                reply_line_text(reply_token, "Command is currently disabled. Admin needs to set command token.")
                 continue
             if not debounce_ok(src_k, cmd, ev_ts_ms):
                 # Silent debounce: no chat spam.
                 continue
             if not publish_cmd(cmd):
-                reply_line_text(reply_token, "command blocked")
+                reply_line_text(reply_token, "Could not send command right now. Please try again.")
                 continue
             # Keep chat clean: show menu again instead of "sent: ..."
             reply_line_messages(reply_token, [flex_home()])
@@ -858,18 +931,18 @@ async def line_webhook(
             continue
 
         if not is_supported_cmd(text):
-            reply_line_text(reply_token, "unsupported cmd (lock/unlock/status), send 'menu'")
+            reply_line_text(reply_token, "Command not supported. Send 'menu' to use quick actions.")
             continue
         if not command_auth_ready() and not is_read_only_cmd(text):
-            reply_line_text(reply_token, "command disabled: missing FW_CMD_TOKEN/BRIDGE_CMD_TOKEN")
+            reply_line_text(reply_token, "Command is currently disabled. Admin needs to set command token.")
             continue
 
         if not debounce_ok(src_k, text, ev_ts_ms):
-            reply_line_text(reply_token, "ignored (debounce), try again")
+            reply_line_text(reply_token, "You sent this too quickly. Please wait a moment and try again.")
             continue
 
         if not publish_cmd(text):
-            reply_line_text(reply_token, "command blocked")
+            reply_line_text(reply_token, "Could not send command right now. Please try again.")
             continue
         reply_line_messages(reply_token, [flex_home()])
 

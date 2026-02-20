@@ -5,7 +5,7 @@ void Logger::begin() {}
 void Logger::update(uint32_t) {}
 
 void Logger::logCommand(const Command& cmd, const SystemState& st) {
-  Serial.print("[CMD] "); Serial.print((int)cmd.type);
-  Serial.print(" | MODE "); Serial.print((int)st.mode);
-  Serial.print(" | LEVEL "); Serial.println((int)st.level);
+  Serial.print("[LOG] command.type="); Serial.println(toString(cmd.type));
+  Serial.print("[LOG] state.mode="); Serial.println(toString(st.mode));
+  Serial.print("[LOG] state.level="); Serial.println(toString(st.level));
 }

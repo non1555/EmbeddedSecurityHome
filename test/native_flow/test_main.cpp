@@ -48,6 +48,30 @@ bool test_armed_door_open_starts_entry_countdown() {
   return true;
 }
 
+bool test_locked_door_open_escalates_alert_in_any_mode() {
+  RuleEngine engine;
+  Config cfg;
+
+  SystemState disarmState;
+  disarmState.mode = Mode::disarm;
+  disarmState.door_locked = true;
+  const Decision d1 = engine.handle(disarmState, cfg, {EventType::door_open, 1000, 1});
+  CHECK(d1.next.level == AlarmLevel::alert);
+  CHECK(d1.next.suspicion_score == 100);
+  CHECK(!d1.next.entry_pending);
+  CHECK(d1.cmd.type == CommandType::buzzer_alert);
+
+  SystemState nightState;
+  nightState.mode = Mode::night;
+  nightState.door_locked = true;
+  const Decision d2 = engine.handle(nightState, cfg, {EventType::door_open, 1100, 1});
+  CHECK(d2.next.level == AlarmLevel::alert);
+  CHECK(d2.next.suspicion_score == 100);
+  CHECK(!d2.next.entry_pending);
+  CHECK(d2.cmd.type == CommandType::buzzer_alert);
+  return true;
+}
+
 bool test_presence_entry_unlock_ultrasonic_pir_marks_home() {
   Presence::Config cfg;
   cfg.unlock_to_ultrasonic_ms = 100;
@@ -132,6 +156,7 @@ int main() {
 
   ok &= test_boot_starts_startup_safe_without_entry_alarm();
   ok &= test_armed_door_open_starts_entry_countdown();
+  ok &= test_locked_door_open_escalates_alert_in_any_mode();
   ok &= test_presence_entry_unlock_ultrasonic_pir_marks_home();
   ok &= test_presence_exit_sequence_marks_away_after_no_pir();
   ok &= test_mode_override_window_expires_and_handles_wraparound();

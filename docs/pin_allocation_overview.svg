@@ -1,0 +1,165 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1080" viewBox="0 0 1500 1080" role="img" aria-label="Pin allocation overview for single-board main firmware">
+  <defs>
+    <style>
+      .title { font: 700 46px 'Segoe UI', Arial, sans-serif; fill: #132238; }
+      .subtitle { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #30425e; }
+      .panel-title { font: 700 26px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .th { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #142238; }
+      .td { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #1d2a3d; }
+      .tdb { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #1d2a3d; }
+      .note-h { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #102033; }
+      .note { font: 500 17px 'Segoe UI', Arial, sans-serif; fill: #22324a; }
+      .chip { font: 700 14px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+    </style>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f6f8fc"/>
+      <stop offset="100%" stop-color="#eef2f8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1500" height="1080" fill="url(#bg)"/>
+
+  <text x="42" y="70" class="title">PIN ALLOCATION OVERVIEW (SINGLE-BOARD)</text>
+  <text x="44" y="102" class="subtitle">Source: src/main_board/app/HardwareConfig.h</text>
+
+  <rect x="34" y="136" width="1008" height="910" rx="18" fill="#ffffff" stroke="#263d5e" stroke-width="2"/>
+  <rect x="34" y="136" width="1008" height="70" rx="18" fill="#1f6fb2"/>
+  <text x="62" y="180" class="panel-title">Main Board ESP32 DevKit V1</text>
+
+  <rect x="60" y="226" width="540" height="44" fill="#d8e8f8" stroke="#9ab6d4" stroke-width="1"/>
+  <rect x="600" y="226" width="160" height="44" fill="#d8e8f8" stroke="#9ab6d4" stroke-width="1"/>
+  <rect x="760" y="226" width="256" height="44" fill="#d8e8f8" stroke="#9ab6d4" stroke-width="1"/>
+  <text x="78" y="254" class="th">Function</text>
+  <text x="650" y="254" class="th">Pin</text>
+  <text x="840" y="254" class="th">Class</text>
+
+  <rect x="60" y="270" width="540" height="40" fill="#fff5d8" stroke="#d7c48f" stroke-width="1"/>
+  <rect x="600" y="270" width="160" height="40" fill="#fff5d8" stroke="#d7c48f" stroke-width="1"/>
+  <rect x="760" y="270" width="256" height="40" fill="#fff5d8" stroke="#d7c48f" stroke-width="1"/>
+  <text x="78" y="296" class="td">Buzzer</text><text x="664" y="296" class="tdb">GPIO25</text><text x="780" y="296" class="td">Actuator Output</text>
+
+  <rect x="60" y="310" width="540" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <rect x="600" y="310" width="160" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <rect x="760" y="310" width="256" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <text x="78" y="336" class="td">Servo Door Lock</text><text x="664" y="336" class="tdb">GPIO26</text><text x="780" y="336" class="td">Actuator Output</text>
+
+  <rect x="60" y="350" width="540" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <rect x="600" y="350" width="160" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <rect x="760" y="350" width="256" height="40" fill="#e7f0ff" stroke="#b8cae6" stroke-width="1"/>
+  <text x="78" y="376" class="td">Servo Window Lock</text><text x="664" y="376" class="tdb">GPIO27</text><text x="780" y="376" class="td">Actuator Output</text>
+
+  <rect x="60" y="390" width="540" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <rect x="600" y="390" width="160" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <rect x="760" y="390" width="256" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <text x="78" y="416" class="td">Reed Door</text><text x="664" y="416" class="tdb">GPIO32</text><text x="780" y="416" class="td">Perimeter Input</text>
+
+  <rect x="60" y="430" width="540" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <rect x="600" y="430" width="160" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <rect x="760" y="430" width="256" height="40" fill="#e8f8ec" stroke="#b3d7bd" stroke-width="1"/>
+  <text x="78" y="456" class="td">Reed Window</text><text x="664" y="456" class="tdb">GPIO19</text><text x="780" y="456" class="td">Perimeter Input</text>
+
+  <rect x="60" y="470" width="540" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="600" y="470" width="160" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="760" y="470" width="256" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <text x="78" y="496" class="td">PIR Zone A (Door+Window)</text><text x="664" y="496" class="tdb">GPIO35</text><text x="780" y="496" class="td">Motion Input</text>
+
+  <rect x="60" y="510" width="540" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="600" y="510" width="160" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="760" y="510" width="256" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <text x="78" y="536" class="td">PIR Zone B (Interior)</text><text x="664" y="536" class="tdb">GPIO36</text><text x="780" y="536" class="td">Motion Input</text>
+
+  <rect x="60" y="550" width="540" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="600" y="550" width="160" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <rect x="760" y="550" width="256" height="40" fill="#efe7ff" stroke="#c7b8e5" stroke-width="1"/>
+  <text x="78" y="576" class="td">PIR Outdoor Zone</text><text x="664" y="576" class="tdb">GPIO39</text><text x="780" y="576" class="td">Motion Input</text>
+
+  <rect x="60" y="590" width="540" height="40" fill="#ffeaf0" stroke="#dfc0cb" stroke-width="1"/>
+  <rect x="600" y="590" width="160" height="40" fill="#ffeaf0" stroke="#dfc0cb" stroke-width="1"/>
+  <rect x="760" y="590" width="256" height="40" fill="#ffeaf0" stroke="#dfc0cb" stroke-width="1"/>
+  <text x="78" y="616" class="td">Vibration Combined</text><text x="664" y="616" class="tdb">GPIO34</text><text x="780" y="616" class="td">Vibration Input</text>
+
+  <rect x="60" y="630" width="540" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="600" y="630" width="160" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="760" y="630" width="256" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <text x="78" y="656" class="td">Ultrasonic Door Zone TRIG / ECHO</text><text x="638" y="656" class="tdb">13 / 14</text><text x="780" y="656" class="td">Door chokepoint</text>
+
+  <rect x="60" y="670" width="540" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="600" y="670" width="160" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="760" y="670" width="256" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <text x="78" y="696" class="td">Ultrasonic Window Zone TRIG / ECHO</text><text x="638" y="696" class="tdb">16 / 17</text><text x="780" y="696" class="td">Window chokepoint</text>
+
+  <rect x="60" y="710" width="540" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="600" y="710" width="160" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <rect x="760" y="710" width="256" height="40" fill="#e8fbff" stroke="#b7dce4" stroke-width="1"/>
+  <text x="78" y="736" class="td">Ultrasonic Between Room TRIG / ECHO</text><text x="646" y="736" class="tdb">4 / 5</text><text x="780" y="736" class="td">Between-room chokepoint</text>
+
+  <rect x="60" y="750" width="540" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <rect x="600" y="750" width="160" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <rect x="760" y="750" width="256" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <text x="78" y="776" class="td">Manual Door Button</text><text x="664" y="776" class="tdb">GPIO33</text><text x="780" y="776" class="td">Manual Input</text>
+
+  <rect x="60" y="790" width="540" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <rect x="600" y="790" width="160" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <rect x="760" y="790" width="256" height="40" fill="#fff1e2" stroke="#dcc6aa" stroke-width="1"/>
+  <text x="78" y="816" class="td">Manual Window Button</text><text x="664" y="816" class="tdb">GPIO18</text><text x="780" y="816" class="td">Manual Input</text>
+
+  <rect x="60" y="830" width="540" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="600" y="830" width="160" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="760" y="830" width="256" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <text x="78" y="856" class="td">I2C SDA / SCL</text><text x="638" y="856" class="tdb">21 / 22</text><text x="780" y="856" class="td">Shared Bus</text>
+
+  <rect x="60" y="870" width="540" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="600" y="870" width="160" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="760" y="870" width="256" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <text x="78" y="896" class="td">Keypad I2C Address</text><text x="668" y="896" class="tdb">0x20</text><text x="780" y="896" class="td">I2C Device</text>
+
+  <rect x="60" y="910" width="540" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="600" y="910" width="160" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="760" y="910" width="256" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <text x="78" y="936" class="td">OLED I2C Address</text><text x="668" y="936" class="tdb">0x3C</text><text x="780" y="936" class="td">I2C Device</text>
+
+  <rect x="60" y="950" width="540" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="600" y="950" width="160" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <rect x="760" y="950" width="256" height="40" fill="#ecfff0" stroke="#bfd8c7" stroke-width="1"/>
+  <text x="78" y="976" class="td">BH1750 I2C Address</text><text x="668" y="976" class="tdb">0x23</text><text x="780" y="976" class="td">I2C Device</text>
+
+  <rect x="1064" y="136" width="402" height="910" rx="18" fill="#ffffff" stroke="#263d5e" stroke-width="2"/>
+  <rect x="1064" y="136" width="402" height="70" rx="18" fill="#204e7a"/>
+  <text x="1090" y="180" class="panel-title">Design Notes</text>
+
+  <rect x="1088" y="232" width="354" height="252" rx="12" fill="#eef6ff" stroke="#b7cce4"/>
+  <text x="1110" y="264" class="note-h">Electrical Rules</text>
+  <text x="1110" y="296" class="note">1) GPIO34/35/36/39 are input-only.</text>
+  <text x="1110" y="326" class="note">2) Manual buttons use INPUT_PULLUP,</text>
+  <text x="1130" y="352" class="note">so the pressed state is LOW.</text>
+  <text x="1110" y="382" class="note">3) Use external 5V for servos and</text>
+  <text x="1130" y="408" class="note">share common GND with ESP32.</text>
+  <text x="1110" y="438" class="note">4) If ultrasonic modules are 5V,</text>
+  <text x="1130" y="464" class="note">protect ECHO lines to 3.3V-safe.</text>
+
+  <rect x="1088" y="504" width="354" height="206" rx="12" fill="#f5f9ee" stroke="#c8d9b0"/>
+  <text x="1110" y="536" class="note-h">Pin Class Summary</text>
+  <rect x="1110" y="560" width="118" height="28" rx="6" fill="#1f6fb2"/><text x="1142" y="579" class="chip">Outputs</text>
+  <rect x="1240" y="560" width="188" height="28" rx="6" fill="#ffffff" stroke="#9fb6ce"/><text x="1252" y="579" class="note">Buzzer + 2 Servos + 3 TRIG</text>
+  <rect x="1110" y="596" width="118" height="28" rx="6" fill="#3f9150"/><text x="1149" y="615" class="chip">Inputs</text>
+  <rect x="1240" y="596" width="188" height="28" rx="6" fill="#ffffff" stroke="#9fb6ce"/><text x="1252" y="615" class="note">Reed, PIR, Vib, Echo, Buttons</text>
+  <rect x="1110" y="632" width="118" height="28" rx="6" fill="#6f4aa8"/><text x="1158" y="651" class="chip">I2C</text>
+  <rect x="1240" y="632" width="188" height="28" rx="6" fill="#ffffff" stroke="#9fb6ce"/><text x="1252" y="651" class="note">SDA21 SCL22 + 3 devices</text>
+  <text x="1110" y="690" class="note">Single-board release keeps this table</text>
+  <text x="1110" y="716" class="note">as the submission source of truth.</text>
+
+  <rect x="1088" y="730" width="354" height="282" rx="12" fill="#fff8ed" stroke="#dec9a1"/>
+  <text x="1110" y="762" class="note-h">Business Rule Mapping</text>
+  <text x="1110" y="794" class="note">- Actuator pins support BR-12..BR-22</text>
+  <text x="1110" y="824" class="note">  for lock/unlock and warning behavior.</text>
+  <text x="1110" y="854" class="note">- Sensor pins support BR-04..BR-11</text>
+  <text x="1110" y="880" class="note">  for scoring, correlation, and levels.</text>
+  <text x="1110" y="910" class="note">- Manual and keypad inputs support</text>
+  <text x="1110" y="936" class="note">  BR-23 and operator command policies.</text>
+  <text x="1110" y="966" class="note">- I2C devices support local UX and</text>
+  <text x="1110" y="992" class="note">  in-field operation visibility.</text>
+</svg>
+
+
+
+

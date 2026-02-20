@@ -101,8 +101,6 @@ static bool parseAuthorizedRemoteCommand(const String& payload,
   return true;
 }
 
-static constexpr uint8_t kSerialSyntheticSrc = 250;
-
 static bool reached(uint32_t nowMs, uint32_t targetMs) {
   return (int32_t)(nowMs - targetMs) >= 0;
 }
@@ -120,16 +118,38 @@ static bool parseUint32Strict(const String& s, uint32_t& out) {
   return true;
 }
 
+static uint8_t persistModeValue(Mode mode) {
+  switch (mode) {
+    case Mode::disarm: return 1;
+    case Mode::away:   return 2;
+    case Mode::night:  return 3;
+    default:           return 0;
+  }
+}
+
+static bool restoreModeValue(uint8_t value, Mode& outMode) {
+  switch (value) {
+    case 1: outMode = Mode::disarm; return true;
+    case 2: outMode = Mode::away;   return true;
+    case 3: outMode = Mode::night;  return true;
+    default:                        return false;
+  }
+}
+
 constexpr uint32_t STATUS_HEARTBEAT_MS = 5000;
 } // namespace
 
 void SecurityOrchestrator::printEventDecision(const Event& e, const Decision& d) const {
-  Serial.print("[EV] "); Serial.print(toString(e.type));
-  Serial.print(" src="); Serial.print((int)e.src);
-  Serial.print(" | [CMD] "); Serial.print(toString(d.cmd.type));
-  Serial.print(" | MODE "); Serial.print(toString(d.next.mode));
-  Serial.print(" | LEVEL "); Serial.print(toString(d.next.level));
-  Serial.print(" | ENTRY "); Serial.println(d.next.entry_pending ? "pending" : "none");
+  Serial.print("[TRACE] event.type="); Serial.println(toString(e.type));
+  Serial.print("[TRACE] event.src="); Serial.println((int)e.src);
+  Serial.print("[TRACE] command.type="); Serial.println(toString(d.cmd.type));
+  Serial.print("[TRACE] state.mode="); Serial.println(toString(d.next.mode));
+  Serial.print("[TRACE] state.level="); Serial.println(toString(d.next.level));
+  Serial.print("[TRACE] state.entry_pending="); Serial.println(d.next.entry_pending ? "1" : "0");
+  Serial.print("[TRACE] output.door_locked="); Serial.println(state_.door_locked ? "1" : "0");
+  Serial.print("[TRACE] output.window_locked="); Serial.println(state_.window_locked ? "1" : "0");
+  Serial.print("[TRACE] output.door_open="); Serial.println(state_.door_open ? "1" : "0");
+  Serial.print("[TRACE] output.window_open="); Serial.println(state_.window_open ? "1" : "0");
 }
 
 void SecurityOrchestrator::syncLiveSnapshot() {
@@ -150,8 +170,12 @@ void SecurityOrchestrator::publishStateEvent(const Event& e, const Command& cmd)
 }
 
 void SecurityOrchestrator::applyDecision(const Event& e) {
+  // Use live actuator/sensor state for decision conditions (e.g. forced-open while locked).
+  syncLiveSnapshot();
+  const Mode prevMode = state_.mode;
   const Decision d = engine_.handle(state_, cfg_, e);
   state_ = d.next;
+  persistModeIfChanged(prevMode);
   applyCommand(d.cmd, state_, acts_, &notifySvc_, &logger_);
   if (isArmedMode(state_.mode)) clearDoorUnlockSession(true);
   publishStateEvent(e, d.cmd);
@@ -174,6 +198,41 @@ void SecurityOrchestrator::updateDoorUnlockSession(uint32_t nowMs) {
                       servo1_,
                       buzzer_,
                       notifySvc_);
+}
+
+void SecurityOrchestrator::restorePersistedMode() {
+  if (!noncePrefReady_ || !noncePref_.isKey("mode")) return;
+
+  const uint8_t saved = noncePref_.getUChar("mode", 0);
+  Mode restored = Mode::disarm;
+  if (!restoreModeValue(saved, restored)) {
+    notifySvc_.send("WARN: persisted mode invalid; fallback to disarm");
+    return;
+  }
+
+  state_.mode = restored;
+  state_.level = AlarmLevel::off;
+  state_.entry_pending = false;
+  state_.entry_deadline_ms = 0;
+  state_.suspicion_score = 0;
+  state_.last_suspicion_update_ms = millis();
+  state_.last_outdoor_motion_ms = 0;
+  state_.last_window_event_ms = 0;
+  state_.last_vibration_ms = 0;
+  state_.last_door_event_ms = 0;
+  state_.keep_window_locked_when_disarmed = false;
+
+  Serial.print("[BOOT] restored mode=");
+  Serial.println(toString(state_.mode));
+}
+
+void SecurityOrchestrator::persistModeIfChanged(Mode prevMode) {
+  if (!noncePrefReady_) return;
+  if (state_.mode == prevMode) return;
+
+  const uint8_t saved = persistModeValue(state_.mode);
+  if (saved == 0) return;
+  noncePref_.putUChar("mode", saved);
 }
 
 bool SecurityOrchestrator::acceptRemoteNonce(const String& nonce, uint32_t nowMs, bool persistMonotonicFloor) {
@@ -258,13 +317,18 @@ void SecurityOrchestrator::updateSensorHealth(uint32_t nowMs) {
 void SecurityOrchestrator::begin() {
   logger_.begin();
   notifySvc_.begin();
+  notifySvc_.setSerialEnabled(cfg_.serial_notify_enabled);
 
   collector_.begin();
+  defaultAllowSerialModeCommands_ = cfg_.allow_serial_mode_commands;
+  defaultAllowSerialManualCommands_ = cfg_.allow_serial_manual_commands;
+  defaultAllowSerialSensorCommands_ = cfg_.allow_serial_sensor_commands;
   mqttBus_.begin();
 
   noncePrefReady_ = noncePref_.begin("eshsecv2", false);
   if (noncePrefReady_) {
     lastRemoteNonce_ = noncePref_.getULong("rnonce", 0);
+    restorePersistedMode();
   } else {
     lastRemoteNonce_ = 0;
     if (cfg_.fail_closed_if_nonce_persistence_unavailable) {
@@ -293,7 +357,8 @@ void SecurityOrchestrator::begin() {
   nextStatusHeartbeatMs_ = 0;
 
   Serial.println("READY");
-  Serial.println("Serial keys: 0=DISARM 1=ARM_NIGHT 6=ARM_AWAY 8=DOOR_OPEN 2=WINDOW_OPEN 7=DOOR_TAMPER 3=VIB 4=MOTION 5=CHOKEPOINT S=SILENCE_DOOR_HOLD_WARN H=HELP_REQUEST D=DOOR_TOGGLE W=WINDOW_TOGGLE");
+  Serial.println("Serial test input available. Send '?' for serial code list.");
+  collector_.printSerialHelp();
   Serial.println("Policy: keypad code disarms+unlocks.");
   Serial.printf("Manual toggle button pins (active LOW): DOOR=%u WINDOW=%u\n",
                 HwCfg::PIN_BTN_DOOR_TOGGLE,
@@ -562,6 +627,32 @@ bool SecurityOrchestrator::processKeypadHelpRequestEvent(const Event& e) {
   publishStateEvent(e, {CommandType::none, e.ts_ms});
   publishStateStatus("keypad_help_request");
   return true;
+}
+
+bool SecurityOrchestrator::processSerialControlEvent(const Event& e) {
+  if (e.type == EventType::serial_test_enable) {
+    cfg_.allow_serial_mode_commands = true;
+    cfg_.allow_serial_manual_commands = true;
+    cfg_.allow_serial_sensor_commands = true;
+    Serial.println("[SERIAL-TEST] policy override enabled");
+    Serial.print("[SERIAL-TEST] allow_serial_mode_commands="); Serial.println(cfg_.allow_serial_mode_commands ? "1" : "0");
+    Serial.print("[SERIAL-TEST] allow_serial_manual_commands="); Serial.println(cfg_.allow_serial_manual_commands ? "1" : "0");
+    Serial.print("[SERIAL-TEST] allow_serial_sensor_commands="); Serial.println(cfg_.allow_serial_sensor_commands ? "1" : "0");
+    publishStateStatus("serial_test_enable");
+    return true;
+  }
+  if (e.type == EventType::serial_test_disable) {
+    cfg_.allow_serial_mode_commands = defaultAllowSerialModeCommands_;
+    cfg_.allow_serial_manual_commands = defaultAllowSerialManualCommands_;
+    cfg_.allow_serial_sensor_commands = defaultAllowSerialSensorCommands_;
+    Serial.println("[SERIAL-TEST] policy override disabled");
+    Serial.print("[SERIAL-TEST] allow_serial_mode_commands="); Serial.println(cfg_.allow_serial_mode_commands ? "1" : "0");
+    Serial.print("[SERIAL-TEST] allow_serial_manual_commands="); Serial.println(cfg_.allow_serial_manual_commands ? "1" : "0");
+    Serial.print("[SERIAL-TEST] allow_serial_sensor_commands="); Serial.println(cfg_.allow_serial_sensor_commands ? "1" : "0");
+    publishStateStatus("serial_test_disable");
+    return true;
+  }
+  return false;
 }
 
 bool SecurityOrchestrator::processManualActuatorEvent(const Event& e) {
@@ -851,17 +942,19 @@ void SecurityOrchestrator::tick(uint32_t nowMs) {
   updateDoorUnlockSession(nowMs);
   if (!hasEvent) return;
 
-  if (e.src == kSerialSyntheticSrc && isModeEvent(e.type) && !cfg_.allow_serial_mode_commands) {
+  if (processSerialControlEvent(e)) return;
+
+  if (isSerialSyntheticSource(e.src) && isModeEvent(e.type) && !cfg_.allow_serial_mode_commands) {
     Serial.println("[SERIAL] mode blocked by policy");
     publishStateStatus("serial_mode_blocked");
     return;
   }
-  if (e.src == kSerialSyntheticSrc && isManualActuatorEvent(e.type) && !cfg_.allow_serial_manual_commands) {
+  if (isSerialSyntheticSource(e.src) && isManualActuatorEvent(e.type) && !cfg_.allow_serial_manual_commands) {
     Serial.println("[SERIAL] manual actuator blocked by policy");
     publishStateStatus("serial_manual_blocked");
     return;
   }
-  if (e.src == kSerialSyntheticSrc && isSerialSyntheticSensorEvent(e.type) && !cfg_.allow_serial_sensor_commands) {
+  if (isSerialSyntheticSource(e.src) && isSerialSyntheticSensorEvent(e.type) && !cfg_.allow_serial_sensor_commands) {
     Serial.println("[SERIAL] sensor event blocked by policy");
     publishStateStatus("serial_sensor_blocked");
     return;
