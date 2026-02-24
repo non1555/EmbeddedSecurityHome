@@ -1,0 +1,49 @@
+﻿%%{init: {"theme":"base","themeVariables":{"background":"#ffffff"},"flowchart":{"nodeSpacing":60,"rankSpacing":80}}}%%
+flowchart TD
+  classDef cloud fill:#e8f3ff,stroke:#1565c0,stroke-width:2px;
+  classDef core fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+  classDef hw fill:#fff8e1,stroke:#f9a825,stroke-width:2px;
+  classDef db fill:#fce4ec,stroke:#ad1457,stroke-width:2px;
+
+  subgraph CLOUD ["External Network"]
+    USER["User (LINE Chat)"]:::cloud <--> BRIDGE["LINE Bridge"]:::cloud
+    BRIDGE <--> BROKER["MQTT Broker"]:::cloud
+  end
+
+  subgraph ESP32 ["ESP32 Main Board (20ms SecTask Loop)"]
+    MQTTSVC["MqttService (Network Interface)"]:::core
+    
+    subgraph LOGIC ["Software Logic"]
+      EC["EventCollector (Gather Inputs)"]:::core
+      RE["RuleEngine (Decision Making)"]:::core
+      CTX["SystemContext (State Management)"]:::core
+      NVS[("NVS Storage (Persistent Memory)")]:::db
+    end
+
+    subgraph HW ["Hardware"]
+      SNS["Sensors (PIR, Reed, Vib, US)"]:::hw
+      KP["Keypad (PIN Input)"]:::hw
+      ACT["Actuators (Servo, Buzzer)"]:::hw
+    end
+  end
+
+  %% Network connection
+  BROKER <-->|Payload / JSON| MQTTSVC
+  
+  %% Input Flow
+  SNS -->|Hardware Signals| EC
+  KP -->|Key Presses| EC
+  EC -->|1 Event per Tick| RE
+  RE -->|Update States & Levels| CTX
+  MQTTSVC -->|Remote Commands| CTX
+
+  %% Output Flow
+  CTX <-->|Save / Restore| NVS
+  CTX -->|Hardware Control| ACT
+  CTX -->|Status / Alerts| MQTTSVC
+
+  %% Unified Transparent Backgrounds
+  style CLOUD fill:transparent,stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5
+  style ESP32 fill:transparent,stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5
+  style LOGIC fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5
+  style HW fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5

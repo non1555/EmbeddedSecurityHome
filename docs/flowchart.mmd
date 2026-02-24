@@ -1,0 +1,192 @@
+﻿%%{init: {"theme":"base","themeVariables":{"background":"#ffffff"},"flowchart":{"htmlLabels":true,"wrappingWidth":220,"diagramPadding":96,"nodeSpacing":20,"rankSpacing":70}}}%%
+flowchart TD
+    classDef process fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef event fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;
+    classDef condition fill:#ffe0b2,stroke:#f57c00,stroke-width:2px;
+    classDef state fill:#dcedc8,stroke:#689f38,stroke-width:2px;
+    classDef command fill:#f8bbd0,stroke:#c2185b,stroke-width:2px;
+    classDef error fill:#ffcdd2,stroke:#d32f2f,stroke-width:2px;
+    classDef loop_node fill:#eeeeee,stroke:#616161,stroke-width:3px,stroke-dasharray: 5 5;
+    classDef storage fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+
+    %% ==========================================
+    %% 0. SYSTEM INITIALIZATION
+    %% ==========================================
+    BOOT(("setup() Start Initialization")) --> INIT_SAFE["Set st.mode = Startup Safe (Actuators Disabled)"]:::process
+    INIT_SAFE --> NVS_INIT[("Preferences.begin('sec-home', false)")]:::storage
+    NVS_INIT --> NVS_RESTORE[("Load NVS (Fallback: mode=Disarm, is_night=false)")]:::storage
+    NVS_RESTORE --> START
+
+    %% ==========================================
+    %% 1. RTOS TASK CYCLE BEGIN (SecTask)
+    %% ==========================================
+    START(("SecTask Entry (20ms Loop)")):::loop_node --> GET_TICKS["Now = millis()"]:::process
+
+    %% ==========================================
+    %% 2. NETWORK & REMOTE COMMANDS
+    %% ==========================================
+    GET_TICKS --> MQ_CONN{"context.isMqttConnected()"}:::condition
+    
+    MQ_CONN -->|"Offline"| KP_POLL
+    MQ_CONN -->|"Online"| MQ_TICK["context.mqttTick(Now)"]:::process
+    
+    MQ_TICK --> MQ_READ{"Check Command Payload"}:::condition
+
+    MQ_READ -->|"lock / unlock"| MQ_HW_CMD["Queue Action: Servo Control"]:::command
+    MQ_READ -->|"silence"| MQ_SIL["Action: buzzer.stop()"]:::command
+    MQ_READ -->|"status"| MQ_STAT["Action: Queue Status Publish"]:::command
+    
+    MQ_READ -->|"arm_night"| MQ_N_CHK{"latest_mode == disarm?"}:::condition
+    MQ_N_CHK -->|"True"| MQ_N_EXE[("Set is_night=true, st.mode=Night; Save NVS")]:::storage
+    MQ_N_CHK -->|"False"| KP_POLL
+
+    MQ_READ -->|"night_off"| MQ_N_OFF{"st.mode == Night?"}:::condition
+    MQ_N_OFF -->|"True"| MQ_REV_M[("Set is_night=false, st.mode=latest_mode; Save NVS")]:::storage
+    MQ_N_OFF -->|"False"| KP_POLL
+
+    MQ_READ -->|"disarm / arm_away"| MQ_DROP["DROP PAYLOAD (Security Policy)"]:::error
+    MQ_READ -->|"No Data / Unknown"| KP_POLL
+
+    MQ_HW_CMD --> KP_POLL
+    MQ_SIL --> KP_POLL
+    MQ_STAT --> KP_POLL
+    MQ_N_EXE --> KP_POLL
+    MQ_REV_M --> KP_POLL
+    MQ_DROP --> KP_POLL
+
+    %% ==========================================
+    %% 3. KEYPAD INTERFACE
+    %% ==========================================
+    KP_POLL{"Keypad collector_.poll()"}:::condition
+    
+    KP_POLL -->|"Press 0-9"| KP_ADD["Append to PIN Buffer"]:::process --> TO_CHK
+    KP_POLL -->|"Press *"| KP_BACK["Backspace (Remove 1 Char)"]:::process --> TO_CHK
+    KP_POLL -->|"Press C"| KP_CLR["Clear Entire PIN Buffer"]:::process --> TO_CHK
+    KP_POLL -->|"Press A"| KP_MUTE["Stop Buzzer (Silence)"]:::command --> TO_CHK
+    KP_POLL -->|"Press B"| KP_SOS["Queue MQTT: keypad_help"]:::event --> TO_CHK
+    
+    KP_POLL -->|"Press #"| KP_CHECK{"Verify PIN"}:::condition
+    KP_CHECK -->|"Valid"| KP_OK[("st.mode = Disarm (clears is_night); Save NVS")]:::storage --> TO_CHK
+    KP_CHECK -->|"Invalid"| KP_FAIL["failed_attempts++"]:::process --> KP_LIMIT{"failed_attempts >= 3?"}:::condition
+    
+    KP_LIMIT -->|"Yes"| KP_AL_TR["Alert; Queue MQTT: keypad_alert"]:::state --> TO_CHK
+    KP_LIMIT -->|"No"| KP_WR_TR["Warn; Queue MQTT: wrong_code"]:::state --> TO_CHK
+
+    KP_POLL -->|"Idle"| SENSORS_START
+
+    %% ==========================================
+    %% 4. SENSOR POLLING (Priority Chain - Edge Detection)
+    %% ==========================================
+    SENSORS_START{"collector.poll(): Read Reed Door"}:::condition
+    SENSORS_START -->|"High"| EV_DOOR["Return Event = door_open"]:::event --> TO_CHK
+    SENSORS_START -->|"Low || No Status Changed"| RD_S_WIN{"Read Reed Window"}:::condition
+    
+    RD_S_WIN -->|"High"| EV_WIN["Return Event = window_open"]:::event --> TO_CHK
+    RD_S_WIN -->|"Low || No Status Changed"| RD_S_P1{"Read PIR 1"}:::condition
+    
+    RD_S_P1 -->|"High"| EV_P1["Return Event = motion 1"]:::event --> TO_CHK
+    RD_S_P1 -->|"Low || No Status Changed"| RD_S_P2{"Read PIR 2"}:::condition
+    
+    RD_S_P2 -->|"High"| EV_P2["Return Event = motion 2"]:::event --> TO_CHK
+    RD_S_P2 -->|"Low || No Status Changed"| RD_S_P3{"Read PIR Window"}:::condition
+    
+    RD_S_P3 -->|"High"| EV_P3["Return Event = motion 3"]:::event --> TO_CHK
+    RD_S_P3 -->|"Low || No Status Changed"| RD_S_VIB{"Read Vibration"}:::condition
+    
+    RD_S_VIB -->|"High"| EV_VIB["Return Event = vib_spike"]:::event --> TO_CHK
+    RD_S_VIB -->|"Low || No Status Changed"| US_SW{"Switch (usIndex)"}:::condition
+    
+    US_SW -->|"Case 0"| US1_CHK{"US1 Triggered? (<= 5cm)"}:::condition
+    US1_CHK -->|"True"| EV_U1["Return Event = chk1"]:::event --> US_INC1["usIndex = 1"]:::process --> TO_CHK
+    US1_CHK -->|"False || No Status Changed"| US_INC1 --> TO_CHK
+
+    US_SW -->|"Case 1"| US2_CHK{"US2 Triggered? (<= 5cm)"}:::condition
+    US2_CHK -->|"True"| EV_U2["Return Event = chk2"]:::event --> US_INC2["usIndex = 2"]:::process --> TO_CHK
+    US2_CHK -->|"False || No Status Changed"| US_INC2 --> TO_CHK
+
+    US_SW -->|"Case 2"| US3_CHK{"US3 Triggered? (<= 5cm)"}:::condition
+    US3_CHK -->|"True"| EV_U3["Return Event = chk3"]:::event --> US_INC3["usIndex = 0"]:::process --> TO_CHK
+    US3_CHK -->|"False || No Status Changed"| US_INC3 --> TO_CHK
+
+    %% ==========================================
+    %% 5. TIMEOUT EVALUATION
+    %% ==========================================
+    TO_CHK{"st.entry_pending == true<br/>&& Now >= deadline"}:::condition
+    TO_CHK -->|"Expired"| EV_TO["Set Event = entry_timeout"]:::event --> RULE_PROCESS
+    TO_CHK -->|"False"| RULE_PROCESS
+
+    %% ==========================================
+    %% 6. RULE ENGINE
+    %% ==========================================
+    RULE_PROCESS{"Process Event (RuleEngine)"}:::condition
+    RULE_PROCESS --> RE_CUR_MODE{"Switch on st.mode"}:::condition
+    
+    %% --- DISARM MODE ---
+    RE_CUR_MODE -->|"Disarm"| RE_D_AUTO{"Config.auto_arm == true"}:::condition
+    
+    RE_D_AUTO -->|"True"| S0{"st.exit_stage == 0<br/>&& Event == chk1"}:::condition
+    RE_D_AUTO -->|"False / Other Event"| ACT_UPD
+    
+    S0 -->|"True"| SET_S1["st.exit_stage = 1"]:::state
+    S0 -->|"False"| S1{"st.exit_stage == 1<br/>&& Event == door_open"}:::condition
+    
+    S1 -->|"True"| SET_S2["st.exit_stage = 2"]:::state
+    S1 -->|"False"| S2{"st.exit_stage == 2<br/>&& door_open == 0"}:::condition
+    
+    S2 -->|"True"| SET_S3["st.exit_stage = 3 st.exit_timeout_ms = Now + 20000"]:::state
+    S2 -->|"False"| S3{"st.exit_stage == 3"}:::condition
+    
+    S3 -->|"True"| S3_MOT{"Event == Indoor/Window?<br/>(mot1, mot2, mot3, chk2, chk3)"}:::condition
+    S3 -->|"False"| ACT_UPD
+    
+    S3_MOT -->|"True"| CANCEL_ARM["st.exit_stage = 0 Cancel Auto-Arm"]:::error
+    S3_MOT -->|"False"| S3_TO{"Now >= st.exit_timeout_ms"}:::condition
+    
+    S3_TO -->|"True"| SET_AWAY[("st.mode = Away; Save NVS; st.exit_stage = 0")]:::storage
+    S3_TO -->|"False"| ACT_UPD
+
+    SET_S1 --> ACT_UPD
+    SET_S2 --> ACT_UPD
+    SET_S3 --> ACT_UPD
+    CANCEL_ARM --> ACT_UPD
+    SET_AWAY --> ACT_UPD
+
+    %% --- AWAY MODE ---
+    RE_CUR_MODE -->|"Away"| RE_A_EV{"Analyze Event Category"}:::condition
+    RE_A_EV -->|"Indoor / Window Motion"| RE_A_STEP["StepUp Alert Level; Queue MQTT: step_up_alert"]:::state
+    RE_A_EV -->|"window_open"| RE_A_WIN["Set Alert; Queue MQTT: alert_high"]:::state
+    RE_A_EV -->|"entry_timeout"| RE_A_TO["Set Alert; Queue MQTT: alert_timeout"]:::state
+    
+    RE_A_EV -->|"door_open"| RE_A_TAMPER{"Vibration Spike Recently?<br/>(Forced Entry)"}:::condition
+    RE_A_TAMPER -->|"True"| RE_A_FORCE["Set Alert; Queue MQTT: alert_forced_entry"]:::state
+    RE_A_TAMPER -->|"False"| RE_A_GRACE{"Within 30s Grace Period?"}:::condition
+    
+    RE_A_GRACE -->|"Expired"| RE_A_WARN["Set Warn; Queue MQTT: warn_entry; entry_pending = true"]:::state
+    RE_A_GRACE -->|"Active"| ACT_UPD
+    
+    RE_A_STEP --> ACT_UPD
+    RE_A_WIN --> ACT_UPD
+    RE_A_TO --> ACT_UPD
+    RE_A_FORCE --> ACT_UPD
+    RE_A_WARN --> ACT_UPD
+
+    %% --- NIGHT MODE ---
+    RE_CUR_MODE -->|"Night"| RE_N_EV{"Analyze Event Category"}:::condition
+    RE_N_EV -->|"Perimeter Breach (Door/Window/Vib/PIR3)"| RE_N_AL["Set Alert; Queue MQTT: alert_night_breach"]:::state
+    RE_N_EV -->|"Indoor Motion"| RE_N_IGN["Ignore Activity (Sleep Mode Safe)"]:::process
+    
+    RE_N_AL --> ACT_UPD
+    RE_N_IGN --> ACT_UPD
+
+    %% ==========================================
+    %% 7. ACTUATORS & MQTT PUBLISH
+    %% ==========================================
+    ACT_UPD["updateActuators(Now)"]:::command --> DS_UPD{"doorSession_.check(Now)"}:::condition
+    
+    DS_UPD -->|"Event: Locked"| DS_CMD["servo1.lock(); Queue MQTT auto_locked"]:::command
+    DS_UPD -->|"Other"| PUB_CHK
+    
+    DS_CMD --> PUB_CHK
+
+    PUB_CHK["Process Outgoing MQTT Queue (Non-blocking)"]:::process --> END_T(("vTaskDelay(20ms)")):::loop_node
+    END_T --> START

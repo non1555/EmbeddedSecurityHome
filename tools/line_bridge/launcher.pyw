@@ -498,7 +498,11 @@ class LauncherApp:
         status_info.columnconfigure(0, weight=1)
         ttk.Label(status_info, textvariable=self.health_var).grid(row=0, column=0, sticky="w")
         ttk.Label(status_info, textvariable=self.ngrok_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Label(status_info, textvariable=self.webhook_var).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        webhook_row = ttk.Frame(status_info)
+        webhook_row.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        webhook_row.columnconfigure(0, weight=1)
+        ttk.Label(webhook_row, textvariable=self.webhook_var).grid(row=0, column=0, sticky="w")
+        ttk.Button(webhook_row, text="Copy", command=self.copy_webhook).grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         ttk.Separator(status_tab).grid(row=2, column=0, sticky="ew", pady=(12, 12))
 
@@ -510,7 +514,9 @@ class LauncherApp:
 
         ttk.Button(btns, text="Start", command=self.start, style="Primary.TButton").grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(btns, text="Stop", command=self.stop).grid(row=0, column=1, sticky="ew", padx=(0, 6))
-        ttk.Button(btns, text="Copy Webhook", command=self.copy_webhook, style="Accent.TButton").grid(row=0, column=2, sticky="ew")
+        ttk.Button(btns, text="Copy Webhook URL", command=self.copy_webhook, style="Accent.TButton").grid(
+            row=0, column=2, sticky="ew"
+        )
 
         links = ttk.Frame(status_tab)
         links.grid(row=4, column=0, sticky="ew", pady=(10, 0))
@@ -2201,6 +2207,7 @@ class LauncherApp:
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
         self.root.update()
+        messagebox.showinfo("Webhook", "Webhook URL copied to clipboard.")
 
     def open_health(self) -> None:
         webbrowser.open(f"http://127.0.0.1:{self.http_port}/health")
