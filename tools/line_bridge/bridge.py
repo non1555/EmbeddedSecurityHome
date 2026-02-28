@@ -110,10 +110,7 @@ MQTT_TOPIC_CMD = _normalize_topic(env("MQTT_TOPIC_CMD", "esh/main/cmd"), "esh/ma
 MQTT_TOPIC_EVENT = _normalize_topic(env("MQTT_TOPIC_EVENT", "esh/main/event"), "esh/main/event")
 MQTT_TOPIC_STATUS = _normalize_topic(env("MQTT_TOPIC_STATUS", "esh/main/status"), "esh/main/status")
 MQTT_TOPIC_ACK = _normalize_topic(env("MQTT_TOPIC_ACK", "esh/main/ack"), "esh/main/ack")
-MQTT_TOPIC_METRICS = _normalize_topic(env("MQTT_TOPIC_METRICS", "esh/main/metrics"), "esh/main/metrics")
-METRICS_PUSH_PERIOD_S = max(5, int(env("METRICS_PUSH_PERIOD_S", "30")))
 INTRUDER_NOTIFY_COOLDOWN_S = max(0, int(env("INTRUDER_NOTIFY_COOLDOWN_S", "20")))
-LINE_PUSH_PERIODIC_STATUS = env("LINE_PUSH_PERIODIC_STATUS", "0").strip().lower() in {"1", "true", "yes", "on"}
 BRIDGE_CMD_TOKEN = _prefer_fw_if_default("BRIDGE_CMD_TOKEN", "", "FW_CMD_TOKEN")
 BRIDGE_CMD_ENVELOPE = env("BRIDGE_CMD_ENVELOPE", "0").strip().lower() in {"1", "true", "yes", "on"}
 NONCE_STATE_FILE = Path(env("BRIDGE_NONCE_STATE_FILE", str(ROOT / ".nonce_state")))
@@ -151,6 +148,11 @@ COMMAND_ALIASES = {
     "night off": "night_off",
     "alarm off": "silence",
     "buzzer stop": "silence",
+}
+
+HELP_COMMANDS = {
+    "help",
+    "menu",
 }
 
 INTRUDER_LEVELS = {"alert"}
@@ -233,6 +235,19 @@ REASON_LABELS = {
     "remote_unlock_all": "Remote unlock all",
 }
 
+FLOWCHART_STATUS_NOTIFY_REASONS = {
+    "remote_status",
+    "wrong_code",
+    "keypad_alert",
+    "step_up_alert",
+    "alert_high",
+    "alert_timeout",
+    "alert_forced_entry",
+    "warn_entry",
+    "alert_night_breach",
+    "auto_locked",
+}
+
 COMMAND_LABELS = {
     "lock door": "Lock door",
     "unlock door": "Unlock door",
@@ -284,10 +299,9 @@ def format_mqtt_to_text(topic: str, payload: str) -> str:
     if topic == MQTT_TOPIC_STATUS:
         return (
             "System Status\n"
-            f"- Reason: {_label_reason(obj.get('reason', ''))}\n"
             f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
             f"- Risk: {_label_level(obj.get('level', ''))}\n"
-            f"- Uptime: {_format_uptime_ms(obj.get('uptime_ms', '-'))}"
+            f"- {_device_line_from_obj(obj)}"
         )
     if topic == MQTT_TOPIC_ACK:
         cmd = _norm_text(obj.get("cmd", ""))
@@ -337,20 +351,6 @@ def _label_reason(v: Any) -> str:
 def _label_command(v: Any) -> str:
     key = _norm_text(v)
     return COMMAND_LABELS.get(key, key or "-")
-
-
-def _format_uptime_ms(v: Any) -> str:
-    try:
-        ms = int(v)
-        if ms < 0:
-            return "-"
-        sec = ms // 1000
-        h = sec // 3600
-        m = (sec % 3600) // 60
-        s = sec % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
-    except Exception:
-        return "-"
 
 
 def _is_intruder_signal(topic: str, obj: Dict[str, Any]) -> bool:
@@ -439,40 +439,23 @@ def reply_line_messages(reply_token: str, messages: Any) -> None:
     )
 
 
-def menu_message() -> Dict[str, Any]:
-    # Backward-compatible quick reply menu (kept as fallback).
-    items = [
-        {"type": "action", "action": {"type": "postback", "label": "Home", "data": "ui=home"}},
-        {"type": "action", "action": {"type": "postback", "label": "Arm Night", "data": "cmd=arm night"}},
-        {"type": "action", "action": {"type": "postback", "label": "Night Off", "data": "cmd=night_off"}},
-        {"type": "action", "action": {"type": "postback", "label": "Silence", "data": "cmd=silence"}},
-        {"type": "action", "action": {"type": "postback", "label": "Lock Door", "data": "cmd=lock door"}},
-        {"type": "action", "action": {"type": "postback", "label": "Unlock Door", "data": "cmd=unlock door"}},
-        {"type": "action", "action": {"type": "postback", "label": "Lock Window", "data": "cmd=lock window"}},
-        {"type": "action", "action": {"type": "postback", "label": "Unlock Window", "data": "cmd=unlock window"}},
-        {"type": "action", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
-        {"type": "action", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
-        {"type": "action", "action": {"type": "postback", "label": "Status", "data": "cmd=status"}},
-    ]
-    mode = state.dev_mode or state.last_status_mode or "unknown"
-    return {"type": "text", "text": f"Menu (mode={mode})", "quickReply": {"items": items}}
-
-
-def parse_postback_cmd(data: str) -> str:
-    s = (data or "").strip()
-    if s.startswith("cmd="):
-        return s[4:].strip().lower()
-    if s.startswith("cmd:"):
-        return s[4:].strip().lower()
-    return s.strip().lower()
-
-
 def _fmt_bool(b: Optional[bool], t: str, f: str, u: str = "?") -> str:
     if b is True:
         return t
     if b is False:
         return f
     return u
+
+
+def _device_line_from_obj(obj: Dict[str, Any]) -> str:
+    door_locked = _json_bool(obj, "door_locked")
+    window_locked = _json_bool(obj, "window_locked")
+    door_open = _json_bool(obj, "door_open")
+    window_open = _json_bool(obj, "window_open")
+    return (
+        f"Door: {_fmt_bool(door_locked, 'LOCK', 'UNLOCK')}/{_fmt_bool(door_open, 'OPEN', 'CLOSE')} | "
+        f"Window: {_fmt_bool(window_locked, 'LOCK', 'UNLOCK')}/{_fmt_bool(window_open, 'OPEN', 'CLOSE')}"
+    )
 
 
 def _device_summary_line() -> str:
@@ -484,106 +467,80 @@ def _device_summary_line() -> str:
     return f"Mode: {mode} | Door: {dl}/{do} | Window: {wl}/{wo}"
 
 
-def _action(label: str, data: str) -> Dict[str, Any]:
-    return {"type": "button", "action": {"type": "postback", "label": label[:20], "data": data}}
+def is_help_cmd(text: str) -> bool:
+    return _norm_text(text) in HELP_COMMANDS
 
 
-def flex_home() -> Dict[str, Any]:
-    # Rich UI inside chat (Flex) without uploading images.
-    return {
-        "type": "flex",
-        "altText": "EmbeddedSecurity menu",
-        "contents": {
-            "type": "bubble",
-            "size": "kilo",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "contents": [
-                    {"type": "text", "text": "EmbeddedSecurity Home", "weight": "bold", "size": "lg"},
-                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
-                    {"type": "separator"},
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "spacing": "md",
-                        "contents": [
-                            {
-                                "type": "button",
-                                "style": "secondary",
-                                "action": {"type": "postback", "label": "Notifications", "data": "ui=mode"},
-                            },
-                            {
-                                "type": "button",
-                                "style": "primary",
-                                "action": {"type": "postback", "label": "Door & Window", "data": "ui=lock"},
-                            },
-                            {
-                                "type": "button",
-                                "style": "link",
-                                "action": {"type": "postback", "label": "Check Status", "data": "cmd=status"},
-                            },
-                        ],
-                    },
-                ],
-            },
-        },
-    }
+def _mode_button_spec() -> tuple[str, str]:
+    if _norm_text(state.dev_mode or state.last_status_mode) == "night":
+        return "Night Off", "cmd=night_off"
+    return "Arm Night", "cmd=arm night"
 
 
-def flex_mode() -> Dict[str, Any]:
-    # Kept for backward compatibility with old rich menu mapping (ui=mode).
-    return {
-        "type": "flex",
-        "altText": "Security mode controls",
-        "contents": {
-            "type": "bubble",
-            "size": "kilo",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "contents": [
-                    {"type": "text", "text": "Security Mode", "weight": "bold", "size": "lg"},
-                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
-                    {"type": "separator"},
-                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": "Arm Night", "data": "cmd=arm night"}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Night Off", "data": "cmd=night_off"}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Silence", "data": "cmd=silence"}},
-                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Check Status", "data": "cmd=status"}},
-                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
-                ],
-            },
-        },
-    }
-
-
-def flex_lock() -> Dict[str, Any]:
-    # Button label should represent the action (opposite of current state).
+def _door_button_spec() -> tuple[str, str]:
     if state.dev_door_locked is True:
-        door_label = "Unlock Door"
-        door_cmd = "cmd=unlock door"
-    elif state.dev_door_locked is False:
-        door_label = "Lock Door"
-        door_cmd = "cmd=lock door"
-    else:
-        door_label = "Lock Door"
-        door_cmd = "cmd=lock door"
+        return "Unlock Door", "cmd=unlock door"
+    return "Lock Door", "cmd=lock door"
 
+
+def _window_button_spec() -> tuple[str, str]:
     if state.dev_window_locked is True:
-        win_label = "Unlock Window"
-        win_cmd = "cmd=unlock window"
-    elif state.dev_window_locked is False:
-        win_label = "Lock Window"
-        win_cmd = "cmd=lock window"
-    else:
-        win_label = "Lock Window"
-        win_cmd = "cmd=lock window"
+        return "Unlock Window", "cmd=unlock window"
+    return "Lock Window", "cmd=lock window"
+
+
+def _all_button_spec() -> tuple[str, str]:
+    if state.dev_door_locked is True and state.dev_window_locked is True:
+        return "Unlock All", "cmd=unlock all"
+    return "Lock All", "cmd=lock all"
+
+
+def _bubble_button(label: str, data: str, style: str = "primary") -> Dict[str, Any]:
+    return {
+        "type": "button",
+        "style": style,
+        "height": "sm",
+        "action": {"type": "postback", "label": label[:20], "data": data},
+    }
+
+
+def command_bubble(note: str = "") -> Dict[str, Any]:
+    mode_label, mode_cmd = _mode_button_spec()
+    door_label, door_cmd = _door_button_spec()
+    window_label, window_cmd = _window_button_spec()
+    all_label, all_cmd = _all_button_spec()
+
+    contents = [
+        {"type": "text", "text": "EmbeddedSecurity Commands", "weight": "bold", "size": "lg"},
+        {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
+    ]
+    if note:
+        contents.extend(
+            [
+                {"type": "separator", "margin": "md"},
+                {"type": "text", "text": note, "size": "sm", "wrap": True, "color": "#0d47a1"},
+            ]
+        )
+    contents.extend(
+        [
+            {"type": "separator", "margin": "md"},
+            {"type": "text", "text": "System", "size": "sm", "weight": "bold", "color": "#555555"},
+            _bubble_button("Status", "cmd=status", "secondary"),
+            _bubble_button("Silence", "cmd=silence", "secondary"),
+            {"type": "separator", "margin": "md"},
+            {"type": "text", "text": "Mode", "size": "sm", "weight": "bold", "color": "#555555"},
+            _bubble_button(mode_label, mode_cmd),
+            {"type": "separator", "margin": "md"},
+            {"type": "text", "text": "Locks", "size": "sm", "weight": "bold", "color": "#555555"},
+            _bubble_button(door_label, door_cmd),
+            _bubble_button(window_label, window_cmd),
+            _bubble_button(all_label, all_cmd, "secondary"),
+        ]
+    )
 
     return {
         "type": "flex",
-        "altText": "Door and window controls",
+        "altText": "EmbeddedSecurity commands",
         "contents": {
             "type": "bubble",
             "size": "kilo",
@@ -591,19 +548,52 @@ def flex_lock() -> Dict[str, Any]:
                 "type": "box",
                 "layout": "vertical",
                 "spacing": "md",
-                "contents": [
-                    {"type": "text", "text": "Door and Window", "weight": "bold", "size": "lg"},
-                    {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
-                    {"type": "separator"},
-                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": door_label, "data": door_cmd}},
-                    {"type": "button", "style": "primary", "action": {"type": "postback", "label": win_label, "data": win_cmd}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Lock All", "data": "cmd=lock all"}},
-                    {"type": "button", "style": "secondary", "action": {"type": "postback", "label": "Unlock All", "data": "cmd=unlock all"}},
-                    {"type": "button", "style": "link", "action": {"type": "postback", "label": "Back", "data": "ui=home"}},
-                ],
+                "contents": contents,
             },
         },
     }
+
+
+def _reply_command_bubble(reply_token: str, note: str = "") -> None:
+    reply_line_messages(reply_token, [command_bubble(note)])
+
+
+def _extract_line_cmd(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if text.startswith("ui="):
+        return "menu"
+    if text.startswith("cmd=") or text.startswith("cmd:"):
+        text = text[4:].strip()
+    return normalize_cmd(text)
+
+
+def _handle_line_command(
+    reply_token: str,
+    src_key: str,
+    ev_ts_ms: int,
+    raw_cmd: str,
+    *,
+    silent_debounce: bool,
+) -> None:
+    cmd = _extract_line_cmd(raw_cmd)
+    if not cmd:
+        return
+    if is_help_cmd(cmd):
+        _reply_command_bubble(reply_token)
+        return
+    if not is_supported_cmd(cmd):
+        reply_line_text(reply_token, "Command not supported. Send 'menu' to open the command bubble.")
+        return
+    if not debounce_ok(src_key, cmd, ev_ts_ms):
+        if not silent_debounce:
+            reply_line_text(reply_token, "You sent this too quickly. Please wait a moment and try again.")
+        return
+    if not publish_cmd(cmd):
+        reply_line_text(reply_token, "Could not send command right now. Please try again.")
+        return
+    _reply_command_bubble(reply_token, f"Sent: {_label_command(cmd)}")
 
 
 class BridgeState:
@@ -614,7 +604,6 @@ class BridgeState:
         self.last_mqtt_rx_at = 0.0
         self.last_cmd = ""
         self.last_cmd_at = 0.0
-        self.last_metrics_push_at = 0.0
         self.last_intruder_push_at = 0.0
         self.last_status_mode = ""
         self.last_status_level = ""
@@ -823,15 +812,12 @@ def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any,
             (MQTT_TOPIC_EVENT, 0),
             (MQTT_TOPIC_STATUS, 0),
             (MQTT_TOPIC_ACK, 0),
-            (MQTT_TOPIC_METRICS, 0),
         ]
     )
-    push_line_text("Bridge connected to MQTT. LINE notifications are active.")
 
 
 def on_disconnect(client: mqtt.Client, userdata: Any, disconnect_flags: Any, reason_code: Any, properties: Any) -> None:
     state.mqtt_connected = False
-    push_line_text(f"Bridge disconnected from MQTT (rc={reason_code}). Trying to reconnect.")
 
 
 def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
@@ -880,19 +866,6 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             state.dev_window_open = wo
         if any(x is not None for x in (dl, wl, do, wo)):
             state.dev_at = time.time()
-    if topic == MQTT_TOPIC_METRICS:
-      now = time.time()
-      if (now - state.last_metrics_push_at) < METRICS_PUSH_PERIOD_S:
-          return
-      state.last_metrics_push_at = now
-      obj = parse_json_payload(payload)
-      push_line_text(
-          "System Health\n"
-          f"- Queue pub/cmd: {obj.get('q_pub', '-')}/{obj.get('q_cmd', '-')}\n"
-          f"- Drops event/pub/cmd: {obj.get('event_drops', '-')}/{obj.get('pub_drops', '-')}/{obj.get('cmd_drops', '-')}\n"
-          f"- Uptime: {_format_uptime_ms(obj.get('uptime_ms', '-'))}"
-      )
-      return
     if topic == MQTT_TOPIC_EVENT or topic == MQTT_TOPIC_STATUS:
         obj = parse_json_payload(payload)
         if _is_keypad_help_signal(topic, obj):
@@ -907,14 +880,9 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     if topic == MQTT_TOPIC_STATUS:
         obj = parse_json_payload(payload)
         reason = _norm_text(obj.get("reason", ""))
-        if reason == "periodic" and not LINE_PUSH_PERIODIC_STATUS:
-            return
-    # Avoid spamming LINE with UI-driven polling.
-    if topic == MQTT_TOPIC_ACK:
-        obj = parse_json_payload(payload)
-        if str(obj.get("cmd", "") or "") == "status":
-            return
-    push_line_text(format_mqtt_to_text(topic, payload))
+        if reason in FLOWCHART_STATUS_NOTIFY_REASONS:
+            push_line_text(format_mqtt_to_text(topic, payload))
+        return
 
 
 mqtt_client.on_connect = on_connect
@@ -1036,35 +1004,7 @@ async def line_webhook(
             data_pb = str(ev.get("postback", {}).get("data", "") or "").strip()
             if not data_pb:
                 continue
-
-            # UI navigation within chat (Flex)
-            if data_pb.startswith("ui="):
-                page = data_pb[3:].strip().lower()
-                if page == "mode":
-                    reply_line_messages(reply_token, [flex_mode()])
-                elif page == "lock":
-                    reply_line_messages(reply_token, [flex_lock()])
-                else:
-                    reply_line_messages(reply_token, [flex_home()])
-                continue
-
-            cmd = normalize_cmd(parse_postback_cmd(data_pb))
-            if not cmd:
-                continue
-            if cmd in {"help", "menu"}:
-                reply_line_messages(reply_token, [flex_home()])
-                continue
-            if not is_supported_cmd(cmd):
-                reply_line_text(reply_token, "Command not supported. Send 'menu' to use quick actions.")
-                continue
-            if not debounce_ok(src_k, cmd, ev_ts_ms):
-                # Silent debounce: no chat spam.
-                continue
-            if not publish_cmd(cmd):
-                reply_line_text(reply_token, "Could not send command right now. Please try again.")
-                continue
-            # Keep chat clean: show menu again instead of "sent: ..."
-            reply_line_messages(reply_token, [flex_home()])
+            _handle_line_command(reply_token, src_k, ev_ts_ms, data_pb, silent_debounce=True)
             continue
 
         if ev.get("type") != "message":
@@ -1073,24 +1013,7 @@ async def line_webhook(
         if msg.get("type") != "text":
             continue
 
-        text = normalize_cmd(msg.get("text", ""))
-
-        if text in {"help", "menu"}:
-            reply_line_messages(reply_token, [flex_home()])
-            continue
-
-        if not is_supported_cmd(text):
-            reply_line_text(reply_token, "Command not supported. Send 'menu' to use quick actions.")
-            continue
-
-        if not debounce_ok(src_k, text, ev_ts_ms):
-            reply_line_text(reply_token, "You sent this too quickly. Please wait a moment and try again.")
-            continue
-
-        if not publish_cmd(text):
-            reply_line_text(reply_token, "Could not send command right now. Please try again.")
-            continue
-        reply_line_messages(reply_token, [flex_home()])
+        _handle_line_command(reply_token, src_k, ev_ts_ms, str(msg.get("text", "") or ""), silent_debounce=False)
 
     return {"ok": True}
 
@@ -1106,3 +1029,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

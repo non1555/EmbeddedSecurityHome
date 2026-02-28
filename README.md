@@ -1,4 +1,4 @@
-﻿# EmbeddedSecurityHome
+# EmbeddedSecurityHome
 
 An ESP32-based smart home security system running FreeRTOS, integrated with LINE OA for real-time notifications and remote control via MQTT.
 
@@ -20,6 +20,7 @@ This document serves as the Single Source of Truth for:
 - **Progressive Alert:** Escalating threat logic (`Off -> Warn -> Alert`).
 - **Access Control:** 4x4 Keypad PIN flow (`*` = Backspace, `C` = Clear buffer).
 - **Remote Control (LINE/MQTT):**
+  - Bubble-based LINE command panel with direct command buttons.
   - Lock/Unlock doors and windows.
   - Mode shifting (`arm_night`, `night_off`).
   - Temporary buzzer `silence` and system `status` requests.
@@ -41,7 +42,7 @@ This document serves as the Single Source of Truth for:
 
 - **RTOS Execution:** Single `SecTask` loop with a `20 ms` period budget.
 - **Event Management:** Handled via `eventQueue`, `commandQueue`, and `publishQueue`.
-- **Network Task:** Non-blocking MQTT tick executed within `SecTask`.
+- **Network Task:** MQTT reconnect and publish handling run in a dedicated low-priority `MqttTask`.
 - **Remote Security Policy:**
   - `arm_night` is only permitted when `latest_mode == Disarm`.
   - `night_off` is only permitted when currently in `Night` mode (reverts to the previous `latest_mode`).
@@ -157,12 +158,14 @@ run.cmd
 
 ## 6. Command Reference
 
+LINE chat uses a single bubble command panel. Send `menu` to open the command bubble again.
+
 | Command | Effect |
 |---|---|
 | `lock door` / `unlock door` | Actuate the main door lock |
 | `lock window` / `unlock window` | Actuate the window lock |
 | `lock all` / `unlock all` | Actuate all locks simultaneously |
-| `arm_night` | Enter Night mode (perimeter monitoring only) |
+| `arm night` / `arm_night` | Enter Night mode (perimeter monitoring only) |
 | `night_off` | Exit Night mode and revert to the previous mode |
 | `silence` | Temporarily mute the buzzer (alert state remains active) |
 | `status` | Request a snapshot of the current system state |
@@ -256,5 +259,6 @@ This section defines the expected system behavior under various scenarios, stric
   * **Expected Result:** `context.isMqttConnected()` returns false. The `SecTask` bypasses the MQTT read block and continues polling the keypad and sensors seamlessly. The system remains 100% operational locally.
 
 ---
+
 
 
