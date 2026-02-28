@@ -13,6 +13,7 @@ void EventCollector::begin() {
 
 bool EventCollector::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
   if (pollKeypad(nowMs, out)) return true;
+  if (keypad_.consumeInputActivity()) return false;
   return pollSensorsOrSerial(nowMs, out);
 }
 

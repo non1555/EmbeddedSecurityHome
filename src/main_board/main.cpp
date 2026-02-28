@@ -18,12 +18,13 @@ ApplicationLogicLayer::EventCollector collector;
 ApplicationLogicLayer::RuleEngine engine;
 
 TaskHandle_t securityTaskHandle = nullptr;
+TaskHandle_t mqttTaskHandle = nullptr;
 QueueHandle_t eventQueue = nullptr;
 
 void securityTask(void*) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t period = pdMS_TO_TICKS(ConfigurationSharedTypes::Config::RTOS_TICK_MS);
-  constexpr uint8_t maxRemoteEventsPerTick = 2;
+  constexpr uint8_t maxRemoteEventsPerTick = 1;
 
   for (;;) {
     esp_task_wdt_reset();
@@ -31,16 +32,11 @@ void securityTask(void*) {
     const uint32_t nowMs = millis();
     ConfigurationSharedTypes::Event event{};
 
-    // Network and remote-command path (flowchart section 3).
-    if (!context.isMqttConnected()) {
-      context.mqttTick(nowMs); // Non-blocking async reconnect attempt.
-    } else {
-      context.mqttTick(nowMs); // pollIncoming + publish drain.
-      uint8_t remoteEvents = 0;
-      while (remoteEvents < maxRemoteEventsPerTick && context.pollRemoteEvent(nowMs, event)) {
-        engine.process(event, context);
-        ++remoteEvents;
-      }
+    // Remote commands are drained here; network reconnect lives in mqttTask.
+    uint8_t remoteEvents = 0;
+    while (remoteEvents < maxRemoteEventsPerTick && context.pollRemoteEvent(nowMs, event)) {
+      engine.process(event, context);
+      ++remoteEvents;
     }
 
     // Keypad/sensor chain (flowchart section 4/5).
@@ -61,7 +57,16 @@ void securityTask(void*) {
     }
 
     context.updateActuators(nowMs, engine);
-    context.mqttTick(nowMs); // End-of-tick flush for pending status/event publish.
+    vTaskDelayUntil(&lastWake, period);
+  }
+}
+
+void mqttTask(void*) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(ConfigurationSharedTypes::Config::MQTT_TASK_MS);
+
+  for (;;) {
+    context.mqttTick(millis());
     vTaskDelayUntil(&lastWake, period);
   }
 }
@@ -104,6 +109,9 @@ void setup() {
   createTaskOrRestart(
     xTaskCreatePinnedToCore(securityTask, "SecTask", 8192, nullptr, 2, &securityTaskHandle, 1),
     "SecTask");
+  createTaskOrRestart(
+    xTaskCreatePinnedToCore(mqttTask, "MqttTask", 6144, nullptr, 1, &mqttTaskHandle, 0),
+    "MqttTask");
   if (esp_task_wdt_add(securityTaskHandle) != ESP_OK) {
     Serial.println("[BOOT] WDT add SecTask failed");
     delay(150);

@@ -12,29 +12,30 @@ flowchart TD
     %% ==========================================
     %% 0. SYSTEM INITIALIZATION
     %% ==========================================
-    BOOT(("setup() Start Initialization")) --> INIT_SAFE["Set st.mode = Startup Safe (Actuators Disabled)"]:::process
-    INIT_SAFE --> NVS_INIT[("Preferences.begin('sec-home', false)")]:::storage
-    NVS_INIT --> NVS_RESTORE[("Load NVS (Fallback: mode=Disarm, is_night=false)")]:::storage
-    NVS_RESTORE --> START
+    BOOT(("setup() Start Initialization")) --> WDT_INIT["Initialize Task Watchdog"]:::process
+    WDT_INIT --> CTX_BEGIN["context.begin(): Initialize Actuators, NVS, and MQTT Service"]:::process
+    CTX_BEGIN --> NVS_RESTORE[("Load latest_mode & is_night from NVS")]:::storage
+    NVS_RESTORE --> COLLECTOR_INIT["collector.begin() and bindCollector()"]:::process
+    COLLECTOR_INIT --> EVT_Q["Create eventQueue"]:::process
+    EVT_Q --> TASKS_CREATE["Create SecTask (Priority 2) and MqttTask (Priority 1)"]:::process
+    TASKS_CREATE --> SEC_START
+    TASKS_CREATE --> MQTT_START
 
     %% ==========================================
     %% 1. RTOS TASK CYCLE BEGIN (SecTask)
     %% ==========================================
-    START(("SecTask Entry (20ms Loop)")):::loop_node --> GET_TICKS["Now = millis()"]:::process
+    SEC_START(("SecTask Entry (20ms Loop)")):::loop_node --> GET_TICKS["Now = millis()"]:::process
 
     %% ==========================================
     %% 2. NETWORK & REMOTE COMMANDS
     %% ==========================================
-    GET_TICKS --> MQ_CONN{"context.isMqttConnected()"}:::condition
-    
-    MQ_CONN -->|"Offline"| KP_POLL
-    MQ_CONN -->|"Online"| MQ_TICK["context.mqttTick(Now)"]:::process
-    
-    MQ_TICK --> MQ_READ{"Check Command Payload"}:::condition
+    CMD_Q[("Remote Command Queue<br/>(filled by MqttTask callback)")]:::storage
+    GET_TICKS --> MQ_READ{"Check Command Payload<br/>(drain max 1 per tick)"}:::condition
+    CMD_Q -.dequeue.-> MQ_READ
 
-    MQ_READ -->|"lock / unlock"| MQ_HW_CMD["Queue Action: Servo Control"]:::command
-    MQ_READ -->|"silence"| MQ_SIL["Action: buzzer.stop()"]:::command
-    MQ_READ -->|"status"| MQ_STAT["Action: Queue Status Publish"]:::command
+    MQ_READ -->|"lock / unlock"| MQ_HW_CMD["Action: Servo Control + Queue Ack/Status"]:::command
+    MQ_READ -->|"silence"| MQ_SIL["Action: buzzer.stop() + Queue Ack/Status"]:::command
+    MQ_READ -->|"status"| MQ_STAT["Action: Queue Status Publish + Ack"]:::command
     
     MQ_READ -->|"arm_night"| MQ_N_CHK{"latest_mode == disarm?"}:::condition
     MQ_N_CHK -->|"True"| MQ_N_EXE[("Set is_night=true, st.mode=Night; Save NVS")]:::storage
@@ -44,15 +45,13 @@ flowchart TD
     MQ_N_OFF -->|"True"| MQ_REV_M[("Set is_night=false, st.mode=latest_mode; Save NVS")]:::storage
     MQ_N_OFF -->|"False"| KP_POLL
 
-    MQ_READ -->|"disarm / arm_away"| MQ_DROP["DROP PAYLOAD (Security Policy)"]:::error
-    MQ_READ -->|"No Data / Unknown"| KP_POLL
+    MQ_READ -->|"No Data / Unknown / Ack-only"| KP_POLL
 
     MQ_HW_CMD --> KP_POLL
     MQ_SIL --> KP_POLL
     MQ_STAT --> KP_POLL
     MQ_N_EXE --> KP_POLL
     MQ_REV_M --> KP_POLL
-    MQ_DROP --> KP_POLL
 
     %% ==========================================
     %% 3. KEYPAD INTERFACE
@@ -184,9 +183,17 @@ flowchart TD
     ACT_UPD["updateActuators(Now)"]:::command --> DS_UPD{"doorSession_.check(Now)"}:::condition
     
     DS_UPD -->|"Event: Locked"| DS_CMD["servo1.lock(); Queue MQTT auto_locked"]:::command
-    DS_UPD -->|"Other"| PUB_CHK
+    DS_UPD -->|"Other"| END_T
     
-    DS_CMD --> PUB_CHK
+    DS_CMD --> END_T
 
-    PUB_CHK["Process Outgoing MQTT Queue (Non-blocking)"]:::process --> END_T(("vTaskDelay(20ms)")):::loop_node
-    END_T --> START
+    END_T(("vTaskDelay(20ms)")):::loop_node --> SEC_START
+
+    %% ==========================================
+    %% 8. MQTT TASK (Background / Lower Priority)
+    %% ==========================================
+    MQTT_START(("MqttTask Entry (10ms Loop)")):::loop_node --> MQTT_NOW["Now = millis()"]:::process
+    MQTT_NOW --> MQTT_TICK["context.mqttTick(Now)<br/>WiFi reconnect + MQTT reconnect + mqtt.loop<br/>Process Outgoing MQTT Queue + receive MQTT callback"]:::process
+    MQTT_TICK -.enqueue incoming cmd.-> CMD_Q
+    MQTT_TICK --> MQTT_DELAY(("vTaskDelay(10ms)")):::loop_node
+    MQTT_DELAY --> MQTT_START

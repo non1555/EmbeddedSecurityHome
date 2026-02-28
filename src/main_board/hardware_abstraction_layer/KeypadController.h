@@ -12,6 +12,7 @@ class KeypadController {
 public:
   void begin(); // Initializes keypad scanner state and configured door code. Params: none.
   bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad and emits semantic keypad events. Params: nowMs=current timestamp in ms, out=event output.
+  bool consumeInputActivity(); // Returns whether a non-event keypad edit happened this tick and clears the flag. Params: none.
 
   const char* buffer() const; // Returns pointer to current entered PIN buffer. Params: none.
   uint8_t length() const; // Returns current entered PIN length. Params: none.
@@ -24,6 +25,7 @@ private:
 
   bool submitReady_ = false;
   bool submitOk_ = false;
+  bool inputEdited_ = false;
 
   uint8_t scanRow_ = 0;
   bool waitingRelease_ = false;

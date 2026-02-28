@@ -180,6 +180,12 @@ void SystemContext::updateActuators(uint32_t nowMs, const RuleEngine& engine) {
         state_.is_night != previousIsNight) {
       persistModeState_();
     }
+    if ((state_.mode == ConfigurationSharedTypes::Mode::away ||
+         state_.mode == ConfigurationSharedTypes::Mode::night) &&
+        state_.mode != previousMode) {
+      actuators_.lockAll();
+      clearDoorSession_(true);
+    }
     enqueueStatus_(tickFlag);
   }
 
@@ -234,7 +240,7 @@ const ConfigurationSharedTypes::SystemState& SystemContext::state() const {
 }
 
 bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
-  constexpr uint8_t kMaxCmdDrain = 2;
+  constexpr uint8_t kMaxCmdDrain = 1;
 
   uint8_t drained = 0;
   ConfigurationSharedTypes::RemoteCommandMessage msg{};

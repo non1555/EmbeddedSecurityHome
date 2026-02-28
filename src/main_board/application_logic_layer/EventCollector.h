@@ -15,7 +15,7 @@ class EventCollector {
 public:
   void begin(); // Initializes I2C, sensors, keypad, and display modules. Params: none.
 
-  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad first, then sensors/serial, and emits first detected event. Params: nowMs=current timestamp in ms, out=event output.
+  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad first, then sensors/serial, and emits first detected event; keypad edits consume the tick before sensors run. Params: nowMs=current timestamp in ms, out=event output.
   bool pollKeypad(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad and emits an event when input completes. Params: nowMs=current timestamp in ms, out=event output.
   bool pollSensorsOrSerial(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls sensors/serial and emits the next detected event. Params: nowMs=current timestamp in ms, out=event output.
 

@@ -25,6 +25,7 @@ void KeypadController::begin() {
   clear_();
   submitReady_ = false;
   submitOk_ = false;
+  inputEdited_ = false;
 }
 
 bool KeypadController::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
@@ -43,6 +44,7 @@ bool KeypadController::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out
 
   if (key == 'C') {
     clear_();
+    inputEdited_ = true;
     return false;
   }
 
@@ -51,6 +53,7 @@ bool KeypadController::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out
       --inputLength_;
       inputBuffer_[inputLength_] = '\0';
     }
+    inputEdited_ = true;
     return false;
   }
 
@@ -59,6 +62,7 @@ bool KeypadController::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out
       inputBuffer_[inputLength_++] = key;
       inputBuffer_[inputLength_] = '\0';
     }
+    inputEdited_ = true;
     return false;
   }
 
@@ -75,6 +79,12 @@ bool KeypadController::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out
   }
 
   return false;
+}
+
+bool KeypadController::consumeInputActivity() {
+  const bool edited = inputEdited_;
+  inputEdited_ = false;
+  return edited;
 }
 
 const char* KeypadController::buffer() const {
