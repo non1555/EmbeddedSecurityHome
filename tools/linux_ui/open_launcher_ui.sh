@@ -27,7 +27,7 @@ fi
 
 VPY="$ROOT/tools/line_bridge/.venv/bin/python3"
 LAUNCHER="$ROOT/tools/line_bridge/launcher.pyw"
-SETUP_SCRIPT="$ROOT/setup.sh"
+SETUP_SCRIPT="$ROOT/scripts/setup.sh"
 if [[ ! -x "$VPY" ]]; then
   ui_show_error "Launcher UI" "Python venv not found:\n$VPY"
   exit 2
@@ -46,9 +46,9 @@ if ! "$VPY" -c "import tkinter" >/dev/null 2>&1; then
     ui_open_file "$LOG_FILE"
     exit 2
   fi
-  ui_show_info "Launcher UI" "tkinter is missing.\nRunning setup.sh to install required dependencies."
+  ui_show_info "Launcher UI" "tkinter is missing.\nRunning scripts/setup.sh to install required dependencies."
   if ! "$SETUP_SCRIPT" >>"$LOG_FILE" 2>&1; then
-    ui_show_error "Launcher UI" "setup.sh failed while installing dependencies.\nCheck log: $LOG_FILE"
+    ui_show_error "Launcher UI" "scripts/setup.sh failed while installing dependencies.\nCheck log: $LOG_FILE"
     ui_open_file "$LOG_FILE"
     exit 2
   fi

@@ -10,7 +10,7 @@ LOG_FILE="$LOG_DIR/native-tests-$(date +%Y%m%d-%H%M%S).log"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/ui_common.sh"
 
-if "$ROOT/tools/run_native_flow_tests.sh" >"$LOG_FILE" 2>&1; then
+if "$ROOT/scripts/run_native_flow_tests.sh" >"$LOG_FILE" 2>&1; then
   ui_show_info "Native Flow Tests" "Tests passed.\nLog: $LOG_FILE"
   ui_open_file "$LOG_FILE"
   exit 0

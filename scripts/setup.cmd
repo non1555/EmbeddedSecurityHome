@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT=%~dp0"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
 set "BOOTSTRAP=%ROOT%tools\line_bridge\bootstrap.cmd"
 set "ENV_FILE=%ROOT%tools\line_bridge\.env"
 set "NGROK_BUNDLED=%ROOT%tools\ngrok\ngrok.exe"
@@ -93,3 +93,4 @@ echo 3^) Firmware build: python -m platformio run
 if "%HAS_PIO%"=="0" exit /b 1
 if "%HAS_NGROK%"=="0" exit /b 1
 exit /b 0
+

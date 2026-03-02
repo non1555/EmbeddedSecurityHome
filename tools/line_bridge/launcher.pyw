@@ -1852,21 +1852,21 @@ class LauncherApp:
 
     def quick_setup_all(self) -> None:
         if os.name == "nt":
-            setup_cmd = PROJECT_ROOT / "setup.cmd"
+            setup_cmd = PROJECT_ROOT / "scripts" / "setup.cmd"
             if not setup_cmd.exists():
                 messagebox.showerror("Missing setup script", f"Missing file: {setup_cmd}")
                 return
             self._run_job_async("Quick Setup", [["cmd", "/c", str(setup_cmd)]], cwd=PROJECT_ROOT)
             return
 
-        setup_sh = PROJECT_ROOT / "setup.sh"
+        setup_sh = PROJECT_ROOT / "scripts" / "setup.sh"
         if not setup_sh.exists():
             messagebox.showerror("Missing setup script", f"Missing file: {setup_sh}")
             return
         if shutil.which("bash"):
             self._run_job_async("Quick Setup", [["bash", str(setup_sh)]], cwd=PROJECT_ROOT)
             return
-        messagebox.showerror("bash missing", "Cannot run setup.sh because 'bash' is not available on PATH.")
+        messagebox.showerror("bash missing", "Cannot run scripts/setup.sh because 'bash' is not available on PATH.")
 
     def install_platformio_core(self) -> None:
         py = self._host_python_cmd()

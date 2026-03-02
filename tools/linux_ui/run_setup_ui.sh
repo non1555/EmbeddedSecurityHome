@@ -10,7 +10,7 @@ LOG_FILE="$LOG_DIR/setup-$(date +%Y%m%d-%H%M%S).log"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/ui_common.sh"
 
-if "$ROOT/setup.sh" >"$LOG_FILE" 2>&1; then
+if "$ROOT/scripts/setup.sh" >"$LOG_FILE" 2>&1; then
   ui_show_info "SecurityHome Setup" "Setup completed.\nLog: $LOG_FILE"
   ui_open_file "$LOG_FILE"
   exit 0

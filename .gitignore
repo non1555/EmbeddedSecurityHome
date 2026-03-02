@@ -18,3 +18,4 @@ tools/line_bridge/richmenu.png
 platformio.local.ini
 tmp_*.mmd
 tmp_*.svg
+src/main_board_single_file/

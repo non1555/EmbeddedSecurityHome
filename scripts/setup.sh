@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP="$ROOT/tools/line_bridge/bootstrap.sh"
 ENV_FILE="$ROOT/tools/line_bridge/.env"
 NGROK_BUNDLED="$ROOT/tools/ngrok/ngrok"
