@@ -24,10 +24,10 @@
 <path d="M1960.0,638.0 L1990.0,652.0 L1990.0,652.0 L2070.0,626.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
 <path d="M1960.0,798.0 L1990.0,780.0 L1990.0,780.0 L2000.0,784.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
 <path d="M1960.0,798.0 L2040.0,810.0 L2040.0,810.0 L2070.0,784.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
-<path d="M1960.0,957.0 L1980.0,940.0 L1980.0,940.0 L2000.0,939.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
-<path d="M1960.0,957.0 L2000.0,972.0 L2000.0,972.0 L2070.0,939.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
-<path d="M1960.0,1118.0 L1980.0,1118.0 L1980.0,1052.0 L2000.0,1052.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
-<path d="M1960.0,1118.0 L2100.0,1140.0 L2070.0,1052.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
+<path d="M1880.0,957.0 L1980.0,940.0 L1980.0,940.0 L2000.0,939.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
+<path d="M1880.0,957.0 L2000.0,972.0 L2000.0,972.0 L2070.0,939.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
+<path d="M1960.0,1108.0 L1980.0,1108.0 L1980.0,1090.0 L2000.0,1090.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
+<path d="M1960.0,1108.0 L2015.0,1108.0 L2015.0,1116.0 L2070.0,1116.0" fill="none" stroke="#757575" stroke-width="1.2" stroke-dasharray="6 4"/>
 <path d="M620.0,218.0 L760.0,218.0 L760.0,217.0 L900.0,217.0" fill="none" stroke="#424242" stroke-width="1.2"/>
 <path d="M620.0,298.0 L760.0,298.0 L760.0,297.0 L900.0,297.0" fill="none" stroke="#424242" stroke-width="1.2"/>
 <path d="M620.0,378.0 L760.0,378.0 L760.0,377.0 L900.0,377.0" fill="none" stroke="#424242" stroke-width="1.2"/>
@@ -57,16 +57,18 @@
 <text x="1807.5" y="857.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">ECHO 5V</text>
 <path d="M1530.0,861.0 L1480.0,861.0 L1480.0,857.0 L1430.0,857.0" fill="none" stroke="#424242" stroke-width="1.2"/>
 <text x="1480.0" y="855.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">ECHO 3.3V</text>
-<path d="M1430.0,957.0 L1480.0,940.0 L1480.0,940.0 L1710.0,957.0" fill="none" stroke="#424242" stroke-width="1.2"/>
-<text x="1568.7" y="942.6" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SDA</text>
-<path d="M1430.0,1017.0 L1570.0,1000.0 L1570.0,970.0 L1710.0,957.0" fill="none" stroke="#424242" stroke-width="1.2"/>
-<text x="1570.0" y="981.2" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SCL</text>
-<path d="M1430.0,957.0 L1530.0,970.0 L1530.0,1100.0 L1710.0,1118.0" fill="none" stroke="#424242" stroke-width="1.2"/>
-<text x="1530.0" y="1071.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SDA</text>
-<path d="M1430.0,1017.0 L1490.0,1030.0 L1490.0,1130.0 L1710.0,1118.0" fill="none" stroke="#424242" stroke-width="1.2"/>
-<text x="1519.4" y="1124.4" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SCL</text>
+<path d="M1430.0,957.0 L1480.0,940.0 L1480.0,940.0 L1660.0,957.0" fill="none" stroke="#424242" stroke-width="1.2"/>
+<text x="1543.7" y="942.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SDA</text>
+<path d="M1430.0,1017.0 L1570.0,1000.0 L1570.0,970.0 L1660.0,957.0" fill="none" stroke="#424242" stroke-width="1.2"/>
+<text x="1560.0" y="997.2" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SCL</text>
+<path d="M1430.0,957.0 L1530.0,970.0 L1530.0,1100.0 L1710.0,1108.0" fill="none" stroke="#424242" stroke-width="1.2"/>
+<text x="1530.0" y="1070.7" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SDA</text>
+<path d="M1430.0,1017.0 L1490.0,1030.0 L1490.0,1130.0 L1710.0,1108.0" fill="none" stroke="#424242" stroke-width="1.2"/>
+<text x="1519.7" y="1123.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">SCL</text>
+<path d="M1880.0,957.0 L2120.0,957.0" fill="none" stroke="#424242" stroke-width="1.2"/>
+<text x="2000.0" y="953.0" text-anchor="middle" font-family="Times New Roman" font-size="12" fill="#212121">P0-P7</text>
 <rect x="980.0" y="150.0" width="360.0" height="980.0" rx="12" ry="12" fill="#e8eaf6" stroke="#5c6bc0" stroke-width="1.2"/>
-<text x="1160.0" y="635.6" text-anchor="middle" font-family="Times New Roman" font-size="16"><tspan x="1160.0" dy="0.0">ESP32-DevKitC</tspan><tspan x="1160.0" dy="20.0">Main Board</tspan></text>
+<text x="1160.0" y="635.6" text-anchor="middle" font-family="Times New Roman" font-size="16"><tspan x="1160.0" dy="0.0">ESP32-WROOM-32</tspan><tspan x="1160.0" dy="20.0">Main Board</tspan></text>
 <rect x="900.0" y="200.0" width="90.0" height="34.0" rx="0" ry="0" fill="#ffffff" stroke="#5c6bc0" stroke-width="1.2"/>
 <text x="945.0" y="221.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="945.0" dy="0.0">GPIO35</tspan></text>
 <rect x="900.0" y="280.0" width="90.0" height="34.0" rx="0" ry="0" fill="#ffffff" stroke="#5c6bc0" stroke-width="1.2"/>
@@ -106,97 +108,99 @@
 <rect x="1330.0" y="1000.0" width="100.0" height="34.0" rx="0" ry="0" fill="#ffffff" stroke="#5c6bc0" stroke-width="1.2"/>
 <text x="1380.0" y="1021.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="1380.0" dy="0.0">GPIO22 SCL</tspan></text>
 <rect x="370.0" y="190.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="222.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">PIR 1</tspan></text>
+<text x="495.0" y="222.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">HC-SR501 PIR 1</tspan></text>
 <rect x="370.0" y="270.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="302.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">PIR 2</tspan></text>
+<text x="495.0" y="302.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">HC-SR501 PIR 2</tspan></text>
 <rect x="370.0" y="350.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="382.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">PIR Window</tspan></text>
+<text x="495.0" y="382.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">HC-SR501 PIR Window</tspan></text>
 <rect x="370.0" y="430.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="462.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Vibration Sensor</tspan></text>
+<text x="495.0" y="462.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">SW-1801P Vibration Sensor</tspan></text>
 <rect x="370.0" y="570.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="602.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Door Reed Switch</tspan></text>
+<text x="495.0" y="602.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Y213 Door Reed Switch</tspan></text>
 <rect x="370.0" y="650.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="495.0" y="682.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Window Reed Switch</tspan></text>
+<text x="495.0" y="682.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Y213 Window Reed Switch</tspan></text>
 <rect x="370.0" y="750.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
 <text x="495.0" y="782.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Door Toggle Button</tspan></text>
 <rect x="370.0" y="830.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
 <text x="495.0" y="862.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="495.0" dy="0.0">Window Toggle Button</tspan></text>
 <rect x="1710.0" y="190.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="222.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Buzzer</tspan></text>
+<text x="1835.0" y="222.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Piezo Buzzer</tspan></text>
 <rect x="1710.0" y="270.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="302.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Door Servo</tspan></text>
+<text x="1835.0" y="302.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">SG90 Door Servo</tspan></text>
 <rect x="1710.0" y="350.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="382.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Window Servo</tspan></text>
+<text x="1835.0" y="382.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">SG90 Window Servo</tspan></text>
 <rect x="1710.0" y="450.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="482.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Ultrasonic 1</tspan></text>
+<text x="1835.0" y="482.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">HC-SR04 Ultrasonic 1</tspan></text>
 <rect x="1710.0" y="610.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="642.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Ultrasonic 2</tspan></text>
+<text x="1835.0" y="642.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">HC-SR04 Ultrasonic 2</tspan></text>
 <rect x="1710.0" y="770.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="802.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">Ultrasonic 3</tspan></text>
-<rect x="1710.0" y="929.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="953.1" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">PCF8574 Keypad</tspan><tspan x="1835.0" dy="17.5">Addr 0x20</tspan></text>
-<rect x="1710.0" y="1090.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
-<text x="1835.0" y="1114.2" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">OLED Display</tspan><tspan x="1835.0" dy="17.5">Addr 0x3C</tspan></text>
+<text x="1835.0" y="802.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">HC-SR04 Ultrasonic 3</tspan></text>
+<rect x="1660.0" y="929.0" width="220.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
+<text x="1770.0" y="953.1" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1770.0" dy="0.0">PCF8574 I2C Expander</tspan><tspan x="1770.0" dy="17.5">Addr 0x20</tspan></text>
+<rect x="1710.0" y="1080.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
+<text x="1835.0" y="1104.2" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1835.0" dy="0.0">SSD1306 OLED Display</tspan><tspan x="1835.0" dy="17.5">I2C Addr 0x3C</tspan></text>
 <rect x="1530.0" y="512.0" width="110.0" height="42.0" rx="12" ry="12" fill="#ffffff" stroke="#424242" stroke-width="1.2"/>
-<text x="1585.0" y="529.7" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="15.0">2k/1k</tspan></text>
+<text x="1585.0" y="529.1" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="17.5">2k/1k</tspan></text>
 <rect x="1530.0" y="671.0" width="110.0" height="42.0" rx="12" ry="12" fill="#ffffff" stroke="#424242" stroke-width="1.2"/>
-<text x="1585.0" y="688.7" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="15.0">2k/1k</tspan></text>
+<text x="1585.0" y="688.1" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="17.5">2k/1k</tspan></text>
 <rect x="1530.0" y="840.0" width="110.0" height="42.0" rx="12" ry="12" fill="#ffffff" stroke="#424242" stroke-width="1.2"/>
-<text x="1585.0" y="857.7" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="15.0">2k/1k</tspan></text>
+<text x="1585.0" y="857.1" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="1585.0" dy="0.0">ECHO Divider</tspan><tspan x="1585.0" dy="17.5">2k/1k</tspan></text>
 <rect x="240.0" y="196.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="270.0" y="210.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="270.0" dy="0.0">+5V</tspan></text>
+<text x="270.0" y="210.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="270.0" dy="0.0">+5V</tspan></text>
 <rect x="300.0" y="222.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="236.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="236.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="240.0" y="276.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="270.0" y="290.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="270.0" dy="0.0">+5V</tspan></text>
+<text x="270.0" y="290.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="270.0" dy="0.0">+5V</tspan></text>
 <rect x="300.0" y="302.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="316.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="316.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="240.0" y="356.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="270.0" y="370.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="270.0" dy="0.0">+5V</tspan></text>
+<text x="270.0" y="370.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="270.0" dy="0.0">+5V</tspan></text>
 <rect x="300.0" y="382.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="396.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="396.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="240.0" y="436.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="270.0" y="450.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="270.0" dy="0.0">+5V</tspan></text>
+<text x="270.0" y="450.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="270.0" dy="0.0">+5V</tspan></text>
 <rect x="300.0" y="462.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="476.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="476.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="300.0" y="602.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="616.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="616.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="300.0" y="682.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="696.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="696.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="300.0" y="782.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="796.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="796.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="300.0" y="862.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="330.0" y="876.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="330.0" dy="0.0">GND</tspan></text>
+<text x="330.0" y="876.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="330.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="200.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="214.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="214.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="202.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="216.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="216.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="276.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="290.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="290.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="276.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="290.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="290.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="356.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="370.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="370.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="356.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="370.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="370.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="456.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="470.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="470.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="456.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="470.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="470.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="616.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="630.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="630.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="616.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="630.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="630.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="774.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="788.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="788.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="774.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="788.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="788.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
 <rect x="2000.0" y="929.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="943.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<text x="2030.0" y="943.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
 <rect x="2070.0" y="929.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="943.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
-<rect x="2000.0" y="1042.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2030.0" y="1056.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
-<rect x="2070.0" y="1042.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
-<text x="2100.0" y="1056.2" text-anchor="middle" font-family="Times New Roman" font-size="12"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<text x="2100.0" y="943.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<rect x="2000.0" y="1080.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
+<text x="2030.0" y="1094.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2030.0" dy="0.0">+5V</tspan></text>
+<rect x="2070.0" y="1106.0" width="60.0" height="20.0" rx="12" ry="12" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.2"/>
+<text x="2100.0" y="1120.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2100.0" dy="0.0">GND</tspan></text>
+<rect x="2120.0" y="929.0" width="250.0" height="56.0" rx="12" ry="12" fill="#f7ecd9" stroke="#6d4c41" stroke-width="1.2"/>
+<text x="2245.0" y="961.9" text-anchor="middle" font-family="Times New Roman" font-size="14"><tspan x="2245.0" dy="0.0">4x4 Matrix Membrane Keypad (#27899)</tspan></text>
 </svg>

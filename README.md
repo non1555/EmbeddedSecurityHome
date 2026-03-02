@@ -13,19 +13,21 @@ This document serves as the Single Source of Truth for:
 
 - **Security Modes:** Supports 3 primary modes: `Disarm`, `Away`, and `Night`.
 - **Intrusion Detection:** Monitors events via a sensor array:
-  - Reed Switches (Doors / Windows)
-  - PIR Motion Sensors
-  - Vibration Sensor (Tamper / Forced entry)
-  - Ultrasonic Sensors (Round-robin + Timeout execution)
+  - `Y213` reed switches (door / window)
+  - `HC-SR501` PIR motion sensors
+  - `SW-1801P` vibration sensor (tamper / forced entry)
+  - `HC-SR04` ultrasonic sensors (round-robin + timeout execution)
 - **Progressive Alert:** Escalating threat logic (`Off -> Warn -> Alert`).
-- **Access Control:** 4x4 Keypad PIN flow (`*` = Backspace, `C` = Clear buffer).
+- **Access Control:** `4x4 Matrix Membrane Keypad (#27899)` PIN flow via `PCF8574` (`*` = Backspace, `C` = Clear buffer).
 - **Local Physical Override:** Dedicated door and window lock/unlock toggle buttons on `GPIO33` and `GPIO18`.
+- **Actuators:** `SG90` mini servos for door/window lock control and a piezo buzzer for warning/alarm output.
 - **Remote Control (LINE/MQTT):**
   - Bubble-based LINE command panel with direct command buttons.
   - Lock/Unlock doors and windows.
   - Mode shifting (`arm_night`, `night_off`).
   - Temporary buzzer `silence` and system `status` requests.
 - **State Persistence:** Saves critical states (`latest_mode`, `is_night`) to NVS memory for power-loss recovery.
+- **Controller:** `ESP32-WROOM-32` with Wi-Fi + Bluetooth.
 
 ## 2. System Diagrams
 
