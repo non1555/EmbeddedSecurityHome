@@ -195,6 +195,14 @@ LINE chat uses a single bubble command panel. Send `menu` to open the command bu
 - `tools/line_bridge/*` : Source code for the LINE Bridge and UI Launcher.
 - `docs/*` : Documentation hub (Block Diagram, Flowchart, Pin Allocation).
 
+### Python Entry Points
+
+| File | Interpreter | How it is used |
+| --- | --- | --- |
+| `tools/pio_env.py` | PlatformIO/SCons Python | Auto-loaded by `platformio.ini` via `extra_scripts`; not intended for direct manual run. |
+| `tools/line_bridge/bridge.py` | `tools/line_bridge/.venv` Python | Run the LINE bridge service. Prefer `tools/line_bridge/run.cmd` or `tools/line_bridge/run.sh`. |
+| `tools/line_bridge/launcher.pyw` | `tools/line_bridge/.venv` Python | Run the desktop launcher UI. Prefer `tools/line_bridge/start-ui.cmd` or `tools/line_bridge/launcher.vbs`. |
+
 ---
 
 ## 9. Possible Cases & Expected Behaviors
