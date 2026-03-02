@@ -100,6 +100,12 @@ void RuleEngine::process(const ConfigurationSharedTypes::Event& e, SystemContext
     return;
   }
 
+  if (e.type == EventType::manual_door_toggle ||
+      e.type == EventType::manual_window_toggle) {
+    context.handleManualToggle(e);
+    return;
+  }
+
   const Decision decision = handle(context.state(), e);
   context.applyDecision(e, decision);
 }
@@ -158,12 +164,14 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
   if (st.mode == Mode::disarm && Config::AUTO_ARM_ENABLED) {
     if (st.exit_stage == 0 && isChokepoint(e, 1)) {
       decision.next.exit_stage = 1;
+      decision.next.exit_timeout_ms = e.ts_ms + Config::EXIT_STAGE_TIMEOUT_MS;
       decision.flag = "exit_stage_1";
       return decision;
     }
 
     if (st.exit_stage == 1 && e.type == EventType::door_open) {
       decision.next.exit_stage = 2;
+      decision.next.exit_timeout_ms = e.ts_ms + Config::EXIT_STAGE_TIMEOUT_MS;
       decision.flag = "exit_stage_2";
       return decision;
     }
@@ -278,6 +286,15 @@ bool RuleEngine::processDisarmAutoArmTick(ConfigurationSharedTypes::SystemState&
 
   if (!Config::AUTO_ARM_ENABLED) return false;
   if (st.mode != Mode::disarm) return false;
+
+  if ((st.exit_stage == 1 || st.exit_stage == 2) &&
+      st.exit_timeout_ms != 0 &&
+      reached(nowMs, st.exit_timeout_ms)) {
+    st.exit_stage = 0;
+    st.exit_timeout_ms = 0;
+    outFlag = "auto_arm_timeout_reset";
+    return true;
+  }
 
   if (st.exit_stage == 2 && !doorOpenNow) {
     st.exit_stage = 3;

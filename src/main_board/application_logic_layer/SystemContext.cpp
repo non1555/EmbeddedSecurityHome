@@ -231,6 +231,41 @@ void SystemContext::handleHelpRequest(const ConfigurationSharedTypes::Event& eve
   enqueueStatus_("keypad_help");
 }
 
+void SystemContext::handleManualToggle(const ConfigurationSharedTypes::Event& event) {
+  syncSnapshot_();
+
+  if (event.type == ConfigurationSharedTypes::EventType::manual_door_toggle) {
+    if (state_.door_locked) {
+      actuators_.unlockDoor();
+      bool doorOpen = collector_ ? collector_->isDoorOpen() : false;
+      clearDoorSession_(true);
+      startDoorSession_(event.ts_ms, doorOpen);
+      enqueueEvent_(event, "manual_door_unlock");
+      enqueueStatus_("manual_door_unlock");
+      return;
+    }
+
+    actuators_.lockDoor();
+    clearDoorSession_(true);
+    enqueueEvent_(event, "manual_door_lock");
+    enqueueStatus_("manual_door_lock");
+    return;
+  }
+
+  if (event.type == ConfigurationSharedTypes::EventType::manual_window_toggle) {
+    if (state_.window_locked) {
+      actuators_.unlockWindow();
+      enqueueEvent_(event, "manual_window_unlock");
+      enqueueStatus_("manual_window_unlock");
+      return;
+    }
+
+    actuators_.lockWindow();
+    enqueueEvent_(event, "manual_window_lock");
+    enqueueStatus_("manual_window_lock");
+  }
+}
+
 ConfigurationSharedTypes::SystemState& SystemContext::state() {
   return state_;
 }

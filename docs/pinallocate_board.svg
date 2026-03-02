@@ -28,7 +28,7 @@
   <text x='30' y='374' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>RD_D</text>
   <rect x='30' y='419' width='430' height='45' fill='#f3f7fb' stroke='#cfd8dc' stroke-width='1'/>
   <text x='30' y='419' font-family='Consolas, monospace' font-size='21' fill='#1a237e' dominant-baseline='middle' dx='16' dy='23'>GPIO33</text>
-  <text x='30' y='419' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'></text>
+  <text x='30' y='419' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>BTN_D</text>
   <rect x='30' y='464' width='430' height='45' fill='#ffffff' stroke='#cfd8dc' stroke-width='1'/>
   <text x='30' y='464' font-family='Consolas, monospace' font-size='21' fill='#1a237e' dominant-baseline='middle' dx='16' dy='23'>GPIO25</text>
   <text x='30' y='464' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>BUZ</text>
@@ -94,7 +94,7 @@
   <text x='1340' y='419' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>RD_W</text>
   <rect x='1340' y='464' width='430' height='45' fill='#ffffff' stroke='#cfd8dc' stroke-width='1'/>
   <text x='1340' y='464' font-family='Consolas, monospace' font-size='21' fill='#1a237e' dominant-baseline='middle' dx='16' dy='23'>GPIO18</text>
-  <text x='1340' y='464' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'></text>
+  <text x='1340' y='464' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>BTN_W</text>
   <rect x='1340' y='509' width='430' height='45' fill='#f3f7fb' stroke='#cfd8dc' stroke-width='1'/>
   <text x='1340' y='509' font-family='Consolas, monospace' font-size='21' fill='#1a237e' dominant-baseline='middle' dx='16' dy='23'>GPIO5</text>
   <text x='1340' y='509' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'>U3_E</text>
@@ -126,3 +126,4 @@
   <text x='1340' y='914' font-family='Consolas, monospace' font-size='21' fill='#1a237e' dominant-baseline='middle' dx='16' dy='23'>GPIO6</text>
   <text x='1340' y='914' font-family='Arial, sans-serif' font-size='20' fill='#263238' dominant-baseline='middle' dx='190' dy='23'></text>
 </svg>
+

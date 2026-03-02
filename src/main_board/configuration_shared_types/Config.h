@@ -19,6 +19,8 @@ constexpr uint8_t PIN_PIR_2 = 36;
 constexpr uint8_t PIN_PIR_3 = 39;
 
 constexpr uint8_t PIN_VIB = 34;
+constexpr uint8_t PIN_BTN_DOOR_TOGGLE = 33;
+constexpr uint8_t PIN_BTN_WINDOW_TOGGLE = 18;
 
 constexpr uint8_t PIN_US_TRIG_1 = 13;
 constexpr uint8_t PIN_US_ECHO_1 = 14;
@@ -44,6 +46,7 @@ constexpr uint32_t STATUS_PERIOD_MS = 5000;
 constexpr uint32_t MQTT_TASK_MS = 10;
 
 constexpr uint32_t ENTRY_DELAY_MS = 30000;
+constexpr uint32_t EXIT_STAGE_TIMEOUT_MS = 15000;
 constexpr uint32_t EXIT_AUTO_ARM_WINDOW_MS = 20000;
 constexpr uint32_t EXIT_GRACE_AFTER_INDOOR_MS = 30000;
 constexpr uint32_t FORCED_ENTRY_WINDOW_MS = 3000;

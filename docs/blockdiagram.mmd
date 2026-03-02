@@ -1,49 +1,68 @@
-﻿%%{init: {"theme":"base","themeVariables":{"background":"#ffffff"},"flowchart":{"nodeSpacing":60,"rankSpacing":80}}}%%
-flowchart TD
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff"},"flowchart":{"nodeSpacing":60,"rankSpacing":80}}}%%
+flowchart LR
   classDef cloud fill:#e8f3ff,stroke:#1565c0,stroke-width:2px;
   classDef core fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
   classDef hw fill:#fff8e1,stroke:#f9a825,stroke-width:2px;
   classDef db fill:#fce4ec,stroke:#ad1457,stroke-width:2px;
+  classDef queue fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px;
 
   subgraph CLOUD ["External Network"]
-    USER["User (LINE Chat)"]:::cloud <--> BRIDGE["LINE Bridge"]:::cloud
+    USER["User (LINE Bubble Chat)"]:::cloud <--> BRIDGE["LINE Bridge"]:::cloud
     BRIDGE <--> BROKER["MQTT Broker"]:::cloud
   end
 
-  subgraph ESP32 ["ESP32 Main Board (20ms SecTask Loop)"]
-    MQTTSVC["MqttService (Network Interface)"]:::core
-    
-    subgraph LOGIC ["Software Logic"]
-      EC["EventCollector (Gather Inputs)"]:::core
-      RE["RuleEngine (Decision Making)"]:::core
-      CTX["SystemContext (State Management)"]:::core
-      NVS[("NVS Storage (Persistent Memory)")]:::db
+  subgraph ESP32 ["ESP32 Main Board"]
+    subgraph SEC ["SecTask (20 ms, Priority 2)"]
+      EC["EventCollector<br/>Keypad + Manual Buttons + Sensors"]:::core
+      EQ[("eventQueue")]:::queue
+      RE["RuleEngine"]:::core
+      CTX["SystemContext"]:::core
+      DISP["DisplayManager"]:::core
+    end
+
+    subgraph NET ["MqttTask (10 ms, Priority 1)"]
+      MQTT["MqttService"]:::core
+      CQ[("commandQueue")]:::queue
+      PQ[("publishQueue")]:::queue
+    end
+
+    subgraph STORAGE ["Persistent Storage"]
+      NVS[("NVS Storage")]:::db
     end
 
     subgraph HW ["Hardware"]
-      SNS["Sensors (PIR, Reed, Vib, US)"]:::hw
-      KP["Keypad (PIN Input)"]:::hw
-      ACT["Actuators (Servo, Buzzer)"]:::hw
+      KP["4x4 Keypad"]:::hw
+      BTN["Manual Buttons<br/>Door / Window Toggle"]:::hw
+      SNS["Sensors<br/>Reed / PIR / Vibration / Ultrasonic"]:::hw
+      ACT["Actuators<br/>Door Servo / Window Servo / Buzzer"]:::hw
+      OLED["OLED Display"]:::hw
     end
   end
 
-  %% Network connection
-  BROKER <-->|Payload / JSON| MQTTSVC
-  
-  %% Input Flow
-  SNS -->|Hardware Signals| EC
-  KP -->|Key Presses| EC
-  EC -->|1 Event per Tick| RE
-  RE -->|Update States & Levels| CTX
-  MQTTSVC -->|Remote Commands| CTX
+  BROKER <-->|MQTT Topics| MQTT
 
-  %% Output Flow
-  CTX <-->|Save / Restore| NVS
-  CTX -->|Hardware Control| ACT
-  CTX -->|Status / Alerts| MQTTSVC
+  KP -->|PIN / A / B / * / C / #| EC
+  BTN -->|manual_door_toggle / manual_window_toggle| EC
+  SNS -->|door / window / motion / vib / chokepoint| EC
 
-  %% Unified Transparent Backgrounds
+  EC -->|Security Event| EQ
+  EQ -->|Drain Queue| RE
+  RE -->|Decision| CTX
+
+  MQTT -->|MQTT callback| CQ
+  CQ -->|Remote command| CTX
+  CTX -->|Status / Event / Ack| PQ
+  PQ -->|Flush publish queue| MQTT
+
+  CTX <-->|Save / Restore latest_mode + is_night| NVS
+  CTX -->|Lock / Unlock / Buzzer| ACT
+  EC -->|PIN buffer / submit result| DISP
+  CTX -->|Door state / countdown| DISP
+  DISP --> OLED
+
   style CLOUD fill:transparent,stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5
   style ESP32 fill:transparent,stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5
-  style LOGIC fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5
+  style SEC fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5
+  style NET fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5
+  style STORAGE fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5
   style HW fill:transparent,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5

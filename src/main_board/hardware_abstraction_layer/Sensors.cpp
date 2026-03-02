@@ -117,10 +117,10 @@ bool Sensors::isWindowOpen() const {
 }
 
 void Sensors::printSerialHelp() const {
-  Serial.println("[SERIAL] 100 disarm, 102 arm_away, 103 arm_night");
-  Serial.println("[SERIAL] 205 help, 206 code_ok, 207 code_bad, 208 entry_timeout");
-  Serial.println("[SERIAL] 300 door_open, 301 window_open, 302 tamper, 303 vibration");
-  Serial.println("[SERIAL] 310/311/312 motion, 320/321/322 chokepoint");
+  Serial.println("[SERIAL] Debug-only mode");
+  Serial.println("[SERIAL] help   -> show this help");
+  Serial.println("[SERIAL] status -> print local reed states");
+  Serial.println("[SERIAL] Event injection is disabled in this build");
 }
 
 int Sensors::readUltrasonicCm_(const UltrasonicState& us, uint32_t timeoutUs) const {
@@ -279,52 +279,12 @@ bool Sensors::pollSerial_(uint32_t nowMs, ConfigurationSharedTypes::Event& out) 
   return false;
 }
 
-bool Sensors::parseSerialChar_(char c, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const {
-  using namespace ConfigurationSharedTypes;
-
-  if (c == '0') { out = Event{EventType::disarm, nowMs, 200}; return true; }
-  if (c == '6') { out = Event{EventType::arm_away, nowMs, 200}; return true; }
-  if (c == '9') { out = Event{EventType::arm_night, nowMs, 200}; return true; }
-  if (c == '8') { out = Event{EventType::door_open, nowMs, 200}; return true; }
-  if (c == '2') { out = Event{EventType::window_open, nowMs, 200}; return true; }
-  if (c == '7') { out = Event{EventType::door_tamper, nowMs, 200}; return true; }
-  if (c == '3') { out = Event{EventType::vib_spike, nowMs, 200}; return true; }
-  if (c == '4') { out = Event{EventType::motion, nowMs, 1}; return true; }
-  if (c == '5') { out = Event{EventType::chokepoint, nowMs, 1}; return true; }
-  if (c == 'S' || c == 's') { out = Event{EventType::door_hold_warn_silence, nowMs, 200}; return true; }
-  if (c == 'H' || c == 'h') { out = Event{EventType::keypad_help_request, nowMs, 200}; return true; }
-
-  return false;
-}
-
-bool Sensors::parseSerialCode_(uint16_t code, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const {
-  using namespace ConfigurationSharedTypes;
-
-  switch (code) {
-    case 100: out = Event{EventType::disarm, nowMs, 200}; return true;
-    case 102: out = Event{EventType::arm_away, nowMs, 200}; return true;
-    case 103: out = Event{EventType::arm_night, nowMs, 200}; return true;
-    case 205: out = Event{EventType::keypad_help_request, nowMs, 200}; return true;
-    case 206: out = Event{EventType::door_code_unlock, nowMs, 200}; return true;
-    case 207: out = Event{EventType::door_code_bad, nowMs, 200}; return true;
-    case 208: out = Event{EventType::entry_timeout, nowMs, 200}; return true;
-    case 300: out = Event{EventType::door_open, nowMs, 200}; return true;
-    case 301: out = Event{EventType::window_open, nowMs, 200}; return true;
-    case 302: out = Event{EventType::door_tamper, nowMs, 200}; return true;
-    case 303: out = Event{EventType::vib_spike, nowMs, 200}; return true;
-    case 310: out = Event{EventType::motion, nowMs, 1}; return true;
-    case 311: out = Event{EventType::motion, nowMs, 2}; return true;
-    case 312: out = Event{EventType::motion, nowMs, 3}; return true;
-    case 320: out = Event{EventType::chokepoint, nowMs, 1}; return true;
-    case 321: out = Event{EventType::chokepoint, nowMs, 2}; return true;
-    case 322: out = Event{EventType::chokepoint, nowMs, 3}; return true;
-    default: return false;
-  }
-}
-
 bool Sensors::parseSerialToken_(const String& token,
                                 uint32_t nowMs,
                                 ConfigurationSharedTypes::Event& out) const {
+  (void)nowMs;
+  (void)out;
+
   String text = token;
   text.trim();
   if (text.length() == 0) return false;
@@ -334,15 +294,16 @@ bool Sensors::parseSerialToken_(const String& token,
     return false;
   }
 
-  if (text.length() == 1) {
-    return parseSerialChar_(text[0], nowMs, out);
+  if (text.equalsIgnoreCase("status")) {
+    Serial.print("[SERIAL] door_open=");
+    Serial.print(doorReed_.stableOpen ? 1 : 0);
+    Serial.print(" window_open=");
+    Serial.println(windowReed_.stableOpen ? 1 : 0);
+    return false;
   }
 
-  for (size_t i = 0; i < text.length(); ++i) {
-    if (text[i] < '0' || text[i] > '9') return false;
-  }
-
-  return parseSerialCode_((uint16_t)text.toInt(), nowMs, out);
+  Serial.println("[SERIAL] Command injection disabled. Type 'help' or 'status'.");
+  return false;
 }
 
 } // namespace HardwareAbstractionLayer

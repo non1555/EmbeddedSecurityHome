@@ -1,190 +1,165 @@
-2. Possible Cases & Logic Conditions
-Category 1: Mode Transitions & Automation
+# Possible Cases & Logic Conditions
 
-Case 1.1: Auto-Arm Success
+## Category 1: Mode Transitions & Automation
 
+### Case 1.1: Auto-Arm Success
 
-Condition: System is in Disarm mode --> Chokepoint 1 triggered --> Door opened --> Door closed --> No indoor motion detected for 20 seconds.
+- Condition: System is in `Disarm` mode -> `chk1` triggered -> door opened -> door closed -> no indoor/window activity for `20s`.
+- Expected Result: `exit_stage` advances from `1` to `3`, then the system switches to `Away`, saves mode state to NVS, locks actuators, and publishes `mode_away`.
 
+### Case 1.2: Auto-Arm Cancelled
 
-Expected Result: System automatically switches to Away mode --> Saves state to NVS (updating latest_mode = Away) --> Publishes MQTT message mode_away.
+- Condition: System is counting the `20s` exit window (`exit_stage == 3`) and detects `motion 1`, `motion 2`, `motion 3`, `chk2`, or `chk3`.
+- Expected Result: Auto-arm is cancelled, `exit_stage` resets to `0`, and the system remains in `Disarm`.
 
-Case 1.2: Auto-Arm Cancelled
+### Case 1.3: Auto-Arm Stage Timeout Reset
 
+- Condition: System enters auto-arm stage `1` or `2`, but the next expected step does not happen within `15s`.
+- Expected Result: `exit_stage` resets back to `0` with flag `auto_arm_timeout_reset`, preventing stale partial sequences from auto-arming later.
 
-Condition: System is counting down 20 seconds for Auto-Arm --> Indoor motion sensor (mot1, mot2, mot3, chk2, chk3) is triggered.
+### Case 1.4: Door Auto-Lock After Close
 
+- Condition: Door was unlocked by PIN, remote command, or manual toggle, then closes and stays closed for `3s`.
+- Expected Result: Door servo locks again and publishes status reason `auto_locked`.
 
-Expected Result: Countdown is aborted --> System reverts to Disarm mode to prevent locking occupants inside.
+### Case 1.5: Door Unlock Timeout
 
-Case 1.3: Door Auto-Lock
+- Condition: Door was unlocked but never opened, and the unlock session reaches `15s`.
+- Expected Result: Door servo locks again and publishes status reason `auto_locked_timeout`.
 
+### Case 1.6: Power Loss Recovery
 
-Condition: Door status remains closed (door_open is LOW) for exactly 3 seconds.
+- Condition: ESP32 restarts after power loss.
+- Expected Result: System restores `latest_mode` and `is_night` from NVS, rebuilds active mode, starts in a locked state, and publishes `boot`.
 
+## Category 6: Local Debug Interface
 
-Expected Result: Triggers servo1.lock() --> Publishes MQTT message auto_locked.
+### Case 6.1: Serial Debug Help
 
-Case 1.4: Power Loss & NVS Recovery (State Override Logic)
+- Condition: User types `help` or `?` in Serial Monitor.
+- Expected Result: System prints debug help text only. No security event is injected into the runtime flow.
 
+### Case 6.2: Serial Debug Status
 
-Condition: ESP32 board loses power and restarts.
+- Condition: User types `status` in Serial Monitor.
+- Expected Result: System prints local reed state (`door_open`, `window_open`) only. No security event is injected.
 
+## Category 2: Away Mode Intrusions
 
-Expected Result: System loads the last saved state from NVS memory during setup(). Specifically, it evaluates the is_night flag. If true, it activates Night mode while retaining latest_mode in RAM. If false, it directly resumes the base latest_mode (Disarm or Away).
+### Case 2.1: Authorized Entry Attempt
 
-Category 2: Away Mode Intrusions (Threat Detection)
+- Condition: System is in `Away` mode and the door opens without a recent vibration spike.
+- Expected Result: System starts a `30s` entry deadline, sets level to `Warn`, activates warning buzzer, and publishes `warn_entry`.
 
-Case 2.1: Grace Period Entry (Authorized Entry Attempt)
+### Case 2.2: Entry Timeout
 
+- Condition: Entry deadline expires without valid keypad disarm.
+- Expected Result: System escalates to `Alert`, activates alarm buzzer, and publishes `alert_timeout`.
 
-Condition: System is in Away mode --> Door is opened (door_open) WITHOUT any prior vibration spike.
+### Case 2.3: Forced Entry by Vibration
 
+- Condition: System is in `Away` mode and `vib_spike` happens shortly before `door_open`.
+- Expected Result: Grace period is skipped, level becomes `Alert`, and the system publishes `alert_forced_entry`.
 
-Expected Result: Initiates a 30-second Grace Period --> Escalates level to Warn --> Publishes MQTT message warn_entry.
+### Case 2.4: Door Opened While Locked
 
-Case 2.2: Entry Timeout
+- Condition: System is in `Away` mode and the door opens while the lock state is still locked.
+- Expected Result: System escalates immediately to `Alert` and publishes `alert_door`.
 
+### Case 2.5: Window Breach
 
-Condition: Grace Period exceeds 30 seconds without a valid PIN entry at the Keypad.
+- Condition: System is in `Away` mode and `window_open` is detected.
+- Expected Result: System escalates immediately to `Alert` and publishes `alert_high`.
 
+### Case 2.6: Indoor Motion Step-Up
 
-Expected Result: Escalates level to Alert immediately --> Triggers Siren --> Publishes MQTT message alert_timeout.
+- Condition: System is in `Away` mode and receives `motion 1`, `motion 2`, `motion 3`, `chk2`, or `chk3`.
+- Expected Result: Alert level steps up (`Off -> Warn -> Alert`) and publishes `step_up_alert`.
 
-Case 2.3: Forced Entry (Door Breached)
+## Category 3: Night Mode Security
 
+### Case 3.1: Perimeter Breach at Night
 
-Condition: System is in Away mode --> Vibration spike (vib_spike) is detected simultaneously with or just before the door opens.
+- Condition: System is in `Night` mode and detects `door_open`, `window_open`, `vib_spike`, or `motion 3`.
+- Expected Result: System escalates immediately to `Alert` and publishes `alert_night_breach`.
 
+### Case 3.2: Indoor Activity Ignored
 
-Expected Result: Bypasses Grace Period --> Escalates level to Alert immediately --> Publishes MQTT message alert_forced_entry.
+- Condition: System is in `Night` mode and receives `motion 1`, `motion 2`, `chk1`, `chk2`, or `chk3`.
+- Expected Result: System ignores the event and keeps the current alarm level.
 
-Case 2.4: Window Breach
+## Category 4: Keypad & Local Physical Control
 
+### Case 4.1: Correct PIN Entry
 
-Condition: System is in Away mode --> Window magnetic sensor (window_open) is triggered.
+- Condition: User enters the correct code and presses `#`.
+- Expected Result: System switches to `Disarm`, clears `is_night`, resets failed attempts, unlocks the door, starts a door session, and publishes `mode_disarm`.
 
+### Case 4.2: Wrong PIN Warning / Alert
 
-Expected Result: Escalates level to Alert immediately --> Publishes MQTT message alert_high.
+- Condition: User enters a wrong code and presses `#`.
+- Expected Result: `failed_attempts` increments. Attempt `1-2` publishes `wrong_code` with warning buzzer. Attempt `3+` publishes `keypad_alert` with alert buzzer.
 
-Case 2.5: Sneak-in Detection (StepUp Escalation)
+### Case 4.3: Keypad Help Request
 
+- Condition: User presses keypad button `B`.
+- Expected Result: System publishes `keypad_help` for external notification routing.
 
-Condition: System is in Away mode --> Indoor motion sensor (mot1, mot2, mot3, or ultrasonics) is triggered.
+### Case 4.4: Keypad Silence
 
+- Condition: User presses keypad button `A`.
+- Expected Result: Warning buzzer is silenced. If a door-hold warning is active, the hold warning is marked as silenced for the current door session.
 
-Expected Result: Triggers StepUp escalation logic (Off --> Warn --> Alert based on continuous movement) --> Publishes MQTT message step_up_alert.
+### Case 4.5: Backspace / Clear
 
-Category 3: Night Mode Security (Arm Stay)
+- Condition: User presses `*` or `C`.
+- Expected Result: `*` removes the last PIN character. `C` clears the whole buffer. Sensor polling is skipped for that tick.
 
-Case 3.1: Perimeter Breach
+### Case 4.6: Local Door Lock/Unlock Toggle Button
 
+- Condition: User presses the local physical door lock/unlock toggle button on `GPIO33`.
+- Expected Result:
+  - If the door is locked: unlock the door, start a new door session, publish event `manual_door_toggle`, and publish status reason `manual_door_unlock`.
+  - If the door is unlocked: lock the door, clear the door session, publish event `manual_door_toggle`, and publish status reason `manual_door_lock`.
 
-Condition: System is in Night mode --> Any perimeter sensor (door_open, window_open, vib_spike, or window PIR mot3) is triggered.
+### Case 4.7: Local Window Lock/Unlock Toggle Button
 
+- Condition: User presses the local physical window lock/unlock toggle button on `GPIO18`.
+- Expected Result:
+  - If the window is locked: unlock the window and publish status reason `manual_window_unlock`.
+  - If the window is unlocked: lock the window and publish status reason `manual_window_lock`.
 
-Expected Result: Bypasses any warnings --> Escalates level to Alert immediately --> Triggers Siren --> Publishes MQTT message alert_night_breach.
+## Category 5: Remote Control & Connectivity
 
-Case 3.2: Sleep Safe Ignore (Indoor Movement)
+### Case 5.1: Remote Arm Night
 
+- Condition: MQTT command is `arm night` / `arm_night` and `latest_mode == Disarm`.
+- Expected Result: System switches to `Night`, saves `is_night = true` to NVS, keeps the base mode in `latest_mode`, and publishes `mode_night`.
 
-Condition: System is in Night mode --> Any indoor sensor (mot1, mot2, chk1, chk2, chk3) is triggered by an occupant.
+### Case 5.2: Remote Arm Night Rejected
 
+- Condition: MQTT command is `arm night` / `arm_night` but `latest_mode != Disarm`.
+- Expected Result: No mode change. Bridge receives ack detail `allowed_only_when_latest_disarm`.
 
-Expected Result: System ignores the event --> No warnings or alerts are triggered --> Siren remains silent.
+### Case 5.3: Remote Night Off
 
-Category 4: Keypad & Access Control
+- Condition: MQTT command is `night_off` while current mode is `Night`.
+- Expected Result: System reverts to the saved base mode (`Disarm` or `Away`), clears `is_night`, saves to NVS, and publishes the resulting mode.
 
-Case 4.1: Correct PIN Entry (Night Flag Override)
+### Case 5.4: Remote Utility Commands
 
+- Condition: MQTT command is `lock door`, `unlock door`, `lock window`, `unlock window`, `lock all`, `unlock all`, `silence`, or `status`.
+- Expected Result:
+  - Lock/unlock commands actuate hardware immediately and publish remote status reasons.
+  - `silence` stops the buzzer and publishes `remote_silence`.
+  - `status` queues a status snapshot with reason `remote_status`.
 
-Condition: User inputs correct PIN --> Presses # (Confirm).
+### Case 5.5: Unsupported Remote Command
 
+- Condition: MQTT command is unsupported, including `disarm`, `arm_away`, or arbitrary unknown text.
+- Expected Result: No state change. The system only publishes a failed ack with detail `unsupported`.
 
-Expected Result: System switches to Disarm mode --> Forces is_night = false and latest_mode = Disarm in NVS --> Unlocks door (servo1.unlock()) --> Resets failed_attempts counter to 0 --> Publishes MQTT message mode_disarm.
+### Case 5.6: Network Disconnect Handling
 
-Case 4.2: Wrong PIN Warning
-
-
-Condition: User inputs incorrect PIN --> Presses # (1st or 2nd attempt).
-
-
-Expected Result: Increments failed_attempts counter --> Escalates level to Warn --> Triggers short buzzer beep --> Publishes MQTT message wrong_code.
-
-Case 4.3: Anti-Brute Force Alert (3 Strikes)
-
-
-Condition: The failed_attempts counter reaches 3.
-
-
-Expected Result: Escalates level to Alert immediately --> Triggers Siren --> Publishes MQTT message keypad_alert.
-
-Case 4.4: Panic Button (SOS)
-
-
-Condition: User presses the B key on the Keypad.
-
-
-Expected Result: Generates a help event --> Publishes MQTT message keypad_help immediately for external notification routing.
-
-Case 4.5: Silence Warning Mute
-
-
-Condition: System is in Warn state (beeping) --> User presses the A key.
-
-
-Expected Result: Executes buzzer.stop() to silence the warning tone while the user inputs the PIN.
-
-Case 4.6: Keypad Backspace
-
-
-Condition: User makes a typo and presses the * key.
-
-
-Expected Result: Removes the last entered character from the PIN buffer and updates the OLED display accordingly.
-
-Case 4.7: Keypad Clear Buffer
-
-
-Condition: User presses the C key.
-
-
-Expected Result: Clears the entire PIN buffer completely, resets the input state, and updates the OLED display.
-
-Category 5: Remote Control & Connectivity (Strict Security Mode)
-
-Case 5.1: Remote Arm Night (Strict Override)
-
-
-Condition: Receives MQTT payload arm_night from a remote client AND latest_mode == Disarm.
-
-
-Expected Result: System switches to Night mode --> Saves state to NVS (Setting is_night = true while preserving latest_mode) --> Publishes MQTT message mode_night. Note: If latest_mode is Away, this command is strictly ignored.
-
-Case 5.2: Remote Night Off (User Error Revert)
-
-Condition: Receives MQTT payload night_off AND the system is currently in Night mode.
-
-Expected Result: System safely reverts back to latest_mode --> Sets is_night = false in NVS --> Publishes the updated mode to MQTT.
-
-Case 5.3: Remote Hardware Override & Utilities
-
-
-Condition: Receives MQTT payload lock door, unlock door, lock window, unlock window, lock all, unlock all, or silence.
-
-
-Expected Result: Executes the specific hardware command immediately, regardless of the active mode. The silence command mutes the buzzer without altering the system's Alert level.
-
-Case 5.4: Remote Status Request
-
-Condition: Receives MQTT payload status.
-
-Expected Result: System enqueues a status publish request immediately, and SecTask calls MQTT loop/tick to flush a non-blocking status payload containing current mode, alert level, and event drop counter.
-
-Case 5.6: Network Disconnection Handling
-
-
-Condition: The mqttBus_.isConnected() function returns False.
-
-
-Expected Result: System executes a non-blocking asynchronous reconnect sequence within the main SecTask loop while sensor/keypad polling continues seamlessly without freezing or watchdog resets.
+- Condition: Wi-Fi or MQTT broker becomes unavailable.
+- Expected Result: `MqttTask` keeps retrying reconnect in the background while `SecTask` continues keypad/manual-button/sensor polling without blocking the main 20 ms loop.

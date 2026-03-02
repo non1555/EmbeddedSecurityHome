@@ -13,7 +13,7 @@ public:
   bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls all inputs in fixed order and emits first event found. Params: nowMs=current timestamp in ms, out=event output.
   bool isDoorOpen() const; // Returns debounced door reed-open state. Params: none.
   bool isWindowOpen() const; // Returns debounced window reed-open state. Params: none.
-  void printSerialHelp() const; // Prints supported serial command mapping. Params: none.
+  void printSerialHelp() const; // Prints serial monitor help text for debug-only usage. Params: none.
 
 private:
   struct ReedState {
@@ -59,10 +59,8 @@ private:
   bool pollUltrasonic_(uint32_t nowMs, uint8_t idx, ConfigurationSharedTypes::Event& out); // Polls one ultrasonic chokepoint channel with hysteresis/cooldown. Params: nowMs=current timestamp in ms, idx=ultrasonic index (0..2), out=event output.
   bool pollVibration_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls vibration sensor with cooldown on rising edge. Params: nowMs=current timestamp in ms, out=event output.
 
-  bool pollSerial_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls serial input buffer and emits parsed test event. Params: nowMs=current timestamp in ms, out=event output.
-  bool parseSerialChar_(char c, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const; // Parses one-character serial shortcut command. Params: c=input char, nowMs=current timestamp in ms, out=event output.
-  bool parseSerialCode_(uint16_t code, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const; // Parses numeric serial command code. Params: code=input command code, nowMs=current timestamp in ms, out=event output.
-  bool parseSerialToken_(const String& token, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const; // Parses generic serial token into an event. Params: token=input text token, nowMs=current timestamp in ms, out=event output.
+  bool pollSerial_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls serial input buffer for debug-only text commands without emitting security events. Params: nowMs=current timestamp in ms, out=unused event output.
+  bool parseSerialToken_(const String& token, uint32_t nowMs, ConfigurationSharedTypes::Event& out) const; // Handles debug-only serial text commands such as help/status without emitting security events. Params: token=input text token, nowMs=current timestamp in ms, out=unused event output.
 };
 
 } // namespace HardwareAbstractionLayer

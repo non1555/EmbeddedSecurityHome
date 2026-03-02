@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1200' viewBox='0 0 1400 1200'>
-  <rect x='0' y='0' width='1400' height='1200' fill='#ffffff'/>
+<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1278' viewBox='0 0 1400 1278'>
+  <rect x='0' y='0' width='1400' height='1278' fill='#ffffff'/>
   <rect x='10' y='10' width='1380' height='48' fill='#86aee0' stroke='#111' stroke-width='2'/>
   <text x='700' y='41' text-anchor='middle' font-family='Times New Roman, serif' font-size='28' fill='#000'>PIN ALLOCATION</text>
   <rect x='10' y='58' width='140' height='50' fill='#a6d9d0' stroke='#111' stroke-width='1.5'/>
@@ -57,7 +57,8 @@
   <text x='508' y='141' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>PIR1</text>
   <rect x='540' y='108' width='65' height='52' fill='#ff7043' stroke='#111' stroke-width='1.5'/>
   <text x='572' y='141' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>RD_D</text>
-  <rect x='605' y='108' width='65' height='52' fill='#cfd8dc' stroke='#111' stroke-width='1.5'/>
+  <rect x='605' y='108' width='65' height='52' fill='#ef9a9a' stroke='#111' stroke-width='1.5'/>
+  <text x='638' y='141' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>BTN_D</text>
   <rect x='670' y='108' width='65' height='52' fill='#ce93d8' stroke='#111' stroke-width='1.5'/>
   <text x='702' y='141' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>BUZ</text>
   <rect x='735' y='108' width='65' height='52' fill='#fdd835' stroke='#111' stroke-width='1.5'/>
@@ -87,7 +88,8 @@
   <rect x='540' y='160' width='65' height='52' fill='#e6e6e6' stroke='#111' stroke-width='1.5'/>
   <rect x='605' y='160' width='65' height='52' fill='#ff7043' stroke='#111' stroke-width='1.5'/>
   <text x='638' y='193' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>RD_W</text>
-  <rect x='670' y='160' width='65' height='52' fill='#cfd8dc' stroke='#111' stroke-width='1.5'/>
+  <rect x='670' y='160' width='65' height='52' fill='#ef9a9a' stroke='#111' stroke-width='1.5'/>
+  <text x='702' y='193' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>BTN_W</text>
   <rect x='735' y='160' width='65' height='52' fill='#26c6da' stroke='#111' stroke-width='1.5'/>
   <text x='768' y='193' text-anchor='middle' font-family='Arial, sans-serif' font-size='16' font-weight='700' fill='#000'>U3_E</text>
   <rect x='800' y='160' width='65' height='52' fill='#26c6da' stroke='#111' stroke-width='1.5'/>
@@ -138,4 +140,9 @@
   <rect x='700' y='860' width='690' height='78' fill='#b0bec5' stroke='#111' stroke-width='1.5'/>
   <text x='26' y='910' font-family='Times New Roman, serif' font-size='28' fill='#000'>GPIO22  ->  I2C_SCL</text>
   <text x='716' y='910' font-family='Times New Roman, serif' font-size='28' fill='#000'>NO PIN OUT</text>
+  <rect x='10' y='938' width='690' height='78' fill='#ef9a9a' stroke='#111' stroke-width='1.5'/>
+  <rect x='700' y='938' width='690' height='78' fill='#ef9a9a' stroke='#111' stroke-width='1.5'/>
+  <text x='26' y='988' font-family='Times New Roman, serif' font-size='28' fill='#000'>GPIO33  ->  BTN_D</text>
+  <text x='716' y='988' font-family='Times New Roman, serif' font-size='28' fill='#000'>GPIO18  ->  BTN_W</text>
 </svg>
+

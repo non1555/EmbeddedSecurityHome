@@ -198,6 +198,8 @@ EVENT_LABELS = {
     "keypad_help_request": "Help requested from keypad",
     "door_code_unlock": "Door code accepted",
     "door_code_bad": "Wrong keypad code",
+    "manual_door_toggle": "Manual door toggle",
+    "manual_window_toggle": "Manual window toggle",
     "arm_away": "Switched to away guard",
     "arm_night": "Switched to night guard",
     "disarm": "System disarmed",
@@ -233,6 +235,10 @@ REASON_LABELS = {
     "remote_unlock_window": "Remote unlock window",
     "remote_lock_all": "Remote lock all",
     "remote_unlock_all": "Remote unlock all",
+    "manual_door_lock": "Manual door locked",
+    "manual_door_unlock": "Manual door unlocked",
+    "manual_window_lock": "Manual window locked",
+    "manual_window_unlock": "Manual window unlocked",
 }
 
 FLOWCHART_STATUS_NOTIFY_REASONS = {
@@ -246,6 +252,10 @@ FLOWCHART_STATUS_NOTIFY_REASONS = {
     "warn_entry",
     "alert_night_breach",
     "auto_locked",
+    "manual_door_lock",
+    "manual_door_unlock",
+    "manual_window_lock",
+    "manual_window_unlock",
 }
 
 COMMAND_LABELS = {

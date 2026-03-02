@@ -30,6 +30,8 @@ enum class EventType : uint8_t {
   keypad_help_request,
   door_code_unlock,
   door_code_bad,
+  manual_door_toggle,
+  manual_window_toggle,
   entry_timeout
 };
 
@@ -130,6 +132,8 @@ inline const char* toString(EventType t) { // Converts EventType enum to stable 
     case EventType::keypad_help_request: return "keypad_help_request";
     case EventType::door_code_unlock: return "door_code_unlock";
     case EventType::door_code_bad: return "door_code_bad";
+    case EventType::manual_door_toggle: return "manual_door_toggle";
+    case EventType::manual_window_toggle: return "manual_window_toggle";
     case EventType::entry_timeout: return "entry_timeout";
     default: return "unknown";
   }

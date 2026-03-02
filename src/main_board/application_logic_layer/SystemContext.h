@@ -30,6 +30,7 @@ public:
 
   void handleSilenceRequest(); // Handles keypad silence event for current warning session. Params: none.
   void handleHelpRequest(const ConfigurationSharedTypes::Event& event); // Handles keypad help event and publishes notification. Params: event=help event payload.
+  void handleManualToggle(const ConfigurationSharedTypes::Event& event); // Handles local physical door/window toggle button and publishes resulting manual status. Params: event=manual toggle event payload.
 
   ConfigurationSharedTypes::SystemState& state(); // Returns mutable global system state. Params: none.
   const ConfigurationSharedTypes::SystemState& state() const; // Returns read-only global system state. Params: none.

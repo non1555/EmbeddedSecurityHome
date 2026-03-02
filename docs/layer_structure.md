@@ -1,37 +1,71 @@
-1. Layered Software Architecture
+# Layer Structure
 
-ชั้นที่ 1: Configuration & Shared Types (ชั้นตั้งค่าและชนิดข้อมูลร่วม)
+This project uses a layered firmware design on ESP32 with two RTOS tasks:
 
-Config.h: เก็บค่าคงที่ทั้งหมด เช่น pin assignment, time constants, network settings และพารามิเตอร์ RTOS
+- `SecTask` (`20 ms`, priority `2`): drains remote events, polls keypad/local lock-unlock toggle buttons/sensors, checks timeout, processes `eventQueue`, updates actuators and OLED state.
+- `MqttTask` (`10 ms`, priority `1`): runs Wi-Fi/MQTT reconnect, receives MQTT callbacks into `commandQueue`, and flushes `publishQueue`.
 
-Types.h: นิยาม enum และโครงสร้างข้อมูลกลางของระบบ (Mode, AlarmLevel, EventType, Event, SystemState ฯลฯ) ให้ทุกไฟล์ใช้มาตรฐานเดียวกัน
+## Layer 1: Configuration & Shared Types
 
-ชั้นที่ 2: Hardware Abstraction Layer (HAL) ชั้นจัดการอุปกรณ์
+- `src/main_board/configuration_shared_types/Config.h`
+  - Central constants for GPIO assignment, timing windows, RTOS periods, ultrasonic timeout, and door-session timing.
+- `src/main_board/configuration_shared_types/Types.h`
+  - Shared enums and structs used across the whole firmware (`Mode`, `AlarmLevel`, `EventType`, `Event`, `SystemState`, queue payload structs).
+- `src/main_board/configuration_shared_types/RuntimeStats.h`
+  - Runtime counters for dropped events / queue pressure telemetry.
 
-กฎหลัก: ชั้นนี้ห้ามมีตรรกะตัดสินใจด้านความปลอดภัย มีหน้าที่อ่าน/เขียนฮาร์ดแวร์เท่านั้น
+## Layer 2: Hardware Abstraction Layer
 
-Sensors.h / .cpp: อ่านค่าจาก reed, PIR, vibration และ ultrasonic โดยใช้ Round-Robin (usIndex) และกำหนด pulseIn timeout 6ms เพื่อไม่บล็อก RTOS
+Rule: this layer talks to hardware only. It does not decide security policy.
 
-Actuators.h / .cpp: ควบคุมอุปกรณ์เอาต์พุต เช่น servo lock/unlock และ buzzer pattern
+- `src/main_board/hardware_abstraction_layer/Sensors.h` / `Sensors.cpp`
+  - Reads reed switches, PIR sensors, vibration sensor, and ultrasonic sensors.
+  - Ultrasonic inputs are staggered with round-robin polling and `pulseIn()` timeout.
+  - Serial Monitor is debug-only in this version (`help` / `status` text output only, no event injection).
+- `src/main_board/hardware_abstraction_layer/Actuators.h` / `Actuators.cpp`
+  - Drives door servo, window servo, and buzzer patterns.
+- `src/main_board/hardware_abstraction_layer/KeypadController.h` / `KeypadController.cpp`
+  - Scans the keypad and manages the PIN buffer.
+  - `*` = backspace, `C` = clear, `#` = submit, `A` = silence, `B` = help.
+- `src/main_board/hardware_abstraction_layer/DisplayManager.h` / `DisplayManager.cpp`
+  - Updates the OLED with PIN feedback, door state, and countdown hints.
 
-KeypadController.h / .cpp: สแกนปุ่มเมทริกซ์และจัดการ PIN buffer (อัปเดตลอจิก: ปุ่ม * = Backspace ลบตัวท้าย 1 ตัว, ปุ่ม C = Clear ล้างทั้ง buffer)
+## Layer 3: Core Services
 
-DisplayManager.h / .cpp: แสดงผลสถานะระบบและผลการกด PIN บนจอ OLED ผ่าน I2C
+- `src/main_board/core_services/MqttService.h` / `MqttService.cpp`
+  - Handles Wi-Fi/MQTT connectivity.
+  - Runs inside `MqttTask`, not inside `SecTask`.
+  - Receives incoming MQTT payloads into `commandQueue`.
+  - Flushes outgoing event/status/ack messages from `publishQueue`.
+- `src/main_board/core_services/NvsStorage.h` / `NvsStorage.cpp`
+  - Persists and restores `latest_mode` and `is_night` for power-loss recovery.
 
-ชั้นที่ 3: Core Services ชั้นบริการหลังบ้าน
+## Layer 4: Application Logic Layer
 
-MqttService.h / .cpp: จัดการ WiFi/MQTT แบบ non-blocking ภายในลูปของ SecTask (ไม่แยก mqttTask) พร้อมคิว publish/ack/status และรับคำสั่ง remote ผ่าน RTOS queue
+- `src/main_board/application_logic_layer/EventCollector.h` / `EventCollector.cpp`
+  - Converts local inputs into normalized events.
+  - Poll order is:
+    1. keypad
+    2. local lock/unlock toggle buttons
+    3. sensor chain
+  - Local lock/unlock toggle buttons are debounced and emitted as `manual_door_toggle` / `manual_window_toggle`.
+- `src/main_board/application_logic_layer/RuleEngine.h` / `RuleEngine.cpp`
+  - Main state machine for mode transitions, warnings, alerts, and auto-arm logic.
+  - Local lock/unlock toggle events are routed directly to `SystemContext`.
+  - Auto-arm tick logic is evaluated from `updateActuators()`, including stage `1/2` timeout reset and stage `3` transition to `Away`.
+- `src/main_board/application_logic_layer/SystemContext.h` / `SystemContext.cpp`
+  - Owns the canonical system state.
+  - Applies decisions, enforces remote-command policy, manages door session timers, persists mode state, and queues MQTT publish messages.
+  - Handles local physical lock/unlock toggles and periodic status publishing.
 
-NvsStorage.h / .cpp: จัดการ Preferences (NVS) ด้วยรูปแบบ State + Modifier โดยบันทึก latest_mode และ is_night แยกกันเพื่อรองรับ recovery หลังไฟดับ
+## Entry Point
 
-ชั้นที่ 4: Application & Logic Layer ชั้นสมองกล
-
-SystemContext.h / .cpp: ศูนย์รวมสถานะระบบปัจจุบัน จัดการ mode/level, door session, timeout, NVS persist และนโยบาย remote command (arm_night, night_off)
-
-EventCollector.h / .cpp: ดึง event จาก Keypad/Sensors แล้วแปลงเป็น Event มาตรฐานให้ RuleEngine ใช้งาน
-
-RuleEngine.h / .cpp: state machine หลักที่ประมวลผล event เพื่อเปลี่ยน mode/level และออกคำสั่ง actuator ตาม flowchart
-
-ไฟล์หลัก: Entry Point
-
-main.cpp: มี setup() และ loop() เพื่อรัน SecTask (Task เดียว) โดยในหนึ่งรอบ 20ms จะเรียก MQTT tick, กวาด remote command, poll Keypad/Sensors, ตรวจ timeout, ประมวลผล event queue ด้วย RuleEngine และอัปเดต actuator พร้อม WDT monitor
+- `src/main_board/main.cpp`
+  - Boot flow:
+    1. start serial
+    2. initialize task watchdog
+    3. initialize `SystemContext`
+    4. initialize `EventCollector`
+    5. create `eventQueue`
+    6. create `SecTask` and `MqttTask`
+  - `loop()` stays idle because the firmware runs through RTOS tasks.

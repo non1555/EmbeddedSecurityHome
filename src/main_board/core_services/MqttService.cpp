@@ -207,7 +207,7 @@ void MqttService::drainPublishQueue_() {
       payload += "\",\"ts_ms\":";
       payload += String(msg.event.ts_ms);
       payload += "}";
-      ok = mqtt_.publish(MQTT_TOPIC_EVENT, payload.c_str(), true);
+      ok = mqtt_.publish(MQTT_TOPIC_EVENT, payload.c_str(), false);
     } else if (msg.kind == ConfigurationSharedTypes::PublishKind::status) {
       String payload = "{\"reason\":\"";
       payload += msg.text1;
