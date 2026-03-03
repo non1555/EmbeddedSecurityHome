@@ -227,6 +227,8 @@ void SystemContext::handleSilenceRequest() {
 }
 
 void SystemContext::handleHelpRequest(const ConfigurationSharedTypes::Event& event) {
+  state_.level = ConfigurationSharedTypes::AlarmLevel::alert;
+  actuators_.alert();
   enqueueEvent_(event, "keypad_help");
   enqueueStatus_("keypad_help");
 }
@@ -372,8 +374,6 @@ bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes:
       enqueueStatus_("remote_unlock_all");
       continue;
     }
-
-    enqueueAck_(command.c_str(), false, "unsupported");
   }
 
   return false;
@@ -499,6 +499,8 @@ void SystemContext::countdownView_(uint32_t nowMs,
 
 void SystemContext::enqueueStatus_(const char* reason) {
   syncSnapshot_();
+  Serial.print("[SERIAL] publish status_reason=");
+  Serial.println((reason && reason[0]) ? reason : "-");
   ConfigurationSharedTypes::PublishMessage msg{};
   msg.kind = ConfigurationSharedTypes::PublishKind::status;
   msg.st = state_;
@@ -508,6 +510,8 @@ void SystemContext::enqueueStatus_(const char* reason) {
 
 void SystemContext::enqueueEvent_(const ConfigurationSharedTypes::Event& event, const char* flag) {
   syncSnapshot_();
+  Serial.print("[SERIAL] publish event_flag=");
+  Serial.println((flag && flag[0]) ? flag : "-");
   ConfigurationSharedTypes::PublishMessage msg{};
   msg.kind = ConfigurationSharedTypes::PublishKind::event;
   msg.event = event;

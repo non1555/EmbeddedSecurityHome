@@ -17,7 +17,7 @@ public:
 
   bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad first, then sensors/serial, and emits first detected event; keypad edits consume the tick before sensors run. Params: nowMs=current timestamp in ms, out=event output.
   bool pollKeypad(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad and emits an event when input completes. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollSensorsOrSerial(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls manual buttons first, then sensors/serial, and emits the next detected event. Params: nowMs=current timestamp in ms, out=event output.
+  bool pollSensorsOrSerial(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls manual buttons first, then sensors, and emits the next detected event. Params: nowMs=current timestamp in ms, out=event output.
 
   bool isDoorOpen() const; // Returns current debounced door-open state. Params: none.
   bool isWindowOpen() const; // Returns current debounced window-open state. Params: none.
@@ -28,8 +28,6 @@ public:
                      bool countdownActive,
                      uint32_t countdownDeadlineMs,
                      uint32_t countdownWarnBeforeMs); // Updates OLED with lock/open state and countdown info. Params: nowMs=current timestamp in ms, doorLocked=door lock status, doorOpen=door open status, countdownActive=whether countdown is active, countdownDeadlineMs=countdown end time, countdownWarnBeforeMs=warning threshold.
-
-  void printSerialHelp() const; // Prints supported serial test commands to Serial monitor. Params: none.
 
 private:
   bool pollManualButtons_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls local door/window toggle buttons with debounce and emits manual toggle event. Params: nowMs=current timestamp in ms, out=event output.

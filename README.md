@@ -216,9 +216,8 @@ This README keeps the high-level summary. The complete case list lives in `docs/
 - **Door Session Auto-Lock:** Door unlock sessions can end with `auto_locked` after close or `auto_locked_timeout` if the door never opens.
 
 ### Category 2: Away Mode Intrusions
-- **Authorized Entry:** Door open without recent vibration starts `warn_entry` and a `30s` keypad deadline.
-- **Forced Entry:** Recent `vib_spike`, `door_tamper`, or door open while locked escalates directly to alert.
-- **Step-Up Alert:** Indoor motion/chokepoint activity steps risk upward from `Off -> Warn -> Alert`.
+- **Immediate Alerts:** `door_open`, `window_open`, `vib_spike`, `door_tamper`, `motion 1`, `motion 2`, `chk2`, and `chk3` escalate directly to alert in `Away`.
+- **Outside Motion Warning:** `motion 3` remains a warning-only case in `Away` to tolerate owner movement around the side of the house.
 
 ### Category 3: Night Mode Security
 - **Perimeter Breach:** `door_open`, `window_open`, `vib_spike`, or `motion 3` raises `alert_night_breach`.

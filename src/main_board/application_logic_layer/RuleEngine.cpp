@@ -29,14 +29,6 @@ bool isAutoArmCancelEvent(const ConfigurationSharedTypes::Event& e) {
          isChokepoint(e, 3);
 }
 
-bool isAwayStepUpEvent(const ConfigurationSharedTypes::Event& e) {
-  return isMotion(e, 1) ||
-         isMotion(e, 2) ||
-         isMotion(e, 3) ||
-         isChokepoint(e, 2) ||
-         isChokepoint(e, 3);
-}
-
 bool isNightPerimeterBreach(const ConfigurationSharedTypes::Event& e) {
   return e.type == ConfigurationSharedTypes::EventType::door_open ||
          e.type == ConfigurationSharedTypes::EventType::window_open ||
@@ -201,11 +193,9 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
 
   if (e.type == EventType::vib_spike) {
     decision.next.last_vibration_ms = e.ts_ms;
-    decision.next.level = stepUp(st.level);
-    decision.cmd = (decision.next.level == AlarmLevel::alert)
-      ? CommandType::buzzer_alert
-      : CommandType::buzzer_warn;
-    decision.flag = "step_up_alert";
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = "alert_high";
     return decision;
   }
 
@@ -216,13 +206,21 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
     return decision;
   }
 
-  if (isAwayStepUpEvent(e)) {
+  if (isMotion(e, 3)) {
+    decision.next.level = AlarmLevel::warn;
+    decision.cmd = CommandType::buzzer_warn;
+    decision.flag = "warn_outside_motion";
+    return decision;
+  }
+
+  if (isMotion(e, 1) ||
+      isMotion(e, 2) ||
+      isChokepoint(e, 2) ||
+      isChokepoint(e, 3)) {
     decision.next.last_indoor_activity_ms = e.ts_ms;
-    decision.next.level = stepUp(st.level);
-    decision.cmd = (decision.next.level == AlarmLevel::alert)
-      ? CommandType::buzzer_alert
-      : CommandType::buzzer_warn;
-    decision.flag = "step_up_alert";
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = "alert_high";
     return decision;
   }
 
@@ -252,24 +250,11 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
       return decision;
     }
 
-    if (st.door_locked) {
-      decision.next.entry_pending = false;
-      decision.next.entry_deadline_ms = 0;
-      decision.next.level = AlarmLevel::alert;
-      decision.cmd = CommandType::buzzer_alert;
-      decision.flag = "alert_door";
-      return decision;
-    }
-
-    if (within(e.ts_ms, st.last_indoor_activity_ms, Config::EXIT_GRACE_AFTER_INDOOR_MS)) {
-      return decision;
-    }
-
-    decision.next.entry_pending = true;
-    decision.next.entry_deadline_ms = e.ts_ms + Config::ENTRY_DELAY_MS;
-    decision.next.level = AlarmLevel::warn;
-    decision.cmd = CommandType::buzzer_warn;
-    decision.flag = "warn_entry";
+    decision.next.entry_pending = false;
+    decision.next.entry_deadline_ms = 0;
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = "alert_door";
     return decision;
   }
 

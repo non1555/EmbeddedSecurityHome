@@ -87,9 +87,6 @@ void Sensors::begin() {
     us_[i].lastFireMs = 0;
   }
   usRoundRobinIdx_ = 0;
-
-  serialLen_ = 0;
-  serialLastByteMs_ = 0;
 }
 
 bool Sensors::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
@@ -103,9 +100,7 @@ bool Sensors::poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
 
   const uint8_t usIdx = usRoundRobinIdx_;
   usRoundRobinIdx_ = (uint8_t)((usRoundRobinIdx_ + 1u) % 3u);
-  if (pollUltrasonic_(nowMs, usIdx, out)) return true;
-
-  return pollSerial_(nowMs, out);
+  return pollUltrasonic_(nowMs, usIdx, out);
 }
 
 bool Sensors::isDoorOpen() const {
@@ -114,13 +109,6 @@ bool Sensors::isDoorOpen() const {
 
 bool Sensors::isWindowOpen() const {
   return windowReed_.stableOpen;
-}
-
-void Sensors::printSerialHelp() const {
-  Serial.println("[SERIAL] Debug-only mode");
-  Serial.println("[SERIAL] help   -> show this help");
-  Serial.println("[SERIAL] status -> print local reed states");
-  Serial.println("[SERIAL] Event injection is disabled in this build");
 }
 
 int Sensors::readUltrasonicCm_(const UltrasonicState& us, uint32_t timeoutUs) const {
@@ -248,62 +236,6 @@ bool Sensors::pollVibration_(uint32_t nowMs, ConfigurationSharedTypes::Event& ou
   vibLastFireMs_ = nowMs;
   out = ConfigurationSharedTypes::Event{ConfigurationSharedTypes::EventType::vib_spike, nowMs, 0};
   return true;
-}
-
-bool Sensors::pollSerial_(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
-  while (Serial.available()) {
-    const char c = (char)Serial.read();
-    if (c == '\r') continue;
-    serialLastByteMs_ = nowMs;
-
-    if (c == '\n') {
-      if (serialLen_ == 0) continue;
-      serialBuf_[serialLen_] = '\0';
-      const String token(serialBuf_);
-      serialLen_ = 0;
-      return parseSerialToken_(token, nowMs, out);
-    }
-
-    if (serialLen_ < (sizeof(serialBuf_) - 1)) {
-      serialBuf_[serialLen_++] = c;
-    }
-  }
-
-  if (serialLen_ > 0 && (nowMs - serialLastByteMs_) >= 40) {
-    serialBuf_[serialLen_] = '\0';
-    const String token(serialBuf_);
-    serialLen_ = 0;
-    return parseSerialToken_(token, nowMs, out);
-  }
-
-  return false;
-}
-
-bool Sensors::parseSerialToken_(const String& token,
-                                uint32_t nowMs,
-                                ConfigurationSharedTypes::Event& out) const {
-  (void)nowMs;
-  (void)out;
-
-  String text = token;
-  text.trim();
-  if (text.length() == 0) return false;
-
-  if (text == "?" || text.equalsIgnoreCase("help")) {
-    printSerialHelp();
-    return false;
-  }
-
-  if (text.equalsIgnoreCase("status")) {
-    Serial.print("[SERIAL] door_open=");
-    Serial.print(doorReed_.stableOpen ? 1 : 0);
-    Serial.print(" window_open=");
-    Serial.println(windowReed_.stableOpen ? 1 : 0);
-    return false;
-  }
-
-  Serial.println("[SERIAL] Command injection disabled. Type 'help' or 'status'.");
-  return false;
 }
 
 } // namespace HardwareAbstractionLayer

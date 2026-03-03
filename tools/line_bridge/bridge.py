@@ -214,6 +214,7 @@ REASON_LABELS = {
     "mode_away": "Mode changed to away",
     "mode_night": "Mode changed to night",
     "wrong_code": "Wrong keypad code",
+    "warn_outside_motion": "Outside-side motion warning",
     "keypad_alert": "Too many wrong keypad attempts",
     "warn_entry": "Entry warning active",
     "alert_timeout": "Entry timeout alarm",
@@ -244,6 +245,7 @@ REASON_LABELS = {
 FLOWCHART_STATUS_NOTIFY_REASONS = {
     "remote_status",
     "wrong_code",
+    "warn_outside_motion",
     "keypad_alert",
     "step_up_alert",
     "alert_high",
@@ -386,8 +388,8 @@ def _is_keypad_help_signal(topic: str, obj: Dict[str, Any]) -> bool:
 
 def _format_keypad_help_alert(obj: Dict[str, Any]) -> str:
     return (
-        "Help Request\n"
-        "A keypad help request was triggered.\n"
+        "Help Request Sent\n"
+        "Emergency help was requested from keypad.\n"
         f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
         f"- Risk: {_label_level(obj.get('level', ''))}"
     )

@@ -53,7 +53,7 @@ flowchart TD
         MQ_N_OFF -->|"True"| MQ_REV_EVT["Return Event = disarm or arm_away<br/>(based on latest_mode)"]:::event --> MQ_RULE
         MQ_N_OFF -->|"False"| MQ_N_OFF_REJ["Queue failed Ack only"]:::error --> REMOTE_DONE
 
-        MQ_READ -->|"No Data / Unsupported / Ack-only"| REMOTE_DONE
+        MQ_READ -->|"No Data / Ack-only"| REMOTE_DONE
 
         %% 1B. Keypad collection
         REMOTE_DONE --> KP_POLL{"2A. pollKeypad()"}:::condition
@@ -154,7 +154,9 @@ flowchart TD
 
         %% 1H. Rule engine
         RULE_PROCESS{"Process Event (RuleEngine)"}:::condition
-        RULE_PROCESS --> RE_MANUAL{"Event == manual_door_toggle<br/>or manual_window_toggle?"}:::condition
+        RULE_PROCESS --> RE_HELP{"Event == keypad_help_request?"}:::condition
+        RE_HELP -->|"True"| RE_HELP_DO["Set Alert + buzzer_alert<br/>Queue MQTT: keypad_help"]:::command --> RULE_NEXT
+        RE_HELP -->|"False"| RE_MANUAL{"Event == manual_door_toggle<br/>or manual_window_toggle?"}:::condition
         RE_MANUAL -->|"True"| RE_MANUAL_DO["Handle manual toggle:<br/>servo lock/unlock + queue manual status"]:::command
         RE_MANUAL -->|"False"| RE_CUR_MODE{"Switch on st.mode"}:::condition
 
@@ -177,14 +179,12 @@ flowchart TD
 
         %% Away mode
         RE_CUR_MODE -->|"Away"| RE_A_EV{"Analyze Event Category"}:::condition
-        RE_A_EV -->|"Indoor / Window Motion"| RE_A_STEP["StepUp Alert Level; Queue MQTT: step_up_alert"]:::state --> AWAY_NEXT
-        RE_A_EV -->|"window_open"| RE_A_WIN["Set Alert; Queue MQTT: alert_high"]:::state --> AWAY_NEXT
+        RE_A_EV -->|"motion 3"| RE_A_M3["Set Warn; Queue MQTT: warn_outside_motion"]:::state --> AWAY_NEXT
+        RE_A_EV -->|"window_open / motion1 / motion2 / chk2 / chk3 / vib_spike"| RE_A_STEP["Set Alert; Queue MQTT: alert_high"]:::state --> AWAY_NEXT
         RE_A_EV -->|"entry_timeout"| RE_A_TO["Set Alert; Queue MQTT: alert_timeout"]:::state --> AWAY_NEXT
         RE_A_EV -->|"door_open"| RE_A_TAMPER{"Vibration Spike Recently?<br/>(Forced Entry)"}:::condition
         RE_A_TAMPER -->|"True"| RE_A_FORCE["Set Alert; Queue MQTT: alert_forced_entry"]:::state --> AWAY_NEXT
-        RE_A_TAMPER -->|"False"| RE_A_GRACE{"Within 30s Grace Period?"}:::condition
-        RE_A_GRACE -->|"Expired"| RE_A_WARN["Set Warn; Queue MQTT: warn_entry; entry_pending = true"]:::state --> AWAY_NEXT
-        RE_A_GRACE -->|"Active"| AWAY_NEXT
+        RE_A_TAMPER -->|"False"| RE_A_DOOR["Set Alert; Queue MQTT: alert_door"]:::state --> AWAY_NEXT
 
         %% Night mode
         RE_CUR_MODE -->|"Night"| RE_N_EV{"Analyze Event Category"}:::condition

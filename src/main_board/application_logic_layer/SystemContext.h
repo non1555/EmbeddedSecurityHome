@@ -29,7 +29,7 @@ public:
   bool isMqttConnected(); // Returns current MQTT link status for task-level flow decisions. Params: none.
 
   void handleSilenceRequest(); // Handles keypad silence event for current warning session. Params: none.
-  void handleHelpRequest(const ConfigurationSharedTypes::Event& event); // Handles keypad help event and publishes notification. Params: event=help event payload.
+  void handleHelpRequest(const ConfigurationSharedTypes::Event& event); // Handles keypad emergency-help event, raises alarm, and publishes help notification. Params: event=help event payload.
   void handleManualToggle(const ConfigurationSharedTypes::Event& event); // Handles local physical door/window toggle button and publishes resulting manual status. Params: event=manual toggle event payload.
 
   ConfigurationSharedTypes::SystemState& state(); // Returns mutable global system state. Params: none.

@@ -66,10 +66,6 @@ void EventCollector::updateDisplay(uint32_t nowMs,
                             countdownWarnBeforeMs);
 }
 
-void EventCollector::printSerialHelp() const {
-  sensors_.printSerialHelp();
-}
-
 bool EventCollector::pollManualButtons_(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
   if (pollManualButton_(ConfigurationSharedTypes::Config::PIN_BTN_DOOR_TOGGLE,
                         nowMs,
