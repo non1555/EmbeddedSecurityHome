@@ -12,6 +12,7 @@ set "ENV_FILE=%ROOT%.env"
 set "ENV_EXAMPLE=%ROOT%.env.example"
 set "HTTP_PORT=8080"
 set "NGROK_URL="
+set "NGROK_CMD="
 
 if not exist "%PY%" (
   echo ERROR: venv python not found: "%PY%"
@@ -54,9 +55,15 @@ if errorlevel 1 (
 )
 
 where ngrok >nul 2>&1
-if errorlevel 1 (
-  echo ERROR: ngrok not found in PATH.
-  echo Install ngrok and ensure `ngrok` is available in your terminal.
+if not errorlevel 1 set "NGROK_CMD=ngrok"
+if not defined NGROK_CMD (
+  if exist "%ROOT%..\ngrok\ngrok.exe" set "NGROK_CMD=%ROOT%..\ngrok\ngrok.exe"
+)
+if not defined NGROK_CMD (
+  echo ERROR: ngrok not found in PATH and bundled ngrok is missing.
+  echo Expected one of:
+  echo   - ngrok in PATH
+  echo   - tools\ngrok\ngrok.exe
   pause
   exit /b 2
 )
@@ -75,7 +82,7 @@ popd
 
 REM Start ngrok (new window)
 echo Starting ngrok tunnel...
-start "ngrok" ngrok http %HTTP_PORT%
+start "ngrok" "%NGROK_CMD%" http %HTTP_PORT%
 
 REM Open local pages
 start "" "http://127.0.0.1:%HTTP_PORT%/health"

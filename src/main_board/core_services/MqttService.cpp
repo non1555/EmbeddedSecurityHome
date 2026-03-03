@@ -204,6 +204,8 @@ void MqttService::drainPublishQueue_() {
       payload += ConfigurationSharedTypes::toString(msg.st.mode);
       payload += "\",\"level\":\"";
       payload += ConfigurationSharedTypes::toString(msg.st.level);
+      payload += "\",\"failed_attempts\":";
+      payload += String(msg.st.failed_attempts);
       payload += "\",\"ts_ms\":";
       payload += String(msg.event.ts_ms);
       payload += "}";
@@ -219,6 +221,8 @@ void MqttService::drainPublishQueue_() {
       payload += ConfigurationSharedTypes::toString(msg.st.latest_mode);
       payload += "\",\"is_night\":";
       payload += msg.st.is_night ? "true" : "false";
+      payload += ",\"failed_attempts\":";
+      payload += String(msg.st.failed_attempts);
       payload += ",\"door_locked\":";
       payload += msg.st.door_locked ? "true" : "false";
       payload += ",\"window_locked\":";

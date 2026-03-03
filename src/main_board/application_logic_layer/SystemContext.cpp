@@ -85,20 +85,8 @@ bool SystemContext::pollEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& o
     return true;
   }
 
-  if (pollTimeoutEvent(nowMs, out)) {
-    return true;
-  }
-
   if (!collector_) return false;
   return collector_->poll(nowMs, out);
-}
-
-bool SystemContext::pollTimeoutEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
-  if (state_.entry_pending && reached_(nowMs, state_.entry_deadline_ms)) {
-    out = ConfigurationSharedTypes::Event{ConfigurationSharedTypes::EventType::entry_timeout, nowMs, 0};
-    return true;
-  }
-  return false;
 }
 
 bool SystemContext::pollRemoteEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
@@ -233,6 +221,12 @@ void SystemContext::handleHelpRequest(const ConfigurationSharedTypes::Event& eve
   enqueueStatus_("keypad_help");
 }
 
+void SystemContext::triggerWarn_(const char* reason) {
+  state_.level = ConfigurationSharedTypes::AlarmLevel::warn;
+  actuators_.warn();
+  enqueueStatus_(reason);
+}
+
 void SystemContext::handleManualToggle(const ConfigurationSharedTypes::Event& event) {
   syncSnapshot_();
 
@@ -244,6 +238,11 @@ void SystemContext::handleManualToggle(const ConfigurationSharedTypes::Event& ev
       startDoorSession_(event.ts_ms, doorOpen);
       enqueueEvent_(event, "manual_door_unlock");
       enqueueStatus_("manual_door_unlock");
+      return;
+    }
+
+    if (state_.door_open) {
+      triggerWarn_("warn_lock_door_open");
       return;
     }
 
@@ -259,6 +258,11 @@ void SystemContext::handleManualToggle(const ConfigurationSharedTypes::Event& ev
       actuators_.unlockWindow();
       enqueueEvent_(event, "manual_window_unlock");
       enqueueStatus_("manual_window_unlock");
+      return;
+    }
+
+    if (state_.window_open) {
+      triggerWarn_("warn_lock_window_open");
       return;
     }
 
@@ -290,6 +294,16 @@ bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes:
       enqueueAck_("status", true, "ok");
       enqueueStatus_("remote_status");
       continue;
+    }
+
+    if (command == "keypad_help") {
+      enqueueAck_("keypad_help", true, "ok");
+      out = ConfigurationSharedTypes::Event{
+        ConfigurationSharedTypes::EventType::keypad_help_request,
+        nowMs,
+        9
+      };
+      return true;
     }
 
     if (command == "silence" || command == "alarm off" || command == "buzzer stop") {
@@ -328,6 +342,11 @@ bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes:
     }
 
     if (command == "lock door") {
+      if (state_.door_open) {
+        enqueueAck_("lock door", false, "door_open");
+        triggerWarn_("warn_lock_door_open");
+        continue;
+      }
       actuators_.lockDoor();
       clearDoorSession_(true);
       enqueueAck_("lock door", true, "ok");
@@ -345,6 +364,11 @@ bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes:
     }
 
     if (command == "lock window") {
+      if (state_.window_open) {
+        enqueueAck_("lock window", false, "window_open");
+        triggerWarn_("warn_lock_window_open");
+        continue;
+      }
       actuators_.lockWindow();
       enqueueAck_("lock window", true, "ok");
       enqueueStatus_("remote_lock_window");
@@ -359,6 +383,13 @@ bool SystemContext::pollRemoteCommand_(uint32_t nowMs, ConfigurationSharedTypes:
     }
 
     if (command == "lock all") {
+      if (state_.door_open || state_.window_open) {
+        enqueueAck_("lock all", false, state_.door_open && state_.window_open
+          ? "door_and_window_open"
+          : (state_.door_open ? "door_open" : "window_open"));
+        triggerWarn_("warn_lock_all_open");
+        continue;
+      }
       actuators_.lockAll();
       clearDoorSession_(true);
       enqueueAck_("lock all", true, "ok");

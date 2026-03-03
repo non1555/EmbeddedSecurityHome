@@ -54,9 +54,6 @@ void printSerialStateChanges(const ConfigurationSharedTypes::SystemState& prev,
   if (prev.is_night != curr.is_night) {
     printBoolField("is_night", curr.is_night);
   }
-  if (prev.entry_pending != curr.entry_pending) {
-    printBoolField("entry_pending", curr.entry_pending);
-  }
   if (prev.failed_attempts != curr.failed_attempts) {
     Serial.print("[SERIAL] state failed_attempts=");
     Serial.println(curr.failed_attempts);
@@ -109,12 +106,6 @@ void securityTask(void*) {
 
     // Keypad/sensor chain (flowchart section 4/5).
     if (collector.poll(nowMs, event)) {
-      if (xQueueSend(eventQueue, &event, 0) != pdTRUE) {
-        ++ConfigurationSharedTypes::RuntimeStats::securityEventDrops;
-      }
-    }
-
-    if (context.pollTimeoutEvent(nowMs, event)) {
       if (xQueueSend(eventQueue, &event, 0) != pdTRUE) {
         ++ConfigurationSharedTypes::RuntimeStats::securityEventDrops;
       }

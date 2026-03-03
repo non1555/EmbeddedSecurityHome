@@ -27,7 +27,7 @@ flowchart TD
 
         %% Shared queues
         CMD_Q[("commandQueue<br/>(FIFO queue filled by MqttTask callback)")]:::storage
-        EVT_RT_Q[("eventQueue<br/>(local events + timeout events only)")]:::storage
+        EVT_RT_Q[("eventQueue<br/>(local events only)")]:::storage
 
         %% ==========================================
         %% 1. SECTASK MAIN LOOP
@@ -41,9 +41,13 @@ flowchart TD
         CMD_Q -.dequeue.-> MQ_READ
         REMOTE_DONE(( )):::join
 
-        MQ_READ -->|"lock / unlock"| MQ_HW_CMD["Direct Action:<br/>Servo Control + Queue Ack/Status"]:::command --> REMOTE_DONE
+        MQ_READ -->|"lock door / lock window / lock all"| MQ_LOCK_CHK{"Target still open?"}:::condition
+        MQ_LOCK_CHK -->|"Yes"| MQ_LOCK_WARN["Set Warn + buzzer_warn<br/>Queue failed Ack + warn_lock_* status"]:::error --> REMOTE_DONE
+        MQ_LOCK_CHK -->|"No"| MQ_LOCK_DO["Direct Action:<br/>Servo Lock + Queue Ack/Status"]:::command --> REMOTE_DONE
+        MQ_READ -->|"unlock door / unlock window / unlock all"| MQ_UNLOCK_DO["Direct Action:<br/>Servo Unlock + Queue Ack/Status"]:::command --> REMOTE_DONE
         MQ_READ -->|"silence"| MQ_SIL["Direct Action:<br/>buzzer.stop() + Queue Ack/Status"]:::command --> REMOTE_DONE
         MQ_READ -->|"status"| MQ_STAT["Direct Action:<br/>Queue Status Publish + Ack"]:::command --> REMOTE_DONE
+        MQ_READ -->|"keypad_help / help"| MQ_HELP_EVT["Return Event = keypad_help_request"]:::event --> MQ_RULE
 
         MQ_READ -->|"arm_night"| MQ_N_CHK{"latest_mode == disarm?"}:::condition
         MQ_N_CHK -->|"True"| MQ_N_EVT["Return Event = arm_night"]:::event --> MQ_RULE["engine.process(remote event, context)<br/>(direct path, not through eventQueue)"]:::process --> REMOTE_DONE
@@ -139,12 +143,8 @@ flowchart TD
         EVT_ENQ -.store.-> EVT_RT_Q
         EVT_ENQ --> TO_CHK
 
-        %% 1F. Timeout poll
-        TO_CHK{"3. pollTimeoutEvent()"}:::condition
-        TO_CHK -->|"Expired"| EV_TO["Return Event = entry_timeout"]:::event --> EVT_TO_ENQ["xQueueSend(eventQueue, timeout_event)"]:::process
-        TO_CHK -->|"No timeout event"| DRAIN_START
-        EVT_TO_ENQ -.store.-> EVT_RT_Q
-        EVT_TO_ENQ --> DRAIN_START
+        %% 1F. Continue to drain
+        TO_CHK["3. Continue to event drain"]:::process --> DRAIN_START
 
         %% 1G. Drain event queue
         DRAIN_START(( )):::join --> DRAIN_Q{"4. while (xQueueReceive(eventQueue))"}:::condition
@@ -157,8 +157,12 @@ flowchart TD
         RULE_PROCESS --> RE_HELP{"Event == keypad_help_request?"}:::condition
         RE_HELP -->|"True"| RE_HELP_DO["Set Alert + buzzer_alert<br/>Queue MQTT: keypad_help"]:::command --> RULE_NEXT
         RE_HELP -->|"False"| RE_MANUAL{"Event == manual_door_toggle<br/>or manual_window_toggle?"}:::condition
-        RE_MANUAL -->|"True"| RE_MANUAL_DO["Handle manual toggle:<br/>servo lock/unlock + queue manual status"]:::command
-        RE_MANUAL -->|"False"| RE_CUR_MODE{"Switch on st.mode"}:::condition
+        RE_MANUAL -->|"True"| RE_MANUAL_DO["Handle manual toggle:<br/>unlock directly<br/>lock only when closed, else warn"]:::command
+        RE_MANUAL -->|"False"| RE_VIB{"Event == vib_spike?"}:::condition
+        RE_VIB -->|"True"| RE_VIB_DO["Set Alert + buzzer_alert<br/>Queue MQTT: alert_high / alert_night_breach"]:::state --> RULE_NEXT
+        RE_VIB -->|"False"| RE_LOCKED{"door_open while door_locked<br/>or window_open while window_locked?"}:::condition
+        RE_LOCKED -->|"True"| RE_LOCKED_DO["Set Alert + buzzer_alert<br/>Queue MQTT: alert_door / alert_high / alert_night_breach"]:::state --> RULE_NEXT
+        RE_LOCKED -->|"False"| RE_CUR_MODE{"Switch on st.mode"}:::condition
 
         DISARM_NEXT(( )):::join
         AWAY_NEXT(( )):::join
@@ -180,11 +184,8 @@ flowchart TD
         %% Away mode
         RE_CUR_MODE -->|"Away"| RE_A_EV{"Analyze Event Category"}:::condition
         RE_A_EV -->|"motion 3"| RE_A_M3["Set Warn; Queue MQTT: warn_outside_motion"]:::state --> AWAY_NEXT
-        RE_A_EV -->|"window_open / motion1 / motion2 / chk2 / chk3 / vib_spike"| RE_A_STEP["Set Alert; Queue MQTT: alert_high"]:::state --> AWAY_NEXT
-        RE_A_EV -->|"entry_timeout"| RE_A_TO["Set Alert; Queue MQTT: alert_timeout"]:::state --> AWAY_NEXT
-        RE_A_EV -->|"door_open"| RE_A_TAMPER{"Vibration Spike Recently?<br/>(Forced Entry)"}:::condition
-        RE_A_TAMPER -->|"True"| RE_A_FORCE["Set Alert; Queue MQTT: alert_forced_entry"]:::state --> AWAY_NEXT
-        RE_A_TAMPER -->|"False"| RE_A_DOOR["Set Alert; Queue MQTT: alert_door"]:::state --> AWAY_NEXT
+        RE_A_EV -->|"window_open / motion1 / motion2 / chk2 / chk3"| RE_A_STEP["Set Alert; Queue MQTT: alert_high"]:::state --> AWAY_NEXT
+        RE_A_EV -->|"door_open"| RE_A_DOOR["Set Alert; Queue MQTT: alert_door"]:::state --> AWAY_NEXT
 
         %% Night mode
         RE_CUR_MODE -->|"Night"| RE_N_EV{"Analyze Event Category"}:::condition

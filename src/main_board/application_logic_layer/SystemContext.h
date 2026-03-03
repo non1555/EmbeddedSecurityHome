@@ -20,8 +20,7 @@ public:
   bool begin(); // Initializes services, RTOS primitives, actuator layer, and persisted mode. Params: none.
   void bindCollector(EventCollector* collector); // Binds event collector for sensor snapshot and display updates. Params: collector=pointer to collector instance.
 
-  bool pollEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls one pending event from remote commands, timeout, or collector input. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollTimeoutEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls entry-timeout event only. Params: nowMs=current timestamp in ms, out=event output.
+  bool pollEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls one pending event from remote commands or collector input. Params: nowMs=current timestamp in ms, out=event output.
   bool pollRemoteEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls remote MQTT command and maps to event when applicable. Params: nowMs=current timestamp in ms, out=event output.
   void applyDecision(const ConfigurationSharedTypes::Event& event, const ConfigurationSharedTypes::Decision& decision); // Applies rule-engine decision to state, actuators, NVS, and MQTT reports. Params: event=source event, decision=rule result.
   void updateActuators(uint32_t nowMs, const RuleEngine& engine); // Runs periodic actuator updates, auto-arm tick, display refresh, and periodic status. Params: nowMs=current timestamp in ms, engine=rule engine for tick logic.
@@ -78,6 +77,7 @@ private:
                       uint32_t& deadlineMs,
                       uint32_t& warnBeforeMs) const; // Computes countdown data for OLED rendering. Params: nowMs=current timestamp in ms, active=output active flag, deadlineMs=output countdown end time, warnBeforeMs=output warning threshold.
 
+  void triggerWarn_(const char* reason); // Raises warning buzzer/state and publishes a status reason. Params: reason=warning reason tag.
   void enqueueStatus_(const char* reason); // Queues status message for MQTT publication. Params: reason=status reason tag.
   void enqueueEvent_(const ConfigurationSharedTypes::Event& event, const char* flag); // Queues event message for MQTT publication. Params: event=event payload, flag=event flag text.
   void enqueueAck_(const char* command, bool ok, const char* detail); // Queues command acknowledgement for MQTT publication. Params: command=command text, ok=ack success flag, detail=extra detail.

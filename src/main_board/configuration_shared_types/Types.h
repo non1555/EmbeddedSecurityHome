@@ -22,7 +22,6 @@ enum class EventType : uint8_t {
   arm_night,
   door_open,
   window_open,
-  door_tamper,
   vib_spike,
   motion,
   chokepoint,
@@ -31,8 +30,7 @@ enum class EventType : uint8_t {
   door_code_unlock,
   door_code_bad,
   manual_door_toggle,
-  manual_window_toggle,
-  entry_timeout
+  manual_window_toggle
 };
 
 enum class CommandType : uint8_t {
@@ -57,11 +55,6 @@ struct SystemState {
   Mode latest_mode = Mode::disarm;
   bool is_night = false;
   AlarmLevel level = AlarmLevel::off;
-
-  bool entry_pending = false;
-  uint32_t entry_deadline_ms = 0;
-  uint32_t last_indoor_activity_ms = 0;
-  uint32_t last_vibration_ms = 0;
 
   uint8_t failed_attempts = 0;
 
@@ -124,7 +117,6 @@ inline const char* toString(EventType t) { // Converts EventType enum to stable 
     case EventType::arm_night: return "arm_night";
     case EventType::door_open: return "door_open";
     case EventType::window_open: return "window_open";
-    case EventType::door_tamper: return "door_tamper";
     case EventType::vib_spike: return "vib_spike";
     case EventType::motion: return "motion";
     case EventType::chokepoint: return "chokepoint";
@@ -134,7 +126,6 @@ inline const char* toString(EventType t) { // Converts EventType enum to stable 
     case EventType::door_code_bad: return "door_code_bad";
     case EventType::manual_door_toggle: return "manual_door_toggle";
     case EventType::manual_window_toggle: return "manual_window_toggle";
-    case EventType::entry_timeout: return "entry_timeout";
     default: return "unknown";
   }
 }

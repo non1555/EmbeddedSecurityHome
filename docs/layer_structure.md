@@ -21,7 +21,7 @@ Rule: this layer talks to hardware only. It does not decide security policy.
 - `src/main_board/hardware_abstraction_layer/Sensors.h` / `Sensors.cpp`
   - Reads reed switches, PIR sensors, vibration sensor, and ultrasonic sensors.
   - Ultrasonic inputs are staggered with round-robin polling and `pulseIn()` timeout.
-  - Serial Monitor is debug-only in this version (`help` / `status` text output only, no event injection).
+  - Does not parse user commands from Serial; input events come from hardware polling only.
 - `src/main_board/hardware_abstraction_layer/Actuators.h` / `Actuators.cpp`
   - Drives door servo, window servo, and buzzer patterns.
 - `src/main_board/hardware_abstraction_layer/KeypadController.h` / `KeypadController.cpp`
@@ -56,7 +56,8 @@ Rule: this layer talks to hardware only. It does not decide security policy.
 - `src/main_board/application_logic_layer/SystemContext.h` / `SystemContext.cpp`
   - Owns the canonical system state.
   - Applies decisions, enforces remote-command policy, manages door session timers, persists mode state, and queues MQTT publish messages.
-  - Handles local physical lock/unlock toggles and periodic status publishing.
+  - Handles local physical lock/unlock toggles, remote `keypad_help`, and warning rejection when trying to lock while a door/window is still open.
+  - Publishes periodic status plus concise reason-tagged status/event messages for the LINE bridge.
 
 ## Entry Point
 
@@ -68,4 +69,5 @@ Rule: this layer talks to hardware only. It does not decide security policy.
     4. initialize `EventCollector`
     5. create `eventQueue`
     6. create `SecTask` and `MqttTask`
+  - Emits Serial runtime trace for events, state changes, and publish reasons; it is not used as a control interface.
   - `loop()` stays idle because the firmware runs through RTOS tasks.

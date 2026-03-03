@@ -9,10 +9,6 @@ bool reached(uint32_t nowMs, uint32_t targetMs) {
   return (int32_t)(nowMs - targetMs) >= 0;
 }
 
-bool within(uint32_t nowMs, uint32_t referenceMs, uint32_t windowMs) {
-  return (referenceMs != 0) && ((nowMs - referenceMs) <= windowMs);
-}
-
 bool isMotion(const ConfigurationSharedTypes::Event& e, uint8_t src) {
   return e.type == ConfigurationSharedTypes::EventType::motion && e.src == src;
 }
@@ -36,20 +32,8 @@ bool isNightPerimeterBreach(const ConfigurationSharedTypes::Event& e) {
          isMotion(e, 3);
 }
 
-ConfigurationSharedTypes::AlarmLevel stepUp(ConfigurationSharedTypes::AlarmLevel level) {
-  if (level == ConfigurationSharedTypes::AlarmLevel::off) {
-    return ConfigurationSharedTypes::AlarmLevel::warn;
-  }
-  if (level == ConfigurationSharedTypes::AlarmLevel::warn) {
-    return ConfigurationSharedTypes::AlarmLevel::alert;
-  }
-  return ConfigurationSharedTypes::AlarmLevel::alert;
-}
-
 void resetCommonForModeChange(ConfigurationSharedTypes::SystemState& st) {
   st.level = ConfigurationSharedTypes::AlarmLevel::off;
-  st.entry_pending = false;
-  st.entry_deadline_ms = 0;
   st.exit_stage = 0;
   st.exit_timeout_ms = 0;
   st.failed_attempts = 0;
@@ -153,6 +137,27 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
     return decision;
   }
 
+  if (e.type == EventType::vib_spike) {
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = (st.mode == Mode::night) ? "alert_night_breach" : "alert_high";
+    return decision;
+  }
+
+  if (e.type == EventType::door_open && st.door_locked) {
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = "alert_door";
+    return decision;
+  }
+
+  if (e.type == EventType::window_open && st.window_locked) {
+    decision.next.level = AlarmLevel::alert;
+    decision.cmd = CommandType::buzzer_alert;
+    decision.flag = (st.mode == Mode::night) ? "alert_night_breach" : "alert_high";
+    return decision;
+  }
+
   if (st.mode == Mode::disarm && Config::AUTO_ARM_ENABLED) {
     if (st.exit_stage == 0 && isChokepoint(e, 1)) {
       decision.next.exit_stage = 1;
@@ -191,14 +196,6 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
     return decision;
   }
 
-  if (e.type == EventType::vib_spike) {
-    decision.next.last_vibration_ms = e.ts_ms;
-    decision.next.level = AlarmLevel::alert;
-    decision.cmd = CommandType::buzzer_alert;
-    decision.flag = "alert_high";
-    return decision;
-  }
-
   if (e.type == EventType::window_open) {
     decision.next.level = AlarmLevel::alert;
     decision.cmd = CommandType::buzzer_alert;
@@ -217,41 +214,13 @@ ConfigurationSharedTypes::Decision RuleEngine::handle(const ConfigurationSharedT
       isMotion(e, 2) ||
       isChokepoint(e, 2) ||
       isChokepoint(e, 3)) {
-    decision.next.last_indoor_activity_ms = e.ts_ms;
     decision.next.level = AlarmLevel::alert;
     decision.cmd = CommandType::buzzer_alert;
     decision.flag = "alert_high";
     return decision;
   }
 
-  if (e.type == EventType::entry_timeout) {
-    decision.next.entry_pending = false;
-    decision.next.entry_deadline_ms = 0;
-    decision.next.level = AlarmLevel::alert;
-    decision.cmd = CommandType::buzzer_alert;
-    decision.flag = "alert_timeout";
-    return decision;
-  }
-
-  if (e.type == EventType::door_tamper) {
-    decision.next.level = AlarmLevel::alert;
-    decision.cmd = CommandType::buzzer_alert;
-    decision.flag = "alert_forced_entry";
-    return decision;
-  }
-
   if (e.type == EventType::door_open) {
-    if (within(e.ts_ms, st.last_vibration_ms, Config::FORCED_ENTRY_WINDOW_MS)) {
-      decision.next.entry_pending = false;
-      decision.next.entry_deadline_ms = 0;
-      decision.next.level = AlarmLevel::alert;
-      decision.cmd = CommandType::buzzer_alert;
-      decision.flag = "alert_forced_entry";
-      return decision;
-    }
-
-    decision.next.entry_pending = false;
-    decision.next.entry_deadline_ms = 0;
     decision.next.level = AlarmLevel::alert;
     decision.cmd = CommandType::buzzer_alert;
     decision.flag = "alert_door";

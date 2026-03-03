@@ -12,6 +12,7 @@ PY="$ROOT/.venv/bin/python3"
 ENV_FILE="$ROOT/.env"
 ENV_EXAMPLE="$ROOT/.env.example"
 REQ_FILE="$ROOT/requirements.txt"
+NGROK_BIN=""
 
 if [[ ! -x "$PY" ]]; then
   echo "Creating venv..."
@@ -46,11 +47,19 @@ echo
   "$PY" -m pip install -r "$REQ_FILE"
 }
 
-command -v ngrok >/dev/null 2>&1 || {
-  echo "ERROR: ngrok not found in PATH."
-  echo "Install ngrok and ensure 'ngrok' works in your terminal."
+if command -v ngrok >/dev/null 2>&1; then
+  NGROK_BIN="$(command -v ngrok)"
+elif [[ -x "$ROOT/../ngrok/ngrok" ]]; then
+  NGROK_BIN="$ROOT/../ngrok/ngrok"
+fi
+
+if [[ -z "$NGROK_BIN" ]]; then
+  echo "ERROR: ngrok not found in PATH and bundled ngrok is missing."
+  echo "Expected one of:"
+  echo "  - ngrok in PATH"
+  echo "  - tools/ngrok/ngrok"
   exit 2
-}
+fi
 
 mkdir -p "$ROOT/logs"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -71,7 +80,7 @@ nohup "$PY" "$ROOT/bridge.py" >"$ROOT/logs/bridge-$TS.log" 2>&1 &
 echo $! >"$ROOT/.bridge.pid"
 
 echo "Starting ngrok..."
-nohup ngrok http "$HTTP_PORT" >"$ROOT/logs/ngrok-$TS.log" 2>&1 &
+nohup "$NGROK_BIN" http "$HTTP_PORT" >"$ROOT/logs/ngrok-$TS.log" 2>&1 &
 echo $! >"$ROOT/.ngrok.pid"
 
 sleep 2

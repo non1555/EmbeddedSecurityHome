@@ -336,6 +336,30 @@ def ngrok_config_has_authtoken() -> bool:
     return False
 
 
+def summarize_platformio_failure(log_path: Path) -> str:
+    try:
+        txt = log_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+    port_missing = re.search(r"Could not open (COM\d+|/dev/\S+), the port doesn't exist", txt, re.IGNORECASE)
+    if port_missing:
+        return f"Upload port not found: {port_missing.group(1)}. Refresh ports and select the active board port."
+
+    port_timeout = re.search(r"Serial port (COM\d+|/dev/\S+).*?Write timeout", txt, re.IGNORECASE | re.DOTALL)
+    if port_timeout:
+        return (
+            f"Upload port responded with write timeout: {port_timeout.group(1)}. "
+            "The board may be on a different port, busy, or not in a stable flash state."
+        )
+
+    connect_fail = re.search(r"Serial port (COM\d+|/dev/\S+).*?Connecting\.*\s*$", txt, re.IGNORECASE | re.DOTALL)
+    if connect_fail and "*** [upload] Error" in txt:
+        return f"Could not connect reliably on {connect_fail.group(1)}. Check cable, boot mode, and selected port."
+
+    return ""
+
+
 class LauncherApp:
     def __init__(self) -> None:
         self.root = Tk()
@@ -2004,10 +2028,20 @@ class LauncherApp:
 
         lines = upsert_env_kv(lines, "FW_WIFI_SSID", self.fw_wifi_ssid.get().strip())
         lines = upsert_env_kv(lines, "FW_WIFI_PASSWORD", self.fw_wifi_password.get().strip())
-        lines = upsert_env_kv(lines, "FW_MQTT_BROKER", self.fw_mqtt_broker.get().strip())
+        fw_broker = self.fw_mqtt_broker.get().strip()
+        fw_username = self.fw_mqtt_username.get().strip()
+        fw_password = self.fw_mqtt_password.get().strip()
+
+        lines = upsert_env_kv(lines, "FW_MQTT_BROKER", fw_broker)
         lines = upsert_env_kv(lines, "FW_MQTT_PORT", str(port))
-        lines = upsert_env_kv(lines, "FW_MQTT_USERNAME", self.fw_mqtt_username.get().strip())
-        lines = upsert_env_kv(lines, "FW_MQTT_PASSWORD", self.fw_mqtt_password.get().strip())
+        lines = upsert_env_kv(lines, "FW_MQTT_USERNAME", fw_username)
+        lines = upsert_env_kv(lines, "FW_MQTT_PASSWORD", fw_password)
+        # Keep bridge MQTT settings aligned with firmware defaults so bridge.py
+        # never uses a stale broker/port after network changes.
+        lines = upsert_env_kv(lines, "MQTT_BROKER", fw_broker)
+        lines = upsert_env_kv(lines, "MQTT_PORT", str(port))
+        lines = upsert_env_kv(lines, "MQTT_USERNAME", fw_username)
+        lines = upsert_env_kv(lines, "MQTT_PASSWORD", fw_password)
         main_cid = self.fw_mqtt_client_id_main.get().strip() or "embedded-security-esp32"
         lines = upsert_env_kv(lines, "FW_MQTT_CLIENT_ID", main_cid)
         lines = [ln for ln in lines if not ln.startswith("FW_MQTT_CLIENT_ID_AUTOMATION=")]
@@ -2065,7 +2099,12 @@ class LauncherApp:
                 if rc == 0:
                     messagebox.showinfo("PlatformIO", f"{success_msg}\nLog: {log_path}")
                 else:
-                    messagebox.showerror("PlatformIO", f"Command failed (rc={rc}).\nLog: {log_path}")
+                    hint = summarize_platformio_failure(log_path)
+                    msg = f"Command failed (rc={rc})."
+                    if hint:
+                        msg += f"\n\n{hint}"
+                    msg += f"\nLog: {log_path}"
+                    messagebox.showerror("PlatformIO", msg)
 
             self.root.after(0, done)
 

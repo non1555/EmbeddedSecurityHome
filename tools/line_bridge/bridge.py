@@ -142,16 +142,19 @@ SILENCE_COMMANDS = {
     "silence",
 }
 READ_ONLY_COMMANDS = {"status"}
-SUPPORTED_COMMANDS = LOCK_COMMANDS | MODE_COMMANDS | SILENCE_COMMANDS | READ_ONLY_COMMANDS
+HELP_ACTION_COMMANDS = {"keypad_help"}
+SUPPORTED_COMMANDS = LOCK_COMMANDS | MODE_COMMANDS | SILENCE_COMMANDS | READ_ONLY_COMMANDS | HELP_ACTION_COMMANDS
 COMMAND_ALIASES = {
     "arm_night": "arm night",
     "night off": "night_off",
     "alarm off": "silence",
     "buzzer stop": "silence",
+    "help": "keypad_help",
+    "help request": "keypad_help",
+    "emergency help": "keypad_help",
 }
 
 HELP_COMMANDS = {
-    "help",
     "menu",
 }
 
@@ -159,16 +162,13 @@ INTRUDER_LEVELS = {"alert"}
 INTRUDER_EVENT_TRIGGERS = {
     "door_open",
     "window_open",
-    "door_tamper",
     "vib_spike",
     "motion",
     "chokepoint",
-    "entry_timeout",
 }
 INTRUDER_STATUS_REASON_TRIGGERS = {
     "alert_night_breach",
     "alert_timeout",
-    "alert_forced_entry",
     "alert_door",
     "step_up_alert",
     "keypad_alert",
@@ -190,11 +190,9 @@ LEVEL_LABELS = {
 EVENT_LABELS = {
     "door_open": "Door opened",
     "window_open": "Window opened",
-    "door_tamper": "Door tamper detected",
     "vib_spike": "Vibration spike detected",
     "motion": "Motion detected",
     "chokepoint": "Chokepoint movement detected",
-    "entry_timeout": "Entry delay timeout",
     "keypad_help_request": "Help requested from keypad",
     "door_code_unlock": "Door code accepted",
     "door_code_bad": "Wrong keypad code",
@@ -216,10 +214,7 @@ REASON_LABELS = {
     "wrong_code": "Wrong keypad code",
     "warn_outside_motion": "Outside-side motion warning",
     "keypad_alert": "Too many wrong keypad attempts",
-    "warn_entry": "Entry warning active",
-    "alert_timeout": "Entry timeout alarm",
     "alert_door": "Door alarm",
-    "alert_forced_entry": "Forced-entry alarm",
     "alert_night_breach": "Night perimeter breach alarm",
     "step_up_alert": "Risk escalated",
     "auto_locked": "Door auto-locked",
@@ -240,24 +235,24 @@ REASON_LABELS = {
     "manual_door_unlock": "Manual door unlocked",
     "manual_window_lock": "Manual window locked",
     "manual_window_unlock": "Manual window unlocked",
+    "warn_lock_door_open": "Door is open, cannot lock",
+    "warn_lock_window_open": "Window is open, cannot lock",
+    "warn_lock_all_open": "Door or window is open, cannot lock all",
 }
 
 FLOWCHART_STATUS_NOTIFY_REASONS = {
     "remote_status",
-    "wrong_code",
-    "warn_outside_motion",
-    "keypad_alert",
-    "step_up_alert",
-    "alert_high",
-    "alert_timeout",
-    "alert_forced_entry",
-    "warn_entry",
-    "alert_night_breach",
+    "mode_disarm",
+    "mode_away",
+    "mode_night",
     "auto_locked",
     "manual_door_lock",
     "manual_door_unlock",
     "manual_window_lock",
     "manual_window_unlock",
+    "warn_lock_door_open",
+    "warn_lock_window_open",
+    "warn_lock_all_open",
 }
 
 COMMAND_LABELS = {
@@ -271,6 +266,7 @@ COMMAND_LABELS = {
     "night_off": "Night off",
     "silence": "Silence buzzer",
     "status": "Status check",
+    "keypad_help": "Emergency help",
 }
 
 
@@ -310,7 +306,7 @@ def format_mqtt_to_text(topic: str, payload: str) -> str:
         )
     if topic == MQTT_TOPIC_STATUS:
         return (
-            "System Status\n"
+            "Status\n"
             f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
             f"- Risk: {_label_level(obj.get('level', ''))}\n"
             f"- {_device_line_from_obj(obj)}"
@@ -388,10 +384,8 @@ def _is_keypad_help_signal(topic: str, obj: Dict[str, Any]) -> bool:
 
 def _format_keypad_help_alert(obj: Dict[str, Any]) -> str:
     return (
-        "Help Request Sent\n"
-        "Emergency help was requested from keypad.\n"
-        f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
-        f"- Risk: {_label_level(obj.get('level', ''))}"
+        "Help request sent. Alarm activated.\n"
+        f"Mode: {_label_mode(obj.get('mode', ''))} | Risk: {_label_level(obj.get('level', ''))}"
     )
 
 
@@ -405,6 +399,75 @@ def _format_intruder_alert(topic: str, obj: Dict[str, Any]) -> str:
         f"- Mode: {_label_mode(obj.get('mode', ''))}\n"
         f"- Risk: {_label_level(obj.get('level', ''))}"
     )
+
+
+def _format_event_notification(obj: Dict[str, Any]) -> Optional[str]:
+    event = _norm_text(obj.get("event", ""))
+    flag = _norm_text(obj.get("flag", ""))
+    attempts = _json_int(obj, "failed_attempts")
+
+    if flag == "wrong_code":
+        suffix = f" (attempt {attempts}/3)" if attempts else ""
+        return f"Warning: Wrong keypad code{suffix}."
+    if flag == "keypad_alert":
+        suffix = f" (attempt {attempts}/3)" if attempts else ""
+        return f"Alarm: Too many wrong keypad attempts{suffix}."
+    if flag == "warn_outside_motion":
+        return "Warning: Outside motion detected."
+    if flag == "alert_door":
+        return "Alarm: Door opened while locked."
+    if flag == "alert_night_breach":
+        if event == "door_open":
+            return "Alarm: Door perimeter breach at night."
+        if event == "window_open":
+            return "Alarm: Window perimeter breach at night."
+        if event == "vib_spike":
+            return "Alarm: Vibration detected at night."
+        if event == "motion":
+            return "Alarm: Perimeter motion detected at night."
+        return "Alarm: Night perimeter breach detected."
+    if flag == "alert_high":
+        if event == "vib_spike":
+            return "Alarm: Vibration detected."
+        if event == "window_open":
+            return "Alarm: Window opened."
+        if event == "motion":
+            return "Alarm: Motion detected."
+        if event == "chokepoint":
+            return "Alarm: Chokepoint movement detected."
+        return "Alarm: Security breach detected."
+    if flag == "step_up_alert":
+        return "Warning: Risk escalated."
+    return None
+
+
+def _format_status_notification(obj: Dict[str, Any]) -> str:
+    reason = _norm_text(obj.get("reason", ""))
+    if reason == "remote_status":
+        return format_mqtt_to_text(MQTT_TOPIC_STATUS, json.dumps(obj))
+    if reason == "mode_disarm":
+        return "Mode changed to Disarmed."
+    if reason == "mode_away":
+        return "Mode changed to Away Guard."
+    if reason == "mode_night":
+        return "Mode changed to Night Guard."
+    if reason == "auto_locked":
+        return "Door auto-locked."
+    if reason == "manual_door_lock":
+        return "Door locked."
+    if reason == "manual_door_unlock":
+        return "Door unlocked."
+    if reason == "manual_window_lock":
+        return "Window locked."
+    if reason == "manual_window_unlock":
+        return "Window unlocked."
+    if reason == "warn_lock_door_open":
+        return "Warning: Door is open. Cannot lock."
+    if reason == "warn_lock_window_open":
+        return "Warning: Window is open. Cannot lock."
+    if reason == "warn_lock_all_open":
+        return "Warning: Door or window is open. Cannot lock all."
+    return format_mqtt_to_text(MQTT_TOPIC_STATUS, json.dumps(obj))
 
 
 def line_api_headers() -> Dict[str, str]:
@@ -485,101 +548,101 @@ def is_help_cmd(text: str) -> bool:
 
 def _mode_button_spec() -> tuple[str, str]:
     if _norm_text(state.dev_mode or state.last_status_mode) == "night":
-        return "Night Off", "cmd=night_off"
-    return "Arm Night", "cmd=arm night"
+        return "Night Off", "night_off"
+    return "Arm Night", "arm night"
 
 
 def _door_button_spec() -> tuple[str, str]:
     if state.dev_door_locked is True:
-        return "Unlock Door", "cmd=unlock door"
-    return "Lock Door", "cmd=lock door"
+        return "Unlock Door", "unlock door"
+    return "Lock Door", "lock door"
 
 
 def _window_button_spec() -> tuple[str, str]:
     if state.dev_window_locked is True:
-        return "Unlock Window", "cmd=unlock window"
-    return "Lock Window", "cmd=lock window"
+        return "Unlock Window", "unlock window"
+    return "Lock Window", "lock window"
 
 
 def _all_button_spec() -> tuple[str, str]:
     if state.dev_door_locked is True and state.dev_window_locked is True:
-        return "Unlock All", "cmd=unlock all"
-    return "Lock All", "cmd=lock all"
+        return "Unlock All", "unlock all"
+    return "Lock All", "lock all"
 
 
-def _bubble_button(label: str, data: str, style: str = "primary") -> Dict[str, Any]:
+def _quick_reply_item(label: str, text: str) -> Dict[str, Any]:
+    payload = (text or "").strip()
+    payload = normalize_cmd(payload) or payload
     return {
-        "type": "button",
-        "style": style,
-        "height": "sm",
-        "action": {"type": "postback", "label": label[:20], "data": data},
+        "type": "action",
+        "action": {
+            "type": "message",
+            "label": label[:20],
+            "text": payload,
+        },
     }
 
 
-def command_bubble(note: str = "") -> Dict[str, Any]:
+def command_quick_reply_message(note: str = "") -> Dict[str, Any]:
     mode_label, mode_cmd = _mode_button_spec()
     door_label, door_cmd = _door_button_spec()
     window_label, window_cmd = _window_button_spec()
     all_label, all_cmd = _all_button_spec()
 
-    contents = [
-        {"type": "text", "text": "EmbeddedSecurity Commands", "weight": "bold", "size": "lg"},
-        {"type": "text", "text": _device_summary_line(), "size": "sm", "wrap": True, "color": "#666666"},
+    lines = [
+        "EmbeddedSecurity Commands",
+        _device_summary_line(),
     ]
     if note:
-        contents.extend(
-            [
-                {"type": "separator", "margin": "md"},
-                {"type": "text", "text": note, "size": "sm", "wrap": True, "color": "#0d47a1"},
-            ]
-        )
-    contents.extend(
-        [
-            {"type": "separator", "margin": "md"},
-            {"type": "text", "text": "System", "size": "sm", "weight": "bold", "color": "#555555"},
-            _bubble_button("Status", "cmd=status", "secondary"),
-            _bubble_button("Silence", "cmd=silence", "secondary"),
-            {"type": "separator", "margin": "md"},
-            {"type": "text", "text": "Mode", "size": "sm", "weight": "bold", "color": "#555555"},
-            _bubble_button(mode_label, mode_cmd),
-            {"type": "separator", "margin": "md"},
-            {"type": "text", "text": "Locks", "size": "sm", "weight": "bold", "color": "#555555"},
-            _bubble_button(door_label, door_cmd),
-            _bubble_button(window_label, window_cmd),
-            _bubble_button(all_label, all_cmd, "secondary"),
-        ]
-    )
+        lines.append(note)
+    lines.append("Tap a button or type a command.")
 
     return {
-        "type": "flex",
-        "altText": "EmbeddedSecurity commands",
-        "contents": {
-            "type": "bubble",
-            "size": "kilo",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "contents": contents,
-            },
+        "type": "text",
+        "text": "\n".join(lines)[:4800],
+        "quickReply": {
+            "items": [
+                _quick_reply_item("Status", "status"),
+                _quick_reply_item("Help", "keypad_help"),
+                _quick_reply_item("Silence", "silence"),
+                _quick_reply_item(mode_label, mode_cmd),
+                _quick_reply_item(door_label, door_cmd),
+                _quick_reply_item(window_label, window_cmd),
+                _quick_reply_item(all_label, all_cmd),
+            ]
         },
     }
 
 
-def _reply_command_bubble(reply_token: str, note: str = "") -> None:
-    reply_line_messages(reply_token, [command_bubble(note)])
+def _reply_command_panel(reply_token: str, note: str = "") -> None:
+    reply_line_messages(reply_token, [command_quick_reply_message(note)])
 
 
-def _extract_line_cmd(raw: str) -> str:
-    text = (raw or "").strip()
-    if not text:
-        return ""
-    if text.startswith("ui="):
-        return "menu"
-    if text.startswith("cmd=") or text.startswith("cmd:"):
-        text = text[4:].strip()
-    return normalize_cmd(text)
-
+def _optimistic_apply_command(cmd: str) -> None:
+    cmd = normalize_cmd(cmd)
+    if cmd == "lock door":
+        if state.dev_door_open is False:
+            state.dev_door_locked = True
+        return
+    if cmd == "unlock door":
+        state.dev_door_locked = False
+        return
+    if cmd == "lock window":
+        if state.dev_window_open is False:
+            state.dev_window_locked = True
+        return
+    if cmd == "unlock window":
+        state.dev_window_locked = False
+        return
+    if cmd == "lock all":
+        if state.dev_door_open is False and state.dev_window_open is False:
+            state.dev_door_locked = True
+            state.dev_window_locked = True
+        return
+    if cmd == "unlock all":
+        state.dev_door_locked = False
+        state.dev_window_locked = False
+        return
 
 def _handle_line_command(
     reply_token: str,
@@ -589,14 +652,14 @@ def _handle_line_command(
     *,
     silent_debounce: bool,
 ) -> None:
-    cmd = _extract_line_cmd(raw_cmd)
+    cmd = normalize_cmd((raw_cmd or "").strip())
     if not cmd:
         return
     if is_help_cmd(cmd):
-        _reply_command_bubble(reply_token)
+        _reply_command_panel(reply_token)
         return
     if not is_supported_cmd(cmd):
-        reply_line_text(reply_token, "Command not supported. Send 'menu' to open the command bubble.")
+        _reply_command_panel(reply_token, "Tap a button or type a supported command.")
         return
     if not debounce_ok(src_key, cmd, ev_ts_ms):
         if not silent_debounce:
@@ -605,7 +668,13 @@ def _handle_line_command(
     if not publish_cmd(cmd):
         reply_line_text(reply_token, "Could not send command right now. Please try again.")
         return
-    _reply_command_bubble(reply_token, f"Sent: {_label_command(cmd)}")
+    _optimistic_apply_command(cmd)
+    if cmd == "status":
+        return
+    if cmd == "keypad_help":
+        reply_line_text(reply_token, "Help request sent. Alarm activated.")
+        return
+    reply_line_text(reply_token, f"Request sent: {_label_command(cmd)}.")
 
 
 class BridgeState:
@@ -618,10 +687,12 @@ class BridgeState:
         self.last_cmd_at = 0.0
         self.last_intruder_push_at = 0.0
         self.last_status_mode = ""
+        self.last_status_latest_mode = ""
         self.last_status_level = ""
         self.last_status_at = 0.0
         # Device snapshot (best-effort, populated from MQTT event/status/ack).
         self.dev_mode = ""
+        self.dev_latest_mode = ""
         self.dev_level = ""
         self.dev_door_locked: Optional[bool] = None
         self.dev_window_locked: Optional[bool] = None
@@ -773,12 +844,37 @@ def _json_bool(obj: Dict[str, Any], key: str) -> Optional[bool]:
     return None
 
 
+def _json_int(obj: Dict[str, Any], key: str) -> Optional[int]:
+    if key not in obj:
+        return None
+    v = obj.get(key)
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+    return None
+
+
 def _apply_snapshot_from_obj(obj: Dict[str, Any]) -> None:
     updated = False
     mode = str(obj.get("mode", "") or "")
+    latest_mode = str(obj.get("latest_mode", "") or "")
     level = str(obj.get("level", "") or "")
     if mode:
         state.dev_mode = mode
+        updated = True
+    if latest_mode:
+        state.dev_latest_mode = latest_mode
         updated = True
     if level:
         state.dev_level = level
@@ -841,6 +937,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     if topic == MQTT_TOPIC_STATUS:
         obj = parse_json_payload(payload)
         state.last_status_mode = str(obj.get("mode", "") or "")
+        state.last_status_latest_mode = str(obj.get("latest_mode", "") or "")
         state.last_status_level = str(obj.get("level", "") or "")
         state.last_status_at = time.time()
         _apply_snapshot_from_obj(obj)
@@ -878,22 +975,25 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             state.dev_window_open = wo
         if any(x is not None for x in (dl, wl, do, wo)):
             state.dev_at = time.time()
-    if topic == MQTT_TOPIC_EVENT or topic == MQTT_TOPIC_STATUS:
-        obj = parse_json_payload(payload)
-        if _is_keypad_help_signal(topic, obj):
-            push_line_text(_format_keypad_help_alert(obj))
-            return
-        if _is_intruder_signal(topic, obj):
-            now = time.time()
-            if INTRUDER_NOTIFY_COOLDOWN_S == 0 or (now - state.last_intruder_push_at) >= INTRUDER_NOTIFY_COOLDOWN_S:
-                state.last_intruder_push_at = now
-                push_line_text(_format_intruder_alert(topic, obj))
-            return
     if topic == MQTT_TOPIC_STATUS:
         obj = parse_json_payload(payload)
         reason = _norm_text(obj.get("reason", ""))
         if reason in FLOWCHART_STATUS_NOTIFY_REASONS:
-            push_line_text(format_mqtt_to_text(topic, payload))
+            push_line_text(_format_status_notification(obj))
+        return
+    if topic == MQTT_TOPIC_EVENT:
+        obj = parse_json_payload(payload)
+        if _is_keypad_help_signal(topic, obj):
+            push_line_text(_format_keypad_help_alert(obj))
+            return
+        text = _format_event_notification(obj)
+        if text:
+            if _norm_text(obj.get("level", "")) == "alert":
+                now = time.time()
+                if INTRUDER_NOTIFY_COOLDOWN_S != 0 and (now - state.last_intruder_push_at) < INTRUDER_NOTIFY_COOLDOWN_S:
+                    return
+                state.last_intruder_push_at = now
+            push_line_text(text)
         return
 
 
@@ -1012,11 +1112,9 @@ async def line_webhook(
             if src_k and src_k != "unknown":
                 state.auto_line_target = src_k
 
-        if ev.get("type") == "postback":
-            data_pb = str(ev.get("postback", {}).get("data", "") or "").strip()
-            if not data_pb:
-                continue
-            _handle_line_command(reply_token, src_k, ev_ts_ms, data_pb, silent_debounce=True)
+        if ev.get("type") in {"follow", "join"}:
+            if reply_token:
+                _reply_command_panel(reply_token, "Bridge connected. Command buttons are ready.")
             continue
 
         if ev.get("type") != "message":
