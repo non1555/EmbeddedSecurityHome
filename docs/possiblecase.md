@@ -217,17 +217,17 @@
 
 - Condition: ประตูถูก unlock ด้วย PIN, remote command, หรือ local door toggle จากนั้นประตูถูกปิดและค้างปิดครบ `3s`
 - Expected Result:
-  - ระบบล็อกประตูอัตโนมัติ
+  - ระบบสั่งให้ servo ประตูเริ่มล็อกอัตโนมัติ
   - session ของประตูสิ้นสุดลง
-  - มีการส่งสถานะ `auto_locked`
+  - มีการส่งสถานะ `auto_locked` หลัง servo ถึงตำแหน่งล็อกจริง
 
 ### Case 4.5: Door Unlock Timeout
 
 - Condition: ประตูถูก unlock แต่ไม่เคยถูกเปิด และครบเวลา unlock session `15s`
 - Expected Result:
-  - ระบบล็อกประตูอัตโนมัติ
+  - ระบบสั่งให้ servo ประตูเริ่มล็อกอัตโนมัติ
   - session ของประตูสิ้นสุดลง
-  - มีการส่งสถานะ `auto_locked_timeout`
+  - มีการส่งสถานะ `auto_locked_timeout` หลัง servo ถึงตำแหน่งล็อกจริง
 
 ### Case 4.6: Power Loss Recovery
 

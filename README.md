@@ -214,7 +214,7 @@ This README keeps the high-level summary. The complete case list lives in `docs/
 - **Auto-Arm Success:** `chk1 -> door open -> door close -> 20s no indoor activity` moves the system from `Disarm` to `Away`, persists mode state, and locks actuators.
 - **Auto-Arm Cancel:** Indoor/window activity during `exit_stage == 3` cancels the auto-arm countdown.
 - **Auto-Arm Stage Timeout Reset:** If stage `1` or `2` stalls for `15s`, the partial sequence is discarded.
-- **Door Session Auto-Lock:** Door unlock sessions can end with `auto_locked` after close or `auto_locked_timeout` if the door never opens.
+- **Door Session Auto-Lock:** Door unlock sessions can end with `auto_locked` after close or `auto_locked_timeout` if the door never opens. These status reasons are published after the door servo reaches the lock position.
 
 ### Category 2: Away Mode Intrusions
 - **Immediate Alerts:** `door_open`, `window_open`, `vib_spike`, `motion 1`, `motion 2`, `chk2`, and `chk3` escalate directly to alert in `Away`.

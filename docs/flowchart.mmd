@@ -205,7 +205,7 @@ flowchart TD
         AUTO_TICK -->|"No change"| DS_UPD
 
         DS_UPD{"doorSession_.check(Now)"}:::condition
-        DS_UPD -->|"Event: Locked"| DS_CMD["servo1.lock(); Queue MQTT auto_locked"]:::command
+        DS_UPD -->|"Event: Locked"| DS_CMD["servo1.lock();<br/>Queue MQTT auto_locked after servo reaches lock position"]:::command
         DS_UPD -->|"Other"| END_T
         DS_CMD --> END_T
             END_T(("vTaskDelay(20ms)")):::loop_node --> SEC_START

@@ -58,6 +58,7 @@ Rule: this layer talks to hardware only. It does not decide security policy.
   - Applies decisions, enforces remote-command policy, manages door session timers, persists mode state, and queues MQTT publish messages.
   - Handles local physical lock/unlock toggles, remote `keypad_help`, and warning rejection when trying to lock while a door/window is still open.
   - Publishes periodic status plus concise reason-tagged status/event messages for the LINE bridge.
+  - Defers `auto_locked` / `auto_locked_timeout` publish until the door servo actually reaches the lock position.
 
 ## Entry Point
 

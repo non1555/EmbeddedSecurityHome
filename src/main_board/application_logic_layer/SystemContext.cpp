@@ -154,6 +154,11 @@ void SystemContext::updateActuators(uint32_t nowMs, const RuleEngine& engine) {
   actuators_.update(nowMs);
 
   syncSnapshot_();
+  if (pendingDoorLockStatus_.active && state_.door_locked) {
+    enqueueStatus_(pendingDoorLockStatus_.reason);
+    pendingDoorLockStatus_ = PendingDoorLockStatus{};
+    syncSnapshot_();
+  }
   updateDoorSession_(nowMs, state_.door_open);
 
   const ConfigurationSharedTypes::Mode previousMode = state_.mode;
@@ -420,6 +425,7 @@ void SystemContext::syncSnapshot_() {
 }
 
 void SystemContext::startDoorSession_(uint32_t nowMs, bool doorOpen) {
+  pendingDoorLockStatus_ = PendingDoorLockStatus{};
   doorSession_.active = true;
   doorSession_.sawOpen = doorOpen;
   doorSession_.lastDoorOpen = doorOpen;
@@ -464,7 +470,10 @@ void SystemContext::updateDoorSession_(uint32_t nowMs, bool doorOpen) {
     } else if (reached_(nowMs, doorSession_.closeLockAtMs)) {
       actuators_.lockDoor();
       clearDoorSession_(true);
-      enqueueStatus_("auto_locked");
+      copyText_(pendingDoorLockStatus_.reason,
+                sizeof(pendingDoorLockStatus_.reason),
+                "auto_locked");
+      pendingDoorLockStatus_.active = true;
     }
     return;
   }
@@ -473,7 +482,10 @@ void SystemContext::updateDoorSession_(uint32_t nowMs, bool doorOpen) {
     if (reached_(nowMs, doorSession_.unlockDeadlineMs)) {
       actuators_.lockDoor();
       clearDoorSession_(true);
-      enqueueStatus_("auto_locked_timeout");
+      copyText_(pendingDoorLockStatus_.reason,
+                sizeof(pendingDoorLockStatus_.reason),
+                "auto_locked_timeout");
+      pendingDoorLockStatus_.active = true;
       return;
     }
 

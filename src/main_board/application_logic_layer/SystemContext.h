@@ -46,12 +46,18 @@ private:
     uint32_t nextWarnMs = 0;
   };
 
+  struct PendingDoorLockStatus {
+    bool active = false;
+    char reason[32] = {};
+  };
+
   HardwareAbstractionLayer::Actuators actuators_{};
   CoreServices::MqttService mqtt_{};
   CoreServices::NvsStorage nvs_{};
 
   ConfigurationSharedTypes::SystemState state_{};
   DoorSession doorSession_{};
+  PendingDoorLockStatus pendingDoorLockStatus_{};
   EventCollector* collector_ = nullptr;
 
   QueueHandle_t commandQueue_ = nullptr;
