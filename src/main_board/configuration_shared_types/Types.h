@@ -5,94 +5,94 @@
 namespace ConfigurationSharedTypes {
 
 enum class Mode : uint8_t {
-  disarm,
-  away,
-  night
+  disarm, // โหมดปลดอาวุธ
+  away, // โหมดเฝ้าระวังเมื่อไม่อยู่บ้าน
+  night // โหมดเฝ้าระวังกลางคืน (เน้น perimeter)
 };
 
 enum class AlarmLevel : uint8_t {
-  off,
-  warn,
-  alert
+  off, // ไม่มีการเตือน
+  warn, // เตือนระดับเบา
+  alert // เตือนระดับรุนแรง
 };
 
 enum class EventType : uint8_t {
-  disarm,
-  arm_away,
-  arm_night,
-  door_open,
-  window_open,
-  vib_spike,
-  motion,
-  chokepoint,
-  door_hold_warn_silence,
-  keypad_help_request,
-  door_code_unlock,
-  door_code_bad,
-  manual_door_toggle,
-  manual_window_toggle
+  disarm, // อีเวนต์ปลดอาวุธ
+  arm_away, // อีเวนต์เข้าโหมด away
+  arm_night, // อีเวนต์เข้าโหมด night
+  door_open, // ตรวจพบประตูเปิด
+  window_open, // ตรวจพบหน้าต่างเปิด
+  vib_spike, // ตรวจพบแรงสั่นสะเทือนผิดปกติ
+  motion, // ตรวจพบการเคลื่อนไหวจาก PIR
+  chokepoint, // ตรวจพบการผ่านจุด choke point จากอัลตราโซนิก
+  door_hold_warn_silence, // คำสั่งปิดเสียงเตือนประตูเปิดค้าง
+  keypad_help_request, // คำขอความช่วยเหลือจากคีย์แพด/LINE
+  door_code_unlock, // ป้อนรหัสถูกต้องและขอปลดล็อกประตู
+  door_code_bad, // ป้อนรหัสผิด
+  manual_door_toggle, // กดปุ่มสลับล็อก/ปลดล็อกประตู
+  manual_window_toggle // กดปุ่มสลับล็อก/ปลดล็อกหน้าต่าง
 };
 
 enum class CommandType : uint8_t {
-  none,
-  buzzer_warn,
-  buzzer_alert,
-  buzzer_stop
+  none, // ไม่มีคำสั่ง actuator เพิ่มเติม
+  buzzer_warn, // สั่งบัซเซอร์โหมด warn
+  buzzer_alert, // สั่งบัซเซอร์โหมด alert
+  buzzer_stop // สั่งหยุดบัซเซอร์
 };
 
 struct Event {
-  EventType type = EventType::disarm;
-  uint32_t ts_ms = 0;
-  uint8_t src = 0;
+  EventType type = EventType::disarm; // ประเภทอีเวนต์
+  uint32_t ts_ms = 0; // เวลาเกิดอีเวนต์ (มิลลิวินาที)
+  uint8_t src = 0; // แหล่งที่มาของอีเวนต์ (เช่น id เซนเซอร์/แหล่งคำสั่ง)
 
-  constexpr Event() = default; // Creates default event (disarm, ts=0, src=0). Params: none.
+  constexpr Event() = default; // สร้างอีเวนต์ค่าเริ่มต้น (disarm, ts=0, src=0)
   constexpr Event(EventType t, uint32_t ts, uint8_t s = 0)
-  : type(t), ts_ms(ts), src(s) {} // Creates event with explicit type/time/source. Params: t=event type, ts=timestamp in ms, s=source id.
+  : type(t), ts_ms(ts), src(s) {} // สร้างอีเวนต์โดยกำหนด type/time/source ชัดเจน
 };
 
 struct SystemState {
-  Mode mode = Mode::disarm;
-  Mode latest_mode = Mode::disarm;
-  bool is_night = false;
-  AlarmLevel level = AlarmLevel::off;
+  Mode mode = Mode::disarm; // โหมดที่ active อยู่ตอนนี้
+  Mode latest_mode = Mode::disarm; // โหมดพื้นฐานล่าสุด (disarm/away)
+  bool is_night = false; // flag ว่าเปิด night override อยู่หรือไม่
+  AlarmLevel level = AlarmLevel::off; // ระดับการเตือนปัจจุบัน
 
-  uint8_t failed_attempts = 0;
+  uint8_t failed_attempts = 0; // จำนวนครั้งป้อนรหัสผิดสะสม
 
-  uint8_t exit_stage = 0;
-  uint32_t exit_timeout_ms = 0;
+  uint8_t exit_stage = 0; // ขั้นของ workflow auto-arm
+  uint32_t exit_timeout_ms = 0; // เวลา timeout ของขั้น auto-arm ปัจจุบัน
 
-  bool door_locked = false;
-  bool window_locked = false;
-  bool door_open = false;
-  bool window_open = false;
+  bool door_locked = false; // สถานะล็อกประตู
+  bool window_locked = false; // สถานะล็อกหน้าต่าง
+  bool door_open = false; // สถานะประตูเปิด
+  bool window_open = false; // สถานะหน้าต่างเปิด
 };
 
 struct Decision {
-  SystemState next{};
-  CommandType cmd = CommandType::none;
-  const char* flag = "";
+  SystemState next{}; // state ถัดไปหลังประมวลผลกฎ
+  CommandType cmd = CommandType::none; // คำสั่ง actuator ที่ต้องทำเพิ่มจาก state
+  const char* flag = ""; // ป้ายเหตุผล/นโยบายที่ใช้ส่งต่อ telemetry
 };
 
 enum class PublishKind : uint8_t {
-  event,
-  status,
-  ack
+  event, // ข้อความประเภท event
+  status, // ข้อความประเภท status
+  ack // ข้อความประเภทตอบรับคำสั่ง
 };
 
 struct PublishMessage {
-  PublishKind kind = PublishKind::event;
-  Event event{};
-  SystemState st{};
-  bool ok = false;
-  char text1[32]{};
-  char text2[64]{};
+  PublishKind kind = PublishKind::event; // ประเภทข้อความ MQTT ที่จะส่ง
+  Event event{}; // payload event (ใช้เมื่อ kind=event)
+  SystemState st{}; // snapshot state ที่แนบไปกับข้อความ
+  bool ok = false; // สถานะสำเร็จ/ไม่สำเร็จ (ใช้กับ ack)
+  char text1[32]{}; // ข้อความสั้นช่องที่ 1 (reason/cmd/flag)
+  char text2[64]{}; // ข้อความสั้นช่องที่ 2 (detail)
 };
 
 struct RemoteCommandMessage {
-  char payload[128]{};
+  char payload[128]{}; // payload คำสั่งดิบที่รับมาจาก MQTT
 };
 
-inline const char* toString(Mode m) { // Converts Mode enum to stable text token. Params: m=mode enum value.
+inline const char* toString(Mode m) { // แปลง Mode เป็นข้อความมาตรฐานสำหรับ log/JSON
   switch (m) {
     case Mode::disarm: return "disarm";
     case Mode::away: return "away";
@@ -101,7 +101,7 @@ inline const char* toString(Mode m) { // Converts Mode enum to stable text token
   }
 }
 
-inline const char* toString(AlarmLevel lv) { // Converts AlarmLevel enum to stable text token. Params: lv=alarm level enum value.
+inline const char* toString(AlarmLevel lv) { // แปลง AlarmLevel เป็นข้อความมาตรฐานสำหรับ log/JSON
   switch (lv) {
     case AlarmLevel::off: return "off";
     case AlarmLevel::warn: return "warn";
@@ -110,7 +110,7 @@ inline const char* toString(AlarmLevel lv) { // Converts AlarmLevel enum to stab
   }
 }
 
-inline const char* toString(EventType t) { // Converts EventType enum to stable text token. Params: t=event type enum value.
+inline const char* toString(EventType t) { // แปลง EventType เป็นข้อความมาตรฐานสำหรับ log/JSON
   switch (t) {
     case EventType::disarm: return "disarm";
     case EventType::arm_away: return "arm_away";
@@ -130,7 +130,7 @@ inline const char* toString(EventType t) { // Converts EventType enum to stable 
   }
 }
 
-inline const char* toString(CommandType t) { // Converts CommandType enum to stable text token. Params: t=command type enum value.
+inline const char* toString(CommandType t) { // แปลง CommandType เป็นข้อความมาตรฐานสำหรับ log/JSON
   switch (t) {
     case CommandType::none: return "none";
     case CommandType::buzzer_warn: return "buzzer_warn";

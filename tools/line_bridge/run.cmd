@@ -11,6 +11,8 @@ set "PY=%ROOT%.venv\Scripts\python.exe"
 set "ENV_FILE=%ROOT%.env"
 set "ENV_EXAMPLE=%ROOT%.env.example"
 set "HTTP_PORT=8080"
+set "MQTT_BROKER="
+set "FW_MQTT_BROKER="
 set "NGROK_URL="
 set "NGROK_CMD="
 
@@ -35,12 +37,20 @@ if not exist "%ENV_FILE%" (
 
 for /f "usebackq tokens=1,2 delims==" %%A in ("%ENV_FILE%") do (
   if /I "%%A"=="HTTP_PORT" set "HTTP_PORT=%%B"
+  if /I "%%A"=="MQTT_BROKER" set "MQTT_BROKER=%%B"
+  if /I "%%A"=="FW_MQTT_BROKER" set "FW_MQTT_BROKER=%%B"
 )
+
+if not defined MQTT_BROKER (
+  if defined FW_MQTT_BROKER set "MQTT_BROKER=%FW_MQTT_BROKER%"
+)
+if not defined MQTT_BROKER set "MQTT_BROKER=127.0.0.1"
 
 echo.
 echo EmbeddedSecurity LINE Bridge Launcher
 echo ====================================
 echo Port: %HTTP_PORT%
+echo MQTT Broker: %MQTT_BROKER%
 echo.
 
 REM Quick dependency check (prints a clear message if missing)
@@ -66,6 +76,42 @@ if not defined NGROK_CMD (
   echo   - tools\ngrok\ngrok.exe
   pause
   exit /b 2
+)
+
+set "BROKER_IS_LOCAL=0"
+if /I "%MQTT_BROKER%"=="127.0.0.1" set "BROKER_IS_LOCAL=1"
+if /I "%MQTT_BROKER%"=="localhost" set "BROKER_IS_LOCAL=1"
+if /I "%MQTT_BROKER%"=="::1" set "BROKER_IS_LOCAL=1"
+if /I "%MQTT_BROKER%"=="%COMPUTERNAME%" set "BROKER_IS_LOCAL=1"
+
+if "%BROKER_IS_LOCAL%"=="1" (
+  echo Checking local Mosquitto service...
+  sc.exe query mosquitto >nul 2>&1
+  if errorlevel 1 (
+    echo WARNING: Mosquitto service not found. Bridge will continue, but MQTT may stay disconnected.
+  ) else (
+    sc.exe query mosquitto | findstr /I "RUNNING" >nul 2>&1
+    if errorlevel 1 (
+      sc.exe qc mosquitto | findstr /I "DISABLED" >nul 2>&1
+      if not errorlevel 1 (
+        echo Mosquitto service is disabled. Trying to switch to Manual...
+        sc.exe config mosquitto start= demand >nul 2>&1
+      )
+      echo Starting Mosquitto service...
+      sc.exe start mosquitto >nul 2>&1
+      timeout /t 1 /nobreak >nul
+      sc.exe query mosquitto | findstr /I "RUNNING" >nul 2>&1
+      if errorlevel 1 (
+        echo WARNING: Could not start Mosquitto service.
+        echo          Try running this command as Administrator.
+      ) else (
+        echo Mosquitto service is running.
+      )
+    ) else (
+      echo Mosquitto service is already running.
+    )
+  )
+  echo.
 )
 
 REM Free port (bridge)

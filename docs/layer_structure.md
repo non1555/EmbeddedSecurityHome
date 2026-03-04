@@ -37,6 +37,7 @@ Rule: this layer talks to hardware only. It does not decide security policy.
   - Runs inside `MqttTask`, not inside `SecTask`.
   - Receives incoming MQTT payloads into `commandQueue`.
   - Flushes outgoing event/status/ack messages from `publishQueue`.
+  - Owns onboard status-LED control with connection-state debounce (`Config::MQTT_CONN_DEBOUNCE_MS`).
 - `src/main_board/core_services/NvsStorage.h` / `NvsStorage.cpp`
   - Persists and restores `latest_mode` and `is_night` for power-loss recovery.
 
@@ -55,6 +56,7 @@ Rule: this layer talks to hardware only. It does not decide security policy.
   - Auto-arm tick logic is evaluated from `updateActuators()`, including stage `1/2` timeout reset and stage `3` transition to `Away`.
 - `src/main_board/application_logic_layer/SystemContext.h` / `SystemContext.cpp`
   - Owns the canonical system state.
+  - Owns per-tick security orchestration through `securityTick()` (remote command drain, local event drain, actuator update, and serial delta logging).
   - Applies decisions, enforces remote-command policy, manages door session timers, persists mode state, and queues MQTT publish messages.
   - Handles local physical lock/unlock toggles, remote `keypad_help`, and warning rejection when trying to lock while a door/window is still open.
   - Publishes periodic status plus concise reason-tagged status/event messages for the LINE bridge.
@@ -70,5 +72,5 @@ Rule: this layer talks to hardware only. It does not decide security policy.
     4. initialize `EventCollector`
     5. create `eventQueue`
     6. create `SecTask` and `MqttTask`
-  - Emits Serial runtime trace for events, state changes, and publish reasons; it is not used as a control interface.
+  - Keeps entrypoint responsibilities only (boot, task creation, watchdog) and delegates security-loop details to `SystemContext`.
   - `loop()` stays idle because the firmware runs through RTOS tasks.

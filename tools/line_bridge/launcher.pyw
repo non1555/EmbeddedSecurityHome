@@ -3,10 +3,8 @@ import json
 import os
 import platform
 import re
-import shlex
 import shutil
 import ctypes
-import signal
 import socket
 import subprocess
 import sys
@@ -16,7 +14,6 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 from tkinter import Tk, StringVar, ttk, messagebox, Canvas
-from glob import glob
 
 
 ROOT = Path(__file__).resolve().parent
@@ -30,13 +27,6 @@ DEFAULT_FW_ENV = "esp32doit-devkit-v1"
 PREFERRED_FW_ENVS = ("main-board",)
 MAIN_BOARD_ENV = "main-board"
 PIO_VENV_DIR = PROJECT_ROOT / ".venv_pio"
-MOSQUITTO_LAN_CONF_PATH = Path("/etc/mosquitto/conf.d/securityhome-lan.conf")
-MOSQUITTO_LAN_CONF_TEXT = (
-    "# Managed by SecurityHome Launcher\n"
-    "listener 1883 0.0.0.0\n"
-    "allow_anonymous true\n"
-)
-
 
 def parse_platformio_envs(path: Path) -> tuple[list[str], dict[str, str]]:
     envs: list[str] = []
@@ -177,38 +167,29 @@ def port_listeners(port: int) -> list[int]:
                 continue
             pids.append(pid)
         return sorted(set(pids))
-
-    # Linux/macOS best-effort: use lsof if available.
-    if shutil.which("lsof"):
-        try:
-            out = subprocess.check_output(
-                ["lsof", "-tiTCP:%d" % port, "-sTCP:LISTEN"],
-                text=True,
-                errors="replace",
-            )
-        except Exception:
-            return []
-        pids: list[int] = []
-        for ln in out.splitlines():
-            try:
-                pids.append(int(ln.strip()))
-            except Exception:
-                pass
-        return sorted(set(pids))
-
     return []
 
 
-def taskkill(pid: int) -> None:
+def taskkill(pid: int) -> bool:
     if pid <= 0:
-        return
+        return True
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except Exception:
-        pass
+        proc = subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return proc.returncode == 0
+    return False
+
+
+def wait_for_port_clear(port: int, timeout_s: float = 2.0) -> bool:
+    deadline = time.time() + max(0.1, timeout_s)
+    while time.time() < deadline:
+        if not port_listeners(port):
+            return True
+        time.sleep(0.1)
+    return not port_listeners(port)
 
 
 def detect_serial_ports() -> list[str]:
@@ -240,13 +221,6 @@ def detect_serial_ports() -> list[str]:
                 ports = [ln.strip() for ln in out.splitlines() if ln.strip()]
             except Exception:
                 ports = []
-        else:
-            devs = []
-            devs.extend(glob("/dev/ttyUSB*"))
-            devs.extend(glob("/dev/ttyACM*"))
-            devs.extend(glob("/dev/tty.usbserial*"))
-            devs.extend(glob("/dev/tty.SLAB_USBtoUART*"))
-            ports = [d for d in devs if d]
 
     # Deduplicate while preserving order.
     seen = set()
@@ -293,14 +267,6 @@ def current_wifi_ssid() -> str:
         except Exception:
             return ""
         return ""
-    if shutil.which("nmcli"):
-        try:
-            out = subprocess.check_output(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], text=True, errors="replace")
-            for ln in out.splitlines():
-                if ln.startswith("yes:"):
-                    return ln.split(":", 1)[1].strip()
-        except Exception:
-            return ""
     return ""
 
 
@@ -434,11 +400,9 @@ class LauncherApp:
         self.service_bridge_var = StringVar(value="(unknown)")
         self.service_ngrok_var = StringVar(value="(unknown)")
         self.service_mosquitto_var = StringVar(value="(unknown)")
-        self.service_mosquitto_listener_var = StringVar(value="(unknown)")
         self.install_action_var = StringVar(value="Ready")
         self.busy_var = StringVar(value="Idle")
         self._busy_count = 0
-        self._busy_bar: ttk.Progressbar | None = None
         self._btn_setup_deps: ttk.Button | None = None
         self._btn_install_pio: ttk.Button | None = None
         self._btn_install_ngrok: ttk.Button | None = None
@@ -853,38 +817,21 @@ class LauncherApp:
         self._btn_mosquitto_toggle = ttk.Button(mqtt_actions, text="Start", command=self.toggle_mosquitto_service)
         self._btn_mosquitto_toggle.grid(row=0, column=0, sticky="w")
         ttk.Button(mqtt_actions, text="Restart", command=self.restart_mosquitto_service).grid(row=0, column=1, sticky="w", padx=(6, 0))
-        ttk.Button(mqtt_actions, text="Automatic", command=lambda: self.set_mosquitto_startup("automatic")).grid(row=0, column=2, sticky="w", padx=(10, 0))
-        ttk.Button(mqtt_actions, text="Manual", command=lambda: self.set_mosquitto_startup("manual")).grid(row=0, column=3, sticky="w", padx=(6, 0))
-        ttk.Button(mqtt_actions, text="Disabled", command=lambda: self.set_mosquitto_startup("disabled")).grid(row=0, column=4, sticky="w", padx=(6, 0))
-
-        r += 1
-        ttk.Label(table, text="Mosquitto Listener").grid(row=r, column=0, sticky="w", pady=(2, 0))
-        ttk.Label(table, textvariable=self.service_mosquitto_listener_var).grid(row=r, column=1, sticky="w", pady=(2, 0))
-        listener_actions = ttk.Frame(table)
-        listener_actions.grid(row=r, column=2, columnspan=2, sticky="w", padx=(8, 0), pady=(2, 0))
-        ttk.Button(listener_actions, text="LAN 1883", command=self.enable_mosquitto_lan_listener).grid(row=0, column=0, sticky="w")
-        ttk.Button(listener_actions, text="Local only", command=self.disable_mosquitto_lan_listener).grid(row=0, column=1, sticky="w", padx=(6, 0))
 
         action = ttk.LabelFrame(install_tab, text="Action Log", padding=10)
         action.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         action.columnconfigure(0, weight=1)
         ttk.Label(action, textvariable=self.install_action_var).grid(row=0, column=0, sticky="w")
         ttk.Label(action, textvariable=self.busy_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        self._busy_bar = ttk.Progressbar(action, mode="indeterminate")
-        self._busy_bar.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
     def _begin_busy(self, label: str) -> None:
         self._busy_count += 1
         self.busy_var.set(f"Working: {label}")
-        if self._busy_bar is not None:
-            self._busy_bar.start(10)
 
     def _end_busy(self) -> None:
         self._busy_count = max(0, self._busy_count - 1)
         if self._busy_count == 0:
             self.busy_var.set("Idle")
-            if self._busy_bar is not None:
-                self._busy_bar.stop()
 
     def _venv_python(self) -> Path:
         # Launcher is intended to be started by .venv pythonw, but don't assume.
@@ -934,6 +881,67 @@ class LauncherApp:
         ts = time.strftime("%Y%m%d-%H%M%S")
         return LOG_DIR / f"{name}-{ts}.log"
 
+    def _mqtt_broker_host(self) -> str:
+        broker = (self.env.get("MQTT_BROKER", "") or "").strip()
+        if broker:
+            return broker
+        return (self.env.get("FW_MQTT_BROKER", "") or "").strip()
+
+    def _local_host_aliases(self) -> set[str]:
+        aliases = {"127.0.0.1", "localhost", "::1"}
+        try:
+            aliases.add(socket.gethostname().strip().lower())
+        except Exception:
+            pass
+        try:
+            aliases.add(socket.getfqdn().strip().lower())
+        except Exception:
+            pass
+        ip = local_ip().strip()
+        if ip:
+            aliases.add(ip)
+        try:
+            host, _, addrs = socket.gethostbyname_ex(socket.gethostname())
+            if host:
+                aliases.add(host.strip().lower())
+            for addr in addrs:
+                if addr:
+                    aliases.add(addr.strip())
+        except Exception:
+            pass
+        return {a for a in aliases if a}
+
+    def _mqtt_uses_local_broker(self) -> bool:
+        broker = self._mqtt_broker_host().strip()
+        if not broker:
+            return False
+        return broker.lower() in self._local_host_aliases()
+
+    def _ensure_local_mosquitto_running(self) -> bool:
+        if not self._mqtt_uses_local_broker():
+            return True
+
+        state, _ = self._query_mosquitto_service()
+        if state.startswith("Running"):
+            return True
+
+        self.start_mosquitto_service()
+        time.sleep(0.8)
+        state, _ = self._query_mosquitto_service()
+        if state.startswith("Running"):
+            return True
+
+        broker = self._mqtt_broker_host() or "localhost"
+        messagebox.showerror(
+            "Mosquitto not running",
+            (
+                "Launcher is configured to use a local MQTT broker "
+                f"({broker}), but the Mosquitto service is not running.\n"
+                "Start or allow the Mosquitto service first, then try Start again."
+            ),
+        )
+        return False
+
     def start(self) -> None:
         if not ENV_PATH.exists():
             messagebox.showerror("Missing .env", f"Missing {ENV_PATH}\nCreate it from .env.example first.")
@@ -953,7 +961,7 @@ class LauncherApp:
         except Exception:
             messagebox.showerror(
                 "Missing deps",
-                "Python deps missing in .venv.\nRun:\n  Windows: tools\\line_bridge\\run.cmd\n  Linux:   tools/line_bridge/run.sh\nOr install manually:\n  python -m pip install -r requirements.txt",
+                "Python deps missing in .venv.\nRun:\n  Windows: tools\\line_bridge\\run.cmd\nOr install manually:\n  python -m pip install -r requirements.txt",
             )
             return
 
@@ -974,6 +982,9 @@ class LauncherApp:
                 "Missing ngrok authtoken",
                 "NGROK_AUTHTOKEN is empty and no authtoken found in ngrok config.\nSave token in Config tab first.",
             )
+            return
+
+        if not self._ensure_local_mosquitto_running():
             return
 
         # Free port (best effort)
@@ -1023,13 +1034,21 @@ class LauncherApp:
         self.ngrok_proc = None
         for pid in port_listeners(4040):
             taskkill(pid)
+        self._kill_remaining_port_listeners(4040, "ngrok")
+        wait_for_port_clear(4040, timeout_s=2.0)
 
         for pid in port_listeners(self.http_port):
             taskkill(pid)
+        self._kill_remaining_port_listeners(self.http_port, "Bridge")
+        wait_for_port_clear(self.http_port, timeout_s=2.0)
 
         if os.name == "nt":
             subprocess.run(["taskkill", "/IM", "ngrok.exe", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.status_var.set("Stopped")
+        self.health_var.set("Health: (not reachable)")
+        self.ngrok_var.set("ngrok: (not reachable)")
+        self.webhook_var.set("Webhook: (unknown)")
+        self.refresh_runtime_services_status()
 
     def _tick(self) -> None:
         # Health
@@ -1175,6 +1194,54 @@ class LauncherApp:
         except Exception as e:
             messagebox.showerror("Run as Admin", f"Unable to relaunch as Administrator.\n{e}")
 
+    def _run_elevated_process(self, exe: str, args: list[str]) -> bool:
+        if os.name != "nt":
+            return False
+        quoted: list[str] = []
+        for a in args:
+            q = str(a).replace("'", "''")
+            quoted.append("'" + q + "'")
+        ps_args = ", ".join(quoted)
+        script = (
+            f"$p = Start-Process -FilePath '{exe}' -ArgumentList @({ps_args}) "
+            "-Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **hidden_proc_kwargs(),
+            )
+            return proc.returncode == 0
+        except Exception:
+            return False
+
+    def _kill_pid_elevated(self, pid: int) -> bool:
+        if pid <= 0:
+            return True
+        return self._run_elevated_process("taskkill.exe", ["/PID", str(pid), "/T", "/F"])
+
+    def _kill_remaining_port_listeners(self, port: int, label: str) -> bool:
+        remaining = port_listeners(port)
+        if not remaining:
+            return True
+        if self.is_windows_admin():
+            for pid in remaining:
+                taskkill(pid)
+            return wait_for_port_clear(port, timeout_s=2.0)
+        ask = messagebox.askyesno(
+            "Administrator Required",
+            f"{label} is still running on port {port}.\nStop it with Administrator permission now?",
+        )
+        if not ask:
+            return False
+        ok = True
+        for pid in remaining:
+            ok = self._kill_pid_elevated(pid) and ok
+        wait_for_port_clear(port, timeout_s=2.0)
+        return ok and not port_listeners(port)
+
     def refresh_install_checks(self) -> None:
         host_py = self._resolved_host_python_path()
         self.check_python_var.set("OK" if host_py else "Missing")
@@ -1215,14 +1282,7 @@ class LauncherApp:
             messagebox.showerror("Python", "Python path not found.")
             return
         p = Path(py_path)
-        if os.name == "nt":
-            subprocess.Popen(["explorer", "/select,", str(p)])
-            return
-        folder = p.parent
-        if shutil.which("xdg-open"):
-            subprocess.Popen(["xdg-open", str(folder)])
-            return
-        messagebox.showinfo("Python", str(folder))
+        subprocess.Popen(["explorer", "/select,", str(p)])
 
     def _set_install_button_state(self, btn: ttk.Button | None, installed: bool, base_label: str) -> None:
         if btn is None:
@@ -1254,7 +1314,6 @@ class LauncherApp:
             self.service_mosquitto_var.set("Not found")
         else:
             self.service_mosquitto_var.set(f"{state} | {startup}")
-        self.service_mosquitto_listener_var.set(self._query_mosquitto_listener_mode())
         self._update_service_toggle_labels()
 
     def _update_service_toggle_labels(self) -> None:
@@ -1269,101 +1328,9 @@ class LauncherApp:
             self._btn_mosquitto_toggle.configure(text="Stop" if mosq_running else "Start")
 
     def _query_mosquitto_service(self) -> tuple[str, str]:
-        if os.name == "nt":
-            return self._query_windows_service("mosquitto")
-        if os.name == "posix":
-            return self._query_linux_service("mosquitto")
-        return ("Unsupported", "Unsupported")
-
-    def _query_mosquitto_listener_mode(self) -> str:
-        if os.name != "posix":
-            return "N/A"
-        if not shutil.which("ss"):
-            return "Unknown (ss missing)"
-        try:
-            out = subprocess.check_output(
-                ["ss", "-ltnH"],
-                text=True,
-                errors="replace",
-                stderr=subprocess.STDOUT,
-            )
-        except Exception:
-            return "Unknown"
-
-        has_1883 = False
-        has_local = False
-        has_lan = False
-        for line in out.splitlines():
-            if ":1883" not in line:
-                continue
-            has_1883 = True
-            if "127.0.0.1:1883" in line or "[::1]:1883" in line:
-                has_local = True
-            if "0.0.0.0:1883" in line or "[::]:1883" in line or "*:1883" in line:
-                has_lan = True
-
-        if has_lan:
-            return "LAN (0.0.0.0:1883)"
-        if has_local:
-            return "Localhost only (127.0.0.1:1883)"
-        if has_1883:
-            return "Custom bind on 1883"
-        return "Not listening on 1883"
-
-    def _query_linux_service(self, name: str) -> tuple[str, str]:
-        if os.name != "posix":
+        if os.name != "nt":
             return ("Unsupported", "Unsupported")
-        if not shutil.which("systemctl"):
-            return ("Unsupported", "No systemctl")
-        try:
-            out = subprocess.check_output(
-                ["systemctl", "show", name, "--no-pager", "--property=LoadState,ActiveState,UnitFileState"],
-                text=True,
-                errors="replace",
-                stderr=subprocess.STDOUT,
-            )
-        except subprocess.CalledProcessError as e:
-            msg = (e.output or "").strip().lower()
-            if "not-found" in msg or "could not be found" in msg:
-                return ("Not found", "Unknown")
-            return ("Query failed", "Unknown")
-        except Exception:
-            return ("Query failed", "Unknown")
-
-        props: dict[str, str] = {}
-        for line in out.splitlines():
-            if "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            props[k.strip()] = v.strip()
-
-        if props.get("LoadState", "") == "not-found":
-            return ("Not found", "Unknown")
-
-        active = props.get("ActiveState", "").strip().lower()
-        if active == "active":
-            state = "Running"
-        elif active in ("inactive", "deactivating"):
-            state = "Stopped"
-        elif active == "failed":
-            state = "Failed"
-        elif active:
-            state = active.capitalize()
-        else:
-            state = "Unknown"
-
-        unit_state = props.get("UnitFileState", "").strip().lower()
-        if unit_state.startswith("enabled"):
-            startup = "Automatic"
-        elif unit_state == "masked":
-            startup = "Disabled"
-        elif unit_state in ("disabled", "static", "indirect"):
-            startup = "Manual"
-        elif unit_state:
-            startup = unit_state.capitalize()
-        else:
-            startup = "Unknown"
-        return (state, startup)
+        return self._query_windows_service("mosquitto")
 
     def _query_windows_service(self, name: str) -> tuple[str, str]:
         if os.name != "nt":
@@ -1417,12 +1384,26 @@ class LauncherApp:
             messagebox.showerror("Windows only", "Mosquitto service control is available on Windows only.")
             return
         try:
-            # If starting from disabled state, switch to manual first.
             if action_name.lower().strip() == "start":
                 try:
                     qc = subprocess.check_output(["sc.exe", "qc", "mosquitto"], text=True, errors="replace", stderr=subprocess.STDOUT)
                     if "START_TYPE" in qc and "DISABLED" in qc:
-                        subprocess.check_output(["sc.exe", "config", "mosquitto", "start= demand"], text=True, errors="replace", stderr=subprocess.STDOUT)
+                        ask = messagebox.askyesno(
+                            "Mosquitto disabled",
+                            (
+                                "Mosquitto service is disabled.\n"
+                                "Change it to Manual startup so Start can continue?"
+                            ),
+                        )
+                        if not ask:
+                            self.install_action_var.set("Start: mosquitto canceled (service disabled)")
+                            return
+                        subprocess.check_output(
+                            ["sc.exe", "config", "mosquitto", "start= demand"],
+                            text=True,
+                            errors="replace",
+                            stderr=subprocess.STDOUT,
+                        )
                 except Exception:
                     pass
 
@@ -1454,161 +1435,6 @@ class LauncherApp:
             messagebox.showerror("Mosquitto service", f"{action_name} failed.\n{e}")
         finally:
             self.refresh_runtime_services_status()
-
-    def _run_linux_systemctl(self, args: list[str], action_name: str) -> bool:
-        if os.name != "posix":
-            return False
-        if not shutil.which("systemctl"):
-            messagebox.showerror("Mosquitto service", "systemctl not found on this Linux system.")
-            return False
-
-        cmd = ["systemctl"] + args
-        try:
-            out = subprocess.check_output(cmd, text=True, errors="replace", stderr=subprocess.STDOUT)
-            self.install_action_var.set(f"{action_name}: mosquitto")
-            if out.strip():
-                self.install_action_var.set(f"{action_name}: mosquitto ({out.splitlines()[-1].strip()})")
-            return True
-        except subprocess.CalledProcessError as e:
-            msg = (e.output or "").strip()
-            low = msg.lower()
-            needs_auth = (
-                "access denied" in low
-                or "permission denied" in low
-                or "interactive authentication required" in low
-                or "authentication is required" in low
-            )
-
-            if needs_auth and shutil.which("pkexec"):
-                try:
-                    out = subprocess.check_output(
-                        ["pkexec", "systemctl"] + args,
-                        text=True,
-                        errors="replace",
-                        stderr=subprocess.STDOUT,
-                    )
-                    self.install_action_var.set(f"{action_name}: mosquitto (elevated)")
-                    if out.strip():
-                        self.install_action_var.set(
-                            f"{action_name}: mosquitto ({out.splitlines()[-1].strip()})"
-                        )
-                    return True
-                except subprocess.CalledProcessError as pe:
-                    msg = (pe.output or "").strip() or str(pe)
-                except Exception as pe:
-                    msg = str(pe)
-
-            manual = "sudo " + " ".join(cmd)
-            install_hint = ""
-            if "could not be found" in low or "not be found" in low or "not-found" in low:
-                install_hint = "\n\nInstall first:\nsudo apt-get install -y mosquitto"
-            messagebox.showerror(
-                "Mosquitto service",
-                f"{action_name} failed.\n{msg or e}\n\nTry in terminal:\n{manual}{install_hint}",
-            )
-            return False
-        except Exception as e:
-            messagebox.showerror("Mosquitto service", f"{action_name} failed.\n{e}")
-            return False
-
-    def _run_linux_mosquitto_sequence(self, steps: list[tuple[list[str], str]]) -> None:
-        if os.name != "posix":
-            return
-        try:
-            for args, action_name in steps:
-                if not self._run_linux_systemctl(args, action_name):
-                    return
-        finally:
-            self.refresh_runtime_services_status()
-
-    def _run_linux_command_with_elevation(self, cmd: list[str], action_name: str) -> bool:
-        if os.name != "posix":
-            return False
-        try:
-            out = subprocess.check_output(
-                cmd,
-                text=True,
-                errors="replace",
-                stderr=subprocess.STDOUT,
-            )
-            self.install_action_var.set(action_name)
-            if out.strip():
-                self.install_action_var.set(f"{action_name} ({out.splitlines()[-1].strip()})")
-            return True
-        except subprocess.CalledProcessError as e:
-            msg = (e.output or "").strip()
-            if shutil.which("pkexec"):
-                try:
-                    out = subprocess.check_output(
-                        ["pkexec"] + cmd,
-                        text=True,
-                        errors="replace",
-                        stderr=subprocess.STDOUT,
-                    )
-                    self.install_action_var.set(f"{action_name} (elevated)")
-                    if out.strip():
-                        self.install_action_var.set(
-                            f"{action_name} ({out.splitlines()[-1].strip()})"
-                        )
-                    return True
-                except subprocess.CalledProcessError as pe:
-                    msg = (pe.output or "").strip() or str(pe)
-                except Exception as pe:
-                    msg = str(pe)
-
-            manual_cmd = "sudo " + " ".join(shlex.quote(str(x)) for x in cmd)
-            messagebox.showerror(
-                "Mosquitto listener",
-                f"{action_name} failed.\n{msg or e}\n\nTry in terminal:\n{manual_cmd}",
-            )
-            return False
-        except Exception as e:
-            messagebox.showerror("Mosquitto listener", f"{action_name} failed.\n{e}")
-            return False
-
-    def _configure_mosquitto_listener_linux(self, lan_enabled: bool) -> None:
-        if os.name != "posix":
-            messagebox.showerror("Mosquitto listener", "This action is available on Linux only.")
-            return
-
-        if not shutil.which("systemctl"):
-            messagebox.showerror("Mosquitto listener", "systemctl not found on this Linux system.")
-            return
-
-        conf_path = str(MOSQUITTO_LAN_CONF_PATH)
-        action_name = "Set mosquitto LAN listener" if lan_enabled else "Set mosquitto localhost listener"
-        tmp_path: Path | None = None
-        try:
-            if lan_enabled:
-                tmp_path = LOG_DIR / "mosquitto-lan.conf.tmp"
-                tmp_path.write_text(MOSQUITTO_LAN_CONF_TEXT, encoding="utf-8")
-                cmd = ["install", "-m", "644", str(tmp_path), conf_path]
-            else:
-                cmd = ["rm", "-f", conf_path]
-
-            if not self._run_linux_command_with_elevation(cmd, action_name):
-                return
-
-            # Restart broker so new bind mode applies immediately.
-            self._run_linux_mosquitto_sequence([(["restart", "mosquitto"], "Restart")])
-            self.install_action_var.set(
-                "Mosquitto listener: LAN 1883 enabled"
-                if lan_enabled
-                else "Mosquitto listener: localhost-only"
-            )
-        finally:
-            if tmp_path is not None:
-                try:
-                    tmp_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
-            self.refresh_runtime_services_status()
-
-    def enable_mosquitto_lan_listener(self) -> None:
-        self._configure_mosquitto_listener_linux(lan_enabled=True)
-
-    def disable_mosquitto_lan_listener(self) -> None:
-        self._configure_mosquitto_listener_linux(lan_enabled=False)
 
     def _run_sc_mosquitto_elevated(self, args: list[str], action_name: str) -> bool:
         if os.name != "nt":
@@ -1644,22 +1470,11 @@ class LauncherApp:
         if os.name == "nt":
             self._run_sc_mosquitto(["start", "mosquitto"], "Start")
             return
-        if os.name == "posix":
-            _, startup = self._query_linux_service("mosquitto")
-            steps: list[tuple[list[str], str]] = []
-            if startup == "Disabled":
-                steps.append((["unmask", "mosquitto"], "Unmask"))
-            steps.append((["start", "mosquitto"], "Start"))
-            self._run_linux_mosquitto_sequence(steps)
-            return
         messagebox.showerror("Mosquitto service", "Unsupported OS for mosquitto service control.")
 
     def stop_mosquitto_service(self) -> None:
         if os.name == "nt":
             self._run_sc_mosquitto(["stop", "mosquitto"], "Stop")
-            return
-        if os.name == "posix":
-            self._run_linux_mosquitto_sequence([(["stop", "mosquitto"], "Stop")])
             return
         messagebox.showerror("Mosquitto service", "Unsupported OS for mosquitto service control.")
 
@@ -1668,45 +1483,6 @@ class LauncherApp:
             self.stop_mosquitto_service()
             time.sleep(0.5)
             self.start_mosquitto_service()
-            return
-        if os.name == "posix":
-            _, startup = self._query_linux_service("mosquitto")
-            steps: list[tuple[list[str], str]] = []
-            if startup == "Disabled":
-                steps.append((["unmask", "mosquitto"], "Unmask"))
-            steps.append((["restart", "mosquitto"], "Restart"))
-            self._run_linux_mosquitto_sequence(steps)
-            return
-        messagebox.showerror("Mosquitto service", "Unsupported OS for mosquitto service control.")
-
-    def set_mosquitto_startup(self, mode: str) -> None:
-        normalized = mode.lower().strip()
-        if os.name == "nt":
-            mapping = {"automatic": "auto", "manual": "demand", "disabled": "disabled"}
-            m = mapping.get(normalized)
-            if not m:
-                return
-            self._run_sc_mosquitto(["config", "mosquitto", f"start= {m}"], f"Set startup {mode}")
-            return
-        if os.name == "posix":
-            steps: list[tuple[list[str], str]] = []
-            if normalized == "automatic":
-                steps = [
-                    (["unmask", "mosquitto"], "Unmask"),
-                    (["enable", "mosquitto"], "Set startup automatic"),
-                ]
-            elif normalized == "manual":
-                steps = [
-                    (["unmask", "mosquitto"], "Unmask"),
-                    (["disable", "mosquitto"], "Set startup manual"),
-                ]
-            elif normalized == "disabled":
-                steps = [
-                    (["disable", "--now", "mosquitto"], "Disable now"),
-                    (["mask", "mosquitto"], "Set startup disabled"),
-                ]
-            if steps:
-                self._run_linux_mosquitto_sequence(steps)
             return
         messagebox.showerror("Mosquitto service", "Unsupported OS for mosquitto service control.")
 
@@ -1742,8 +1518,13 @@ class LauncherApp:
     def stop_bridge_only(self) -> None:
         if self.bridge_proc is not None and self.bridge_proc.poll() is None:
             taskkill(self.bridge_proc.pid)
+        for pid in port_listeners(self.http_port):
+            taskkill(pid)
+        self._kill_remaining_port_listeners(self.http_port, "Bridge")
+        wait_for_port_clear(self.http_port, timeout_s=2.0)
         self.bridge_proc = None
         self.install_action_var.set("Bridge stopped")
+        self.health_var.set("Health: (not reachable)")
         self.refresh_runtime_services_status()
 
     def restart_bridge_only(self) -> None:
@@ -1799,9 +1580,13 @@ class LauncherApp:
         self.ngrok_proc = None
         for pid in port_listeners(4040):
             taskkill(pid)
+        self._kill_remaining_port_listeners(4040, "ngrok")
+        wait_for_port_clear(4040, timeout_s=2.0)
         if os.name == "nt":
             subprocess.run(["taskkill", "/IM", "ngrok.exe", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.install_action_var.set("ngrok stopped")
+        self.ngrok_var.set("ngrok: (not reachable)")
+        self.webhook_var.set("Webhook: (unknown)")
         self.refresh_runtime_services_status()
 
     def restart_ngrok_only(self) -> None:
@@ -1875,22 +1660,11 @@ class LauncherApp:
         self._run_job_async("Setup venv + deps", cmds, cwd=ROOT)
 
     def quick_setup_all(self) -> None:
-        if os.name == "nt":
-            setup_cmd = PROJECT_ROOT / "scripts" / "setup.cmd"
-            if not setup_cmd.exists():
-                messagebox.showerror("Missing setup script", f"Missing file: {setup_cmd}")
-                return
-            self._run_job_async("Quick Setup", [["cmd", "/c", str(setup_cmd)]], cwd=PROJECT_ROOT)
+        setup_cmd = PROJECT_ROOT / "scripts" / "setup.cmd"
+        if not setup_cmd.exists():
+            messagebox.showerror("Missing setup script", f"Missing file: {setup_cmd}")
             return
-
-        setup_sh = PROJECT_ROOT / "scripts" / "setup.sh"
-        if not setup_sh.exists():
-            messagebox.showerror("Missing setup script", f"Missing file: {setup_sh}")
-            return
-        if shutil.which("bash"):
-            self._run_job_async("Quick Setup", [["bash", str(setup_sh)]], cwd=PROJECT_ROOT)
-            return
-        messagebox.showerror("bash missing", "Cannot run scripts/setup.sh because 'bash' is not available on PATH.")
+        self._run_job_async("Quick Setup", [["cmd", "/c", str(setup_cmd)]], cwd=PROJECT_ROOT)
 
     def install_platformio_core(self) -> None:
         py = self._host_python_cmd()

@@ -13,41 +13,41 @@ namespace ApplicationLogicLayer {
 
 class EventCollector {
 public:
-  void begin(); // Initializes I2C, sensors, keypad, and display modules. Params: none.
+  void begin(); // เริ่มต้น I2C, เซนเซอร์, คีย์แพด และจอแสดงผล
 
-  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad first, then sensors/serial, and emits first detected event; keypad edits consume the tick before sensors run. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollKeypad(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad and emits an event when input completes. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollSensorsOrSerial(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls manual buttons first, then sensors, and emits the next detected event. Params: nowMs=current timestamp in ms, out=event output.
+  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านอินพุตตามลำดับหลัก (keypad ก่อน แล้วปุ่ม/เซนเซอร์) และคืนอีเวนต์แรกที่พบ
+  bool pollKeypad(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านคีย์แพดและคืนอีเวนต์เมื่อมีเหตุการณ์สำคัญจากการกดปุ่ม
+  bool pollSensorsOrSerial(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านปุ่ม manual ก่อน แล้วอ่านเซนเซอร์เพื่อคืนอีเวนต์ถัดไป
 
-  bool isDoorOpen() const; // Returns current debounced door-open state. Params: none.
-  bool isWindowOpen() const; // Returns current debounced window-open state. Params: none.
+  bool isDoorOpen() const; // คืนค่าสถานะประตูเปิดแบบผ่านดีบาวซ์แล้ว
+  bool isWindowOpen() const; // คืนค่าสถานะหน้าต่างเปิดแบบผ่านดีบาวซ์แล้ว
 
   void updateDisplay(uint32_t nowMs,
                      bool doorLocked,
                      bool doorOpen,
                      bool countdownActive,
                      uint32_t countdownDeadlineMs,
-                     uint32_t countdownWarnBeforeMs); // Updates OLED with lock/open state and countdown info. Params: nowMs=current timestamp in ms, doorLocked=door lock status, doorOpen=door open status, countdownActive=whether countdown is active, countdownDeadlineMs=countdown end time, countdownWarnBeforeMs=warning threshold.
+                     uint32_t countdownWarnBeforeMs); // อัปเดตข้อมูลที่จอ OLED ต้องใช้แสดง (สถานะประตูและนับถอยหลัง)
 
 private:
-  bool pollManualButtons_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls local door/window toggle buttons with debounce and emits manual toggle event. Params: nowMs=current timestamp in ms, out=event output.
+  bool pollManualButtons_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านปุ่ม toggle บนบอร์ดพร้อมดีบาวซ์และปล่อยอีเวนต์ manual
   bool pollManualButton_(uint8_t pin,
                          uint32_t nowMs,
                          bool& lastRawPressed,
                          bool& stablePressed,
                          uint32_t& lastChangeMs,
                          ConfigurationSharedTypes::EventType pressEvent,
-                         ConfigurationSharedTypes::Event& out); // Polls one local manual button using edge debounce and emits event on stable press. Params: pin=GPIO number, nowMs=current timestamp in ms, lastRawPressed=raw input state cache, stablePressed=debounced state cache, lastChangeMs=last edge time, pressEvent=event to emit on press, out=event output.
+                         ConfigurationSharedTypes::Event& out); // อ่านปุ่ม local 1 ตัวด้วย edge debounce แล้วปล่อยอีเวนต์เมื่อกดค้างเสถียร
 
-  HardwareAbstractionLayer::Sensors sensors_;
-  HardwareAbstractionLayer::KeypadController keypad_;
-  HardwareAbstractionLayer::DisplayManager display_;
-  bool doorToggleLastRawPressed_ = false;
-  bool doorToggleStablePressed_ = false;
-  uint32_t doorToggleLastChangeMs_ = 0;
-  bool windowToggleLastRawPressed_ = false;
-  bool windowToggleStablePressed_ = false;
-  uint32_t windowToggleLastChangeMs_ = 0;
+  HardwareAbstractionLayer::Sensors sensors_; // โมดูลอ่านเซนเซอร์ทั้งหมด
+  HardwareAbstractionLayer::KeypadController keypad_; // โมดูลจัดการคีย์แพด
+  HardwareAbstractionLayer::DisplayManager display_; // โมดูลแสดงผล OLED
+  bool doorToggleLastRawPressed_ = false; // ค่า raw ล่าสุดของปุ่ม toggle ประตู
+  bool doorToggleStablePressed_ = false; // ค่าปุ่ม toggle ประตูหลังดีบาวซ์
+  uint32_t doorToggleLastChangeMs_ = 0; // เวลาที่ปุ่ม toggle ประตูเปลี่ยนสถานะล่าสุด
+  bool windowToggleLastRawPressed_ = false; // ค่า raw ล่าสุดของปุ่ม toggle หน้าต่าง
+  bool windowToggleStablePressed_ = false; // ค่าปุ่ม toggle หน้าต่างหลังดีบาวซ์
+  uint32_t windowToggleLastChangeMs_ = 0; // เวลาที่ปุ่ม toggle หน้าต่างเปลี่ยนสถานะล่าสุด
 };
 
 } // namespace ApplicationLogicLayer

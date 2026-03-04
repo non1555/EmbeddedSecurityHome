@@ -9,50 +9,50 @@ namespace HardwareAbstractionLayer {
 
 class Sensors {
 public:
-  void begin(); // Initializes GPIO directions and baseline sensor states. Params: none.
-  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls all inputs in fixed order and emits first event found. Params: nowMs=current timestamp in ms, out=event output.
-  bool isDoorOpen() const; // Returns debounced door reed-open state. Params: none.
-  bool isWindowOpen() const; // Returns debounced window reed-open state. Params: none.
+  void begin(); // ตั้งค่าโหมด GPIO และค่าเริ่มต้นของสถานะเซนเซอร์
+  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านอินพุตทั้งหมดตามลำดับที่กำหนดและส่งอีเวนต์แรกที่พบ
+  bool isDoorOpen() const; // คืนค่าสถานะประตูเปิดแบบผ่านดีบาวซ์แล้ว
+  bool isWindowOpen() const; // คืนค่าสถานะหน้าต่างเปิดแบบผ่านดีบาวซ์แล้ว
 
 private:
   struct ReedState {
-    bool stableOpen = false;
-    bool lastRaw = false;
-    bool firedOpen = false;
-    uint32_t lastFlipMs = 0;
+    bool stableOpen = false; // สถานะเปิด/ปิดที่ผ่านดีบาวซ์แล้ว
+    bool lastRaw = false; // ค่าอ่านดิบล่าสุดจากพิน
+    bool firedOpen = false; // เคยปล่อยอีเวนต์ "เปิด" ไปแล้วในรอบนี้หรือยัง
+    uint32_t lastFlipMs = 0; // เวลาที่ค่า raw เปลี่ยนล่าสุด
   };
 
   struct UltrasonicState {
-    uint8_t trigPin = ConfigurationSharedTypes::Config::PIN_UNUSED;
-    uint8_t echoPin = ConfigurationSharedTypes::Config::PIN_UNUSED;
-    bool inside = false;
-    uint32_t nextSampleMs = 0;
-    uint32_t lastFireMs = 0;
+    uint8_t trigPin = ConfigurationSharedTypes::Config::PIN_UNUSED; // พิน trigger ของช่องอัลตราโซนิก
+    uint8_t echoPin = ConfigurationSharedTypes::Config::PIN_UNUSED; // พิน echo ของช่องอัลตราโซนิก
+    bool inside = false; // วัตถุยังอยู่ในโซนตรวจจับหรือไม่
+    uint32_t nextSampleMs = 0; // เวลาถัดไปที่อนุญาตให้อ่านช่องนี้
+    uint32_t lastFireMs = 0; // เวลาล่าสุดที่ปล่อยอีเวนต์จากช่องนี้
   };
 
-  ReedState doorReed_{};
-  ReedState windowReed_{};
+  ReedState doorReed_{}; // สถานะรีดสวิตช์ประตู
+  ReedState windowReed_{}; // สถานะรีดสวิตช์หน้าต่าง
 
-  bool pirLast_[3] = {false, false, false};
-  uint32_t pirLastFireMs_[3] = {0, 0, 0};
+  bool pirLast_[3] = {false, false, false}; // ค่า raw ล่าสุดของ PIR ทั้ง 3 ตัว
+  uint32_t pirLastFireMs_[3] = {0, 0, 0}; // เวลาปล่อยอีเวนต์ล่าสุดของ PIR แต่ละตัว
 
-  bool vibLast_ = false;
-  uint32_t vibLastFireMs_ = 0;
+  bool vibLast_ = false; // ค่า raw ล่าสุดของเซนเซอร์สั่น
+  uint32_t vibLastFireMs_ = 0; // เวลาปล่อยอีเวนต์สั่นล่าสุด
 
-  UltrasonicState us_[3]{};
-  uint8_t usRoundRobinIdx_ = 0;
+  UltrasonicState us_[3]{}; // สถานะของอัลตราโซนิกทั้ง 3 ช่อง
+  uint8_t usRoundRobinIdx_ = 0; // index ช่องอัลตราโซนิกที่จะอ่านในรอบถัดไป
 
-  static bool reached_(uint32_t nowMs, uint32_t targetMs); // Checks signed wrap-safe time reach condition. Params: nowMs=current timestamp in ms, targetMs=target time in ms.
-  static bool pinConfigured_(uint8_t pin); // Checks whether pin is valid and not PIN_UNUSED. Params: pin=GPIO number.
-  static uint8_t pirPin_(uint8_t idx); // Maps PIR index to configured GPIO pin. Params: idx=PIR index (0..2).
+  static bool reached_(uint32_t nowMs, uint32_t targetMs); // เช็กเวลาแบบรองรับการ overflow ของ millis()
+  static bool pinConfigured_(uint8_t pin); // เช็กว่าพินถูกตั้งค่าใช้งานจริงและไม่ใช่ PIN_UNUSED
+  static uint8_t pirPin_(uint8_t idx); // แปลงดัชนี PIR (0..2) เป็นหมายเลขพินจริง
 
-  int readUltrasonicCm_(const UltrasonicState& us, uint32_t timeoutUs = ConfigurationSharedTypes::Config::US_ECHO_TIMEOUT_US) const; // Reads ultrasonic distance in cm (returns 999 when no echo in timeout window). Params: us=ultrasonic channel state, timeoutUs=pulse timeout in microseconds.
+  int readUltrasonicCm_(const UltrasonicState& us, uint32_t timeoutUs = ConfigurationSharedTypes::Config::US_ECHO_TIMEOUT_US) const; // อ่านระยะอัลตราโซนิกเป็นเซนติเมตร (คืน 999 เมื่อ timeout)
 
-  bool pollDoor_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls door reed sensor with debounce and edge detection. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollWindow_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls window reed sensor with debounce and edge detection. Params: nowMs=current timestamp in ms, out=event output.
-  bool pollPir_(uint32_t nowMs, uint8_t idx, ConfigurationSharedTypes::Event& out); // Polls one PIR channel with cooldown on rising edge. Params: nowMs=current timestamp in ms, idx=PIR index (0..2), out=event output.
-  bool pollUltrasonic_(uint32_t nowMs, uint8_t idx, ConfigurationSharedTypes::Event& out); // Polls one ultrasonic chokepoint channel with hysteresis/cooldown. Params: nowMs=current timestamp in ms, idx=ultrasonic index (0..2), out=event output.
-  bool pollVibration_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls vibration sensor with cooldown on rising edge. Params: nowMs=current timestamp in ms, out=event output.
+  bool pollDoor_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านรีดสวิตช์ประตูพร้อมดีบาวซ์และตรวจจับขอบสัญญาณ
+  bool pollWindow_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านรีดสวิตช์หน้าต่างพร้อมดีบาวซ์และตรวจจับขอบสัญญาณ
+  bool pollPir_(uint32_t nowMs, uint8_t idx, ConfigurationSharedTypes::Event& out); // อ่าน PIR รายช่องพร้อมคูลดาวน์เมื่อเกิดขอบขาขึ้น
+  bool pollUltrasonic_(uint32_t nowMs, uint8_t idx, ConfigurationSharedTypes::Event& out); // อ่านอัลตราโซนิกรายช่องพร้อม hysteresis และคูลดาวน์
+  bool pollVibration_(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านเซนเซอร์สั่นพร้อมคูลดาวน์เมื่อเกิดขอบขาขึ้น
 };
 
 } // namespace HardwareAbstractionLayer

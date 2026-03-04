@@ -10,40 +10,40 @@ namespace HardwareAbstractionLayer {
 
 class KeypadController {
 public:
-  void begin(); // Initializes keypad scanner state and configured door code. Params: none.
-  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // Polls keypad and emits semantic keypad events. Params: nowMs=current timestamp in ms, out=event output.
-  bool consumeInputActivity(); // Returns whether a non-event keypad edit happened this tick and clears the flag. Params: none.
+  void begin(); // เริ่มต้นสถานะตัวสแกนคีย์แพดและโหลดรหัสประตูที่ตั้งไว้
+  bool poll(uint32_t nowMs, ConfigurationSharedTypes::Event& out); // อ่านคีย์แพดและปล่อยอีเวนต์เชิงความหมายตามปุ่มที่กด
+  bool consumeInputActivity(); // คืนค่าว่ามีการแก้ไขบัฟเฟอร์คีย์แพดใน tick นี้หรือไม่ แล้วเคลียร์แฟลก
 
-  const char* buffer() const; // Returns pointer to current entered PIN buffer. Params: none.
-  uint8_t length() const; // Returns current entered PIN length. Params: none.
-  bool consumeSubmitResult(bool& ok); // Returns latest submit result once and clears flag. Params: ok=output submit pass/fail flag.
+  const char* buffer() const; // คืน pointer ของบัฟเฟอร์ PIN ปัจจุบัน
+  uint8_t length() const; // คืนจำนวนหลัก PIN ที่ป้อนอยู่ตอนนี้
+  bool consumeSubmitResult(bool& ok); // ดึงผล submit ล่าสุดครั้งเดียวแล้วเคลียร์แฟลก
 
 private:
-  char doorCode_[5] = {0, 0, 0, 0, 0};
-  char inputBuffer_[5] = {0, 0, 0, 0, 0};
-  uint8_t inputLength_ = 0;
+  char doorCode_[5] = {0, 0, 0, 0, 0}; // รหัสประตูที่ใช้อ้างอิง (4 หลัก + null)
+  char inputBuffer_[5] = {0, 0, 0, 0, 0}; // บัฟเฟอร์รหัสที่ผู้ใช้กำลังกด
+  uint8_t inputLength_ = 0; // ความยาวข้อมูลใน inputBuffer_ ปัจจุบัน
 
-  bool submitReady_ = false;
-  bool submitOk_ = false;
-  bool inputEdited_ = false;
+  bool submitReady_ = false; // มีผล submit ใหม่พร้อมให้ consumer อ่านหรือไม่
+  bool submitOk_ = false; // ผล submit ล่าสุดถูกต้องหรือไม่
+  bool inputEdited_ = false; // มีการแก้ไขบัฟเฟอร์ใน tick ล่าสุดหรือไม่
 
-  uint8_t scanRow_ = 0;
-  bool waitingRelease_ = false;
-  char lastKey_ = 0;
-  uint32_t lastKeyMs_ = 0;
-  uint8_t ioShadow_ = 0xFF;
+  uint8_t scanRow_ = 0; // แถวที่กำลังสแกนในรอบปัจจุบัน
+  bool waitingRelease_ = false; // รอปล่อยปุ่มก่อนรับคีย์ใหม่หรือไม่
+  char lastKey_ = 0; // คีย์ล่าสุดที่ผ่าน debounce แล้ว
+  uint32_t lastKeyMs_ = 0; // เวลาที่อ่านคีย์ล่าสุด
+  uint8_t ioShadow_ = 0xFF; // เงา bit state ของพอร์ต PCF8574 ล่าสุด
 
-  void clear_(); // Clears entered PIN buffer. Params: none.
-  void setDoorCodeFromBuild_(); // Loads build-time DOOR_CODE or fallback default. Params: none.
-  bool isValidCode_(const char* code) const; // Validates that a code is exactly 4 digits. Params: code=c-string code to validate.
-  bool matchesDoorCode_() const; // Compares entered PIN with configured door code. Params: none.
+  void clear_(); // ล้างบัฟเฟอร์ PIN ที่ป้อนอยู่
+  void setDoorCodeFromBuild_(); // โหลด DOOR_CODE จาก build config หรือใช้ค่าเริ่มต้น
+  bool isValidCode_(const char* code) const; // ตรวจว่ารหัสเป็นเลข 4 หลักถูกฟอร์แมต
+  bool matchesDoorCode_() const; // เปรียบเทียบ PIN ที่กดกับรหัสประตูจริง
 
-  bool writePort_(uint8_t value); // Writes raw byte to keypad I2C expander. Params: value=port bitmask.
-  int readPressedColumn_(); // Reads active column index from keypad matrix or -1. Params: none.
-  bool setRowActive_(uint8_t row); // Drives one row low for scan step. Params: row=row index (0..3).
-  bool setAllRowsHigh_(); // Releases all rows high (idle state). Params: none.
-  char mapKey_(uint8_t row, uint8_t col) const; // Maps row/column to key symbol. Params: row=row index (0..3), col=column index (0..3).
-  char scanKey_(uint32_t nowMs); // Runs one scan cycle with debounce and release gating. Params: nowMs=current timestamp in ms.
+  bool writePort_(uint8_t value); // เขียนค่าดิบ 1 ไบต์ไปยัง I2C expander ของคีย์แพด
+  int readPressedColumn_(); // อ่านคอลัมน์ที่ถูกกดจากเมทริกซ์ (หรือ -1 ถ้าไม่พบ)
+  bool setRowActive_(uint8_t row); // ดึงแถวที่ระบุลง low เพื่อสแกนทีละแถว
+  bool setAllRowsHigh_(); // ปล่อยทุกแถวเป็น high (สถานะ idle)
+  char mapKey_(uint8_t row, uint8_t col) const; // แมปตำแหน่งแถว/คอลัมน์เป็นตัวอักษรปุ่ม
+  char scanKey_(uint32_t nowMs); // รันสแกนคีย์ 1 รอบพร้อม debounce และรอปล่อยปุ่ม
 };
 
 } // namespace HardwareAbstractionLayer

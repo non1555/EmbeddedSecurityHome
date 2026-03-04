@@ -5,6 +5,7 @@
 #include "application_logic_layer/EventCollector.h"
 #include "application_logic_layer/RuleEngine.h"
 #include "configuration_shared_types/Config.h"
+#include "configuration_shared_types/RuntimeStats.h"
 
 namespace ApplicationLogicLayer {
 
@@ -32,6 +33,78 @@ ConfigurationSharedTypes::Mode SystemContext::sanitizeBaseMode_(ConfigurationSha
   return (mode == ConfigurationSharedTypes::Mode::away)
     ? ConfigurationSharedTypes::Mode::away
     : ConfigurationSharedTypes::Mode::disarm;
+}
+
+void SystemContext::serialLogEvent_(const char* path, const ConfigurationSharedTypes::Event& event) {
+  Serial.print("[SERIAL] ");
+  Serial.print(path);
+  Serial.print(" event=");
+  Serial.print(ConfigurationSharedTypes::toString(event.type));
+  Serial.print(" src=");
+  Serial.println(event.src);
+}
+
+void SystemContext::serialLogStateChanges_() {
+  if (!hasLastSerialState_) {
+    lastSerialState_ = state_;
+    hasLastSerialState_ = true;
+    return;
+  }
+
+  const ConfigurationSharedTypes::SystemState& prev = lastSerialState_;
+  const ConfigurationSharedTypes::SystemState& curr = state_;
+  auto printBoolField = [](const char* name, bool value) {
+    Serial.print("[SERIAL] state ");
+    Serial.print(name);
+    Serial.print("=");
+    Serial.println(value ? 1 : 0);
+  };
+
+  if (prev.mode != curr.mode) {
+    Serial.print("[SERIAL] state mode=");
+    Serial.println(ConfigurationSharedTypes::toString(curr.mode));
+  }
+  if (prev.latest_mode != curr.latest_mode) {
+    Serial.print("[SERIAL] state latest_mode=");
+    Serial.println(ConfigurationSharedTypes::toString(curr.latest_mode));
+  }
+  if (prev.level != curr.level) {
+    Serial.print("[SERIAL] state level=");
+    Serial.println(ConfigurationSharedTypes::toString(curr.level));
+  }
+  if (prev.is_night != curr.is_night) {
+    printBoolField("is_night", curr.is_night);
+  }
+  if (prev.failed_attempts != curr.failed_attempts) {
+    Serial.print("[SERIAL] state failed_attempts=");
+    Serial.println(curr.failed_attempts);
+  }
+  if (prev.exit_stage != curr.exit_stage) {
+    Serial.print("[SERIAL] state exit_stage=");
+    Serial.println(curr.exit_stage);
+  }
+  if (prev.door_locked != curr.door_locked) {
+    printBoolField("door_locked", curr.door_locked);
+  }
+  if (prev.window_locked != curr.window_locked) {
+    printBoolField("window_locked", curr.window_locked);
+  }
+  if (prev.door_open != curr.door_open) {
+    printBoolField("door_open", curr.door_open);
+  }
+  if (prev.window_open != curr.window_open) {
+    printBoolField("window_open", curr.window_open);
+  }
+  if (!(prev.door_locked && prev.door_open) &&
+      (curr.door_locked && curr.door_open)) {
+    Serial.println("[SERIAL] alert door_open_while_locked");
+  }
+  if (!(prev.window_locked && prev.window_open) &&
+      (curr.window_locked && curr.window_open)) {
+    Serial.println("[SERIAL] alert window_open_while_locked");
+  }
+
+  lastSerialState_ = state_;
 }
 
 void SystemContext::applyActiveModeFromBase_() {
@@ -91,6 +164,34 @@ bool SystemContext::pollEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& o
 
 bool SystemContext::pollRemoteEvent(uint32_t nowMs, ConfigurationSharedTypes::Event& out) {
   return pollRemoteCommand_(nowMs, out);
+}
+
+void SystemContext::securityTick(uint32_t nowMs,
+                                 RuleEngine& engine,
+                                 QueueHandle_t eventQueue,
+                                 uint8_t maxRemoteEventsPerTick) {
+  ConfigurationSharedTypes::Event event{};
+
+  uint8_t remoteEvents = 0;
+  while (remoteEvents < maxRemoteEventsPerTick && pollRemoteEvent(nowMs, event)) {
+    engine.process(event, *this);
+    serialLogEvent_("remote", event);
+    ++remoteEvents;
+  }
+
+  if (collector_ && collector_->poll(nowMs, event)) {
+    if (xQueueSend(eventQueue, &event, 0) != pdTRUE) {
+      ++ConfigurationSharedTypes::RuntimeStats::securityEventDrops;
+    }
+  }
+
+  while (xQueueReceive(eventQueue, &event, 0) == pdTRUE) {
+    engine.process(event, *this);
+    serialLogEvent_("local", event);
+  }
+
+  updateActuators(nowMs, engine);
+  serialLogStateChanges_();
 }
 
 void SystemContext::applyDecision(const ConfigurationSharedTypes::Event& event,

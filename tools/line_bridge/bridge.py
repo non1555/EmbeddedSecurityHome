@@ -205,6 +205,8 @@ EVENT_LABELS = {
 
 REASON_LABELS = {
     "boot": "System boot",
+    "online": "MQTT connected",
+    "offline": "MQTT disconnected",
     "periodic": "Periodic heartbeat",
     "silence": "Silence requested",
     "keypad_help": "Help requested from keypad",
@@ -241,6 +243,8 @@ REASON_LABELS = {
 }
 
 FLOWCHART_STATUS_NOTIFY_REASONS = {
+    "online",
+    "offline",
     "remote_status",
     "mode_disarm",
     "mode_away",
@@ -443,6 +447,10 @@ def _format_event_notification(obj: Dict[str, Any]) -> Optional[str]:
 
 def _format_status_notification(obj: Dict[str, Any]) -> str:
     reason = _norm_text(obj.get("reason", ""))
+    if reason == "online":
+        return "Board connected to MQTT."
+    if reason == "offline":
+        return "Board disconnected from MQTT."
     if reason == "remote_status":
         return format_mqtt_to_text(MQTT_TOPIC_STATUS, json.dumps(obj))
     if reason == "mode_disarm":

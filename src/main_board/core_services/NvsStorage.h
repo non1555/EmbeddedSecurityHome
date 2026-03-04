@@ -6,14 +6,14 @@ namespace CoreServices {
 
 class NvsStorage {
 public:
-  void begin(); // Opens NVS namespace (Preferences) once. Params: none.
+  void begin(); // เปิด namespace ของ NVS (Preferences) สำหรับใช้งานครั้งแรก
   bool loadModeState(ConfigurationSharedTypes::Mode& outLatestMode,
-                     bool& outIsNight); // Loads persisted base mode and night override flag from NVS. Params: outLatestMode=output base mode (disarm/away), outIsNight=output override flag.
+                     bool& outIsNight); // โหลด latest_mode และ is_night ที่เคยบันทึกจาก NVS
   void saveModeState(ConfigurationSharedTypes::Mode latestMode,
-                     bool isNight); // Persists base mode and night override flag to NVS. Params: latestMode=base mode (disarm/away), isNight=night override flag.
+                     bool isNight); // บันทึก latest_mode และ is_night ลง NVS
 
 private:
-  bool started_ = false;
+  bool started_ = false; // ระบุว่า begin() ถูกเรียกและพร้อมใช้งานแล้วหรือไม่
 };
 
 } // namespace CoreServices

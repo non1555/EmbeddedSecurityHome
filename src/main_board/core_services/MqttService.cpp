@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "configuration_shared_types/Config.h"
 #include "configuration_shared_types/RuntimeStats.h"
 
 #ifndef WIFI_SSID
@@ -95,6 +96,12 @@ void MqttService::begin(QueueHandle_t commandQueue) {
   mqtt_.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt_.setSocketTimeout(MQTT_SOCKET_TIMEOUT_S);
   mqtt_.setCallback(onMqttMessage_);
+
+  const uint8_t ledPin = ConfigurationSharedTypes::Config::PIN_STATUS_LED;
+  if (ledPin != ConfigurationSharedTypes::Config::PIN_UNUSED) {
+    pinMode(ledPin, OUTPUT);
+    setStatusLed_(false);
+  }
 }
 
 void MqttService::loop(uint32_t nowMs) {
@@ -105,6 +112,7 @@ void MqttService::loop(uint32_t nowMs) {
     mqtt_.loop();
     drainPublishQueue_();
   }
+  updateConnectionSignal_(nowMs);
 
   if (reached(nowMs, nextMetricsMs_)) {
     nextMetricsMs_ = nowMs + MQTT_METRICS_PERIOD_MS;
@@ -140,6 +148,42 @@ bool MqttService::enqueue(const ConfigurationSharedTypes::PublishMessage& msg) {
 
 bool MqttService::isConnected() {
   return mqtt_.connected();
+}
+
+void MqttService::setStatusLed_(bool connected) {
+  const uint8_t ledPin = ConfigurationSharedTypes::Config::PIN_STATUS_LED;
+  if (ledPin == ConfigurationSharedTypes::Config::PIN_UNUSED) return;
+
+  const bool activeHigh = ConfigurationSharedTypes::Config::STATUS_LED_ACTIVE_HIGH;
+  const uint8_t level = ((connected && activeHigh) || (!connected && !activeHigh)) ? HIGH : LOW;
+  digitalWrite(ledPin, level);
+}
+
+void MqttService::updateConnectionSignal_(uint32_t nowMs) {
+  const bool rawNow = mqtt_.connected();
+
+  if (!hasRawConnected_) {
+    rawConnected_ = rawNow;
+    hasRawConnected_ = true;
+    rawChangedAtMs_ = nowMs;
+  } else if (rawNow != rawConnected_) {
+    rawConnected_ = rawNow;
+    rawChangedAtMs_ = nowMs;
+  }
+
+  if (!hasStableConnected_) {
+    stableConnected_ = rawConnected_;
+    hasStableConnected_ = true;
+    setStatusLed_(stableConnected_);
+    return;
+  }
+
+  if (stableConnected_ == rawConnected_) return;
+  const uint32_t debounceMs = ConfigurationSharedTypes::Config::MQTT_CONN_DEBOUNCE_MS;
+  if (!reached(nowMs, rawChangedAtMs_ + debounceMs)) return;
+
+  stableConnected_ = rawConnected_;
+  setStatusLed_(stableConnected_);
 }
 
 void MqttService::connectWifi_(uint32_t nowMs) {

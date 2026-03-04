@@ -217,7 +217,7 @@ flowchart TD
         subgraph MQTT_LOOP["MqttTask (10ms)"]
             direction TB
             MQTT_START(("MqttTask Entry")):::loop_node --> MQTT_NOW["Now = millis()"]:::process
-            MQTT_NOW --> MQTT_TICK["context.mqttTick(Now)<br/>WiFi reconnect + MQTT reconnect + mqtt.loop<br/>Process Outgoing MQTT Queue + receive MQTT callback"]:::process
+            MQTT_NOW --> MQTT_TICK["context.mqttTick(Now)<br/>WiFi reconnect + MQTT reconnect + mqtt.loop<br/>Process Outgoing MQTT Queue + receive MQTT callback<br/>Debounced MQTT status LED update"]:::process
             MQTT_TICK -.enqueue incoming cmd.-> CMD_Q
             MQTT_TICK --> MQTT_DELAY(("vTaskDelay(10ms)")):::loop_node
             MQTT_DELAY --> MQTT_START

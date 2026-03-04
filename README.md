@@ -30,6 +30,7 @@ This document serves as the Single Source of Truth for:
 - **Safe Lock Guard:** Door/window lock commands are rejected with a warning if the target is still open.
 - **State Persistence:** Saves critical states (`latest_mode`, `is_night`) to NVS memory for power-loss recovery.
 - **Controller:** `ESP32-WROOM-32` with Wi-Fi + Bluetooth.
+- **Connection Status LED:** Onboard status LED reflects MQTT link state with debounce to avoid flicker during short reconnect jitters.
 
 ## 2. System Diagrams
 
@@ -52,6 +53,7 @@ Live view: [Mermaid Flowchart](https://mermaid.live/edit#pako:eNqtWwlz2sgS_ivzSG
 - **Input Order:** `SecTask` polls keypad first, then local lock/unlock toggle buttons, then the sensor chain.
 - **Serial Monitor Policy:** Serial emits runtime trace only; it no longer accepts control commands or injects security events.
 - **Network Task:** MQTT reconnect and publish handling run in a dedicated low-priority `MqttTask`.
+- **Connection Debounce:** MQTT link state is debounced before updating the onboard status LED (`Config::MQTT_CONN_DEBOUNCE_MS`).
 - **Remote Security Policy:**
   - `arm_night` is only permitted when `latest_mode == Disarm`.
   - `night_off` is only permitted when currently in `Night` mode (reverts to the previous `latest_mode`).
@@ -192,7 +194,7 @@ LINE chat uses a compact rich menu (`Controls`) to send `menu` and open the quic
 ## 8. Project Structure
 
 - `src/main_board/*` : Source code for the primary ESP32 firmware.
-- `scripts/*` : Entry-point command scripts for setup and native test execution.
+- `scripts/*` : Entry-point command scripts for setup and Windows helper tasks.
 - `tools/line_bridge/*` : Source code for the LINE Bridge and UI Launcher.
 - `docs/*` : Documentation hub (Block Diagram, Flowchart, Pin Allocation).
 
@@ -201,7 +203,7 @@ LINE chat uses a compact rich menu (`Controls`) to send `menu` and open the quic
 | File | Interpreter | How it is used |
 | --- | --- | --- |
 | `tools/pio_env.py` | PlatformIO/SCons Python | Auto-loaded by `platformio.ini` via `extra_scripts`; not intended for direct manual run. |
-| `tools/line_bridge/bridge.py` | `tools/line_bridge/.venv` Python | Run the LINE bridge service. Prefer `tools/line_bridge/run.cmd` or `tools/line_bridge/run.sh`. |
+| `tools/line_bridge/bridge.py` | `tools/line_bridge/.venv` Python | Run the LINE bridge service. Prefer `tools/line_bridge/run.cmd`. |
 | `tools/line_bridge/launcher.pyw` | `tools/line_bridge/.venv` Python | Run the desktop launcher UI. Prefer `tools/line_bridge/start-ui.cmd` or `tools/line_bridge/launcher.vbs`. |
 
 ---
