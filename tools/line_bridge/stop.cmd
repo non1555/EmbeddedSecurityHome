@@ -5,7 +5,14 @@ REM Stop bridge + ngrok (best-effort).
 
 set "ROOT=%~dp0"
 set "ENV_FILE=%ROOT%.env"
+set "ENV_SHARED_FILE=%ROOT%.env.shared"
 set "HTTP_PORT=8080"
+
+if not exist "%ENV_FILE%" (
+  if exist "%ENV_SHARED_FILE%" (
+    set "ENV_FILE=%ENV_SHARED_FILE%"
+  )
+)
 
 if exist "%ENV_FILE%" (
   for /f "usebackq tokens=1,2 delims==" %%A in ("%ENV_FILE%") do (

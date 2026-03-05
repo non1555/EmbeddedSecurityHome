@@ -19,6 +19,7 @@ from tkinter import Tk, StringVar, ttk, messagebox, Canvas
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent.parent
 ENV_PATH = ROOT / ".env"
+ENV_SHARED_PATH = ROOT / ".env.shared"
 PLATFORMIO_INI_PATH = PROJECT_ROOT / "platformio.ini"
 NGROK_BUNDLE_DIR = PROJECT_ROOT / "tools" / "ngrok"
 LOG_DIR = ROOT / "logs"
@@ -106,6 +107,20 @@ def read_env(path: Path) -> dict[str, str]:
     return out
 
 
+def load_runtime_env() -> dict[str, str]:
+    out = read_env(ENV_SHARED_PATH)
+    out.update(read_env(ENV_PATH))
+    return out
+
+
+def env_source_label() -> str:
+    if ENV_PATH.exists():
+        return str(ENV_PATH)
+    if ENV_SHARED_PATH.exists():
+        return str(ENV_SHARED_PATH)
+    return f"{ENV_PATH} or {ENV_SHARED_PATH}"
+
+
 def read_env_lines(path: Path) -> list[str]:
     if not path.exists():
         return []
@@ -114,6 +129,20 @@ def read_env_lines(path: Path) -> list[str]:
 
 def write_env_lines(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_runtime_env_lines() -> list[str]:
+    if ENV_PATH.exists():
+        return read_env_lines(ENV_PATH)
+    if ENV_SHARED_PATH.exists():
+        return read_env_lines(ENV_SHARED_PATH)
+    return []
+
+
+def write_runtime_env_lines(lines: list[str]) -> None:
+    # Keep local .env and tracked .env.shared aligned for quick setup/restore.
+    write_env_lines(ENV_PATH, lines)
+    write_env_lines(ENV_SHARED_PATH, lines)
 
 
 def upsert_env_kv(lines: list[str], key: str, value: str) -> list[str]:
@@ -337,7 +366,7 @@ class LauncherApp:
         self._canvas: Canvas | None = None
         self._canvas_window: int | None = None
 
-        self.env = read_env(ENV_PATH)
+        self.env = load_runtime_env()
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
 
         self.bridge_proc: subprocess.Popen | None = None
@@ -943,12 +972,12 @@ class LauncherApp:
         return False
 
     def start(self) -> None:
-        if not ENV_PATH.exists():
-            messagebox.showerror("Missing .env", f"Missing {ENV_PATH}\nCreate it from .env.example first.")
+        if not ENV_PATH.exists() and not ENV_SHARED_PATH.exists():
+            messagebox.showerror("Missing env file", f"Missing {env_source_label()}\nCreate it from .env.example first.")
             return
 
         # Reload env (user may have edited it in UI)
-        self.env = read_env(ENV_PATH)
+        self.env = load_runtime_env()
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
 
         py = self._venv_python()
@@ -1487,10 +1516,10 @@ class LauncherApp:
         messagebox.showerror("Mosquitto service", "Unsupported OS for mosquitto service control.")
 
     def start_bridge_only(self) -> None:
-        if not ENV_PATH.exists():
-            messagebox.showerror("Missing .env", f"Missing {ENV_PATH}\nCreate it from .env.example first.")
+        if not ENV_PATH.exists() and not ENV_SHARED_PATH.exists():
+            messagebox.showerror("Missing env file", f"Missing {env_source_label()}\nCreate it from .env.example first.")
             return
-        self.env = read_env(ENV_PATH)
+        self.env = load_runtime_env()
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
         py = self._venv_python()
         if not py.exists():
@@ -1539,7 +1568,7 @@ class LauncherApp:
             self.start_bridge_only()
 
     def start_ngrok_only(self) -> None:
-        self.env = read_env(ENV_PATH)
+        self.env = load_runtime_env()
         self.http_port = int(self.env.get("HTTP_PORT", "8080") or "8080")
         ngrok_cmd = self._ngrok_base_cmd()
         if not ngrok_cmd:
@@ -1796,7 +1825,7 @@ class LauncherApp:
             messagebox.showerror("Invalid Door Code", "Door code must be exactly 4 digits or empty.")
             return False
 
-        lines = read_env_lines(ENV_PATH)
+        lines = read_runtime_env_lines()
         if not lines:
             lines = []
 
@@ -1837,10 +1866,10 @@ class LauncherApp:
             upload_port = ""
         lines = upsert_env_kv(lines, "FW_UPLOAD_PORT", upload_port)
 
-        write_env_lines(ENV_PATH, lines)
-        self.env = read_env(ENV_PATH)
+        write_runtime_env_lines(lines)
+        self.env = load_runtime_env()
         if notify:
-            messagebox.showinfo("Saved", f"Firmware fields saved to {ENV_PATH}")
+            messagebox.showinfo("Saved", f"Firmware fields saved to {ENV_PATH} and {ENV_SHARED_PATH}")
         return True
 
     def _run_platformio_async(self, args: list[str], success_msg: str, fw_env: str) -> None:
@@ -1967,7 +1996,7 @@ class LauncherApp:
             messagebox.showerror("Invalid HTTP_PORT", "HTTP_PORT must be an integer 1..65535")
             return
 
-        lines = read_env_lines(ENV_PATH)
+        lines = read_runtime_env_lines()
         if not lines:
             # Create a basic file if missing/empty.
             lines = []
@@ -1987,11 +2016,11 @@ class LauncherApp:
             return
         lines = upsert_env_kv(lines, "NGROK_AUTHTOKEN", ngrok_token)
 
-        write_env_lines(ENV_PATH, lines)
+        write_runtime_env_lines(lines)
         # Keep UI actions (Start/Health) aligned with saved config without requiring restart.
-        self.env = read_env(ENV_PATH)
+        self.env = load_runtime_env()
         self.http_port = port
-        messagebox.showinfo("Saved", f"Updated {ENV_PATH}\nRestart Bridge to apply changes.")
+        messagebox.showinfo("Saved", f"Updated {ENV_PATH} and {ENV_SHARED_PATH}\nRestart Bridge to apply changes.")
 
     def set_ngrok_authtoken(self) -> None:
         tok = self.cfg_ngrok_authtoken.get().strip()

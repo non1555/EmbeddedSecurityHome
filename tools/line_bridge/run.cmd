@@ -9,6 +9,7 @@ REM - Prints ngrok public URL + webhook URL and copies it to clipboard
 set "ROOT=%~dp0"
 set "PY=%ROOT%.venv\Scripts\python.exe"
 set "ENV_FILE=%ROOT%.env"
+set "ENV_SHARED_FILE=%ROOT%.env.shared"
 set "ENV_EXAMPLE=%ROOT%.env.example"
 set "HTTP_PORT=8080"
 set "MQTT_BROKER="
@@ -23,6 +24,12 @@ if not exist "%PY%" (
   echo   python -m venv .venv
   echo   .venv\Scripts\python.exe -m pip install -r requirements.txt
   exit /b 2
+)
+
+if not exist "%ENV_FILE%" (
+  if exist "%ENV_SHARED_FILE%" (
+    set "ENV_FILE=%ENV_SHARED_FILE%"
+  )
 )
 
 if not exist "%ENV_FILE%" (

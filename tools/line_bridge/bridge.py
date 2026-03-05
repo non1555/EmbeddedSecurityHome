@@ -76,9 +76,40 @@ def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-# Always load .env next to bridge.py, regardless of current working directory.
+# Always load tracked shared env first, then local .env override.
+load_env_file(str(SCRIPT_DIR / ".env.shared"))
 load_env_file(str(SCRIPT_DIR / ".env"))
 ROOT = SCRIPT_DIR
+ENV_FILE = SCRIPT_DIR / ".env"
+ENV_SHARED_FILE = SCRIPT_DIR / ".env.shared"
+
+
+def _read_env_lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return []
+
+
+def _write_env_lines(path: Path, lines: list[str]) -> None:
+    try:
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _upsert_env_line(lines: list[str], key: str, value: str) -> list[str]:
+    out: list[str] = []
+    found = False
+    for ln in lines:
+        if ln.startswith(f"{key}="):
+            out.append(f"{key}={value}")
+            found = True
+        else:
+            out.append(ln)
+    if not found:
+        out.append(f"{key}={value}")
+    return out
 
 def _prefer_fw_if_default(name: str, default: str, fw_name: str) -> str:
     v = env(name, default).strip()
@@ -121,6 +152,43 @@ LINE_CHANNEL_SECRET = env("LINE_CHANNEL_SECRET")
 LINE_TARGET_USER_ID = env("LINE_TARGET_USER_ID")
 LINE_TARGET_GROUP_ID = env("LINE_TARGET_GROUP_ID")
 LINE_TARGET_ROOM_ID = env("LINE_TARGET_ROOM_ID")
+
+
+def _persist_line_target(target_id: str) -> None:
+    global LINE_TARGET_USER_ID, LINE_TARGET_GROUP_ID, LINE_TARGET_ROOM_ID
+
+    tid = str(target_id or "").strip()
+    if not tid:
+        return
+    prefix = tid[:1]
+    if prefix not in {"U", "C", "R"}:
+        return
+
+    user_id = tid if prefix == "U" else ""
+    group_id = tid if prefix == "C" else ""
+    room_id = tid if prefix == "R" else ""
+
+    LINE_TARGET_USER_ID = user_id
+    LINE_TARGET_GROUP_ID = group_id
+    LINE_TARGET_ROOM_ID = room_id
+
+    os.environ["LINE_TARGET_USER_ID"] = user_id
+    os.environ["LINE_TARGET_GROUP_ID"] = group_id
+    os.environ["LINE_TARGET_ROOM_ID"] = room_id
+
+    target_paths: list[Path] = []
+    if ENV_SHARED_FILE.exists():
+        target_paths.append(ENV_SHARED_FILE)
+    if ENV_FILE.exists():
+        target_paths.append(ENV_FILE)
+    if not target_paths:
+        target_paths = [ENV_SHARED_FILE]
+    for path in target_paths:
+        lines = _read_env_lines(path)
+        lines = _upsert_env_line(lines, "LINE_TARGET_USER_ID", user_id)
+        lines = _upsert_env_line(lines, "LINE_TARGET_GROUP_ID", group_id)
+        lines = _upsert_env_line(lines, "LINE_TARGET_ROOM_ID", room_id)
+        _write_env_lines(path, lines)
 
 CMD_DEBOUNCE_MS = max(0, int(env("CMD_DEBOUNCE_MS", "600")))
 DEVICE_OFFLINE_GRACE_S = max(0.0, float(env("DEVICE_OFFLINE_GRACE_S", "3.0")))
@@ -521,6 +589,25 @@ def line_api_headers() -> Dict[str, str]:
     }
 
 
+def _line_post(url: str, body: Dict[str, Any]) -> None:
+    try:
+        resp = requests.post(
+            url,
+            headers=line_api_headers(),
+            json=body,
+            timeout=8,
+        )
+    except Exception as exc:
+        print(f"[line] POST failed: {url} err={exc}")
+        return
+
+    if resp.status_code >= 400:
+        detail = (resp.text or "").strip()
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
+        print(f"[line] POST {url} status={resp.status_code} body={detail}")
+
+
 def push_line_text(text: str) -> None:
     target = get_line_target()
     if not LINE_CHANNEL_ACCESS_TOKEN or not target:
@@ -529,12 +616,7 @@ def push_line_text(text: str) -> None:
         "to": target,
         "messages": [{"type": "text", "text": text[:4800]}],
     }
-    requests.post(
-        "https://api.line.me/v2/bot/message/push",
-        headers=line_api_headers(),
-        json=body,
-        timeout=8,
-    )
+    _line_post("https://api.line.me/v2/bot/message/push", body)
 
 
 def reply_line_text(reply_token: str, text: str) -> None:
@@ -550,12 +632,7 @@ def reply_line_messages(reply_token: str, messages: Any) -> None:
         "replyToken": reply_token,
         "messages": messages,
     }
-    requests.post(
-        "https://api.line.me/v2/bot/message/reply",
-        headers=line_api_headers(),
-        json=body,
-        timeout=8,
-    )
+    _line_post("https://api.line.me/v2/bot/message/reply", body)
 
 
 def _fmt_bool(b: Optional[bool], t: str, f: str, u: str = "?") -> str:
@@ -1198,9 +1275,10 @@ async def line_webhook(
         src_k = source_key(ev)
         ev_ts_ms = int(ev.get("timestamp") or 0)
 
-        if not (LINE_TARGET_USER_ID or LINE_TARGET_GROUP_ID or LINE_TARGET_ROOM_ID):
-            if src_k and src_k != "unknown":
-                state.auto_line_target = src_k
+        if src_k and src_k != "unknown":
+            state.auto_line_target = src_k
+            if not (LINE_TARGET_USER_ID or LINE_TARGET_GROUP_ID or LINE_TARGET_ROOM_ID):
+                _persist_line_target(src_k)
 
         if ev.get("type") in {"follow", "join"}:
             if reply_token:
@@ -1229,4 +1307,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
