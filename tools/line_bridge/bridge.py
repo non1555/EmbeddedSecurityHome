@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -122,6 +123,7 @@ LINE_TARGET_GROUP_ID = env("LINE_TARGET_GROUP_ID")
 LINE_TARGET_ROOM_ID = env("LINE_TARGET_ROOM_ID")
 
 CMD_DEBOUNCE_MS = max(0, int(env("CMD_DEBOUNCE_MS", "600")))
+DEVICE_OFFLINE_GRACE_S = max(0.0, float(env("DEVICE_OFFLINE_GRACE_S", "3.0")))
 
 HTTP_HOST = env("HTTP_HOST", "0.0.0.0")
 HTTP_PORT = int(env("HTTP_PORT", "8080"))
@@ -243,8 +245,6 @@ REASON_LABELS = {
 }
 
 FLOWCHART_STATUS_NOTIFY_REASONS = {
-    "online",
-    "offline",
     "remote_status",
     "mode_disarm",
     "mode_away",
@@ -292,7 +292,37 @@ def parse_json_payload(payload: str) -> Dict[str, Any]:
         if isinstance(obj, dict):
             return obj
     except Exception:
+        # Fall through to permissive parser for legacy/malformed payloads.
         pass
+
+    out: Dict[str, Any] = {}
+    text = str(payload or "")
+    if not text:
+        return out
+
+    str_keys = ("event", "flag", "mode", "level", "reason", "latest_mode", "cmd", "detail")
+    for key in str_keys:
+        m = re.search(rf'"{re.escape(key)}"\s*:\s*"([^"]*)"', text)
+        if m:
+            out[key] = m.group(1)
+
+    int_keys = ("src", "failed_attempts", "ts_ms", "uptime_ms", "event_drops")
+    for key in int_keys:
+        m = re.search(rf'"{re.escape(key)}"\s*:\s*(-?\d+)', text)
+        if m:
+            try:
+                out[key] = int(m.group(1))
+            except Exception:
+                pass
+
+    bool_keys = ("is_night", "door_locked", "window_locked", "door_open", "window_open", "ok")
+    for key in bool_keys:
+        m = re.search(rf'"{re.escape(key)}"\s*:\s*(true|false)', text, flags=re.IGNORECASE)
+        if m:
+            out[key] = m.group(1).lower() == "true"
+
+    if out:
+        return out
     return {}
 
 
@@ -410,6 +440,12 @@ def _format_event_notification(obj: Dict[str, Any]) -> Optional[str]:
     flag = _norm_text(obj.get("flag", ""))
     attempts = _json_int(obj, "failed_attempts")
 
+    if flag == "warn_lock_door_open":
+        return "Warning: Door is open. Cannot lock."
+    if flag == "warn_lock_window_open":
+        return "Warning: Window is open. Cannot lock."
+    if flag == "warn_lock_all_open":
+        return "Warning: Door or window is open. Cannot lock all."
     if flag == "wrong_code":
         suffix = f" (attempt {attempts}/3)" if attempts else ""
         return f"Warning: Wrong keypad code{suffix}."
@@ -709,12 +745,50 @@ class BridgeState:
         self.dev_at = 0.0
         # Learned from LINE webhook when LINE_TARGET_* isn't configured.
         self.auto_line_target = ""
+        # Device availability debounce state (from board status reason online/offline).
+        self.device_conn_lock = threading.Lock()
+        self.device_conn_seq = 0
+        self.device_conn_state = "unknown"  # unknown | offline_pending | offline | online
 
 
 state = BridgeState()
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID, clean_session=True)
 
 _last_cmd_at_by_source_ms: Dict[str, int] = {}
+
+
+def _handle_device_presence_reason(reason: str) -> bool:
+    r = _norm_text(reason)
+    if r not in {"online", "offline"}:
+        return False
+
+    if r == "online":
+        with state.device_conn_lock:
+            state.device_conn_seq += 1
+            changed = state.device_conn_state != "online"
+            state.device_conn_state = "online"
+        if changed:
+            push_line_text("Device online: board reconnected to MQTT.")
+        return True
+
+    with state.device_conn_lock:
+        state.device_conn_seq += 1
+        seq = state.device_conn_seq
+        state.device_conn_state = "offline_pending"
+
+    def delayed_offline() -> None:
+        if DEVICE_OFFLINE_GRACE_S > 0:
+            time.sleep(DEVICE_OFFLINE_GRACE_S)
+        with state.device_conn_lock:
+            if seq != state.device_conn_seq:
+                return
+            if state.device_conn_state == "online":
+                return
+            state.device_conn_state = "offline"
+        push_line_text("Device offline: board disconnected from MQTT.")
+
+    threading.Thread(target=delayed_offline, daemon=True).start()
+    return True
 
 
 def _load_nonce_state() -> int:
@@ -922,7 +996,10 @@ def verify_line_signature(raw_body: bytes, signature: str) -> bool:
 
 
 def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:
+    was_connected = state.mqtt_connected
     state.mqtt_connected = (reason_code == 0)
+    if state.mqtt_connected and not was_connected:
+        push_line_text("Bridge connected: MQTT online, LINE bridge ready.")
     client.subscribe(
         [
             (MQTT_TOPIC_EVENT, 0),
@@ -933,7 +1010,10 @@ def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any,
 
 
 def on_disconnect(client: mqtt.Client, userdata: Any, disconnect_flags: Any, reason_code: Any, properties: Any) -> None:
+    was_connected = state.mqtt_connected
     state.mqtt_connected = False
+    if was_connected:
+        push_line_text("Bridge warning: MQTT disconnected. LINE command bridge is waiting for reconnect.")
 
 
 def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
@@ -986,6 +1066,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     if topic == MQTT_TOPIC_STATUS:
         obj = parse_json_payload(payload)
         reason = _norm_text(obj.get("reason", ""))
+        if _handle_device_presence_reason(reason):
+            return
         if reason in FLOWCHART_STATUS_NOTIFY_REASONS:
             push_line_text(_format_status_notification(obj))
         return

@@ -97,6 +97,7 @@
   - ระบบยกระดับเป็น `Warn`
   - เสียงเตือนเป็น warning
   - มีการส่งสถานะ `warn_lock_door_open`
+  - มีการแจ้งเตือนใน LINE ว่าไม่สามารถล็อกได้เพราะประตูยังเปิดอยู่
 
 ### Case 2.8: Local Window Lock/Unlock Toggle Button
 
@@ -117,6 +118,7 @@
   - ระบบยกระดับเป็น `Warn`
   - เสียงเตือนเป็น warning
   - มีการส่งสถานะ `warn_lock_window_open`
+  - มีการแจ้งเตือนใน LINE ว่าไม่สามารถล็อกได้เพราะหน้าต่างยังเปิดอยู่
 
 ## Category 3: Remote Control & Connectivity
 

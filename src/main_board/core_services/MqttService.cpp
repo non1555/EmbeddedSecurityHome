@@ -250,7 +250,7 @@ void MqttService::drainPublishQueue_() {
       payload += ConfigurationSharedTypes::toString(msg.st.level);
       payload += "\",\"failed_attempts\":";
       payload += String(msg.st.failed_attempts);
-      payload += "\",\"ts_ms\":";
+      payload += ",\"ts_ms\":";
       payload += String(msg.event.ts_ms);
       payload += "}";
       ok = mqtt_.publish(MQTT_TOPIC_EVENT, payload.c_str(), false);
