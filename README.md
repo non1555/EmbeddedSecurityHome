@@ -2,6 +2,10 @@
 
 An ESP32-based smart home security system running FreeRTOS, integrated with LINE OA for real-time notifications and remote control via MQTT.
 
+## Video Files
+
+Demo videos are available here: [Google Drive Folder](https://drive.google.com/drive/folders/1o656E6uxtnRRsrU7g_JeKcb3mhfDfn2v?usp=sharing)
+
 This document serves as the Single Source of Truth for:
 - Understanding the system scope and logic.
 - End-to-end installation and deployment.
